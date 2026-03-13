@@ -691,6 +691,26 @@ function setupIPC(): void {
     return savedPath;
   });
 
+  // --- ペルソナアイコン選択ダイアログ ---
+  ipcMain.handle(IPC_CHANNELS.PERSONA_ICON_SELECT, async (_e, personaId: string) => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: 'ペルソナアイコン画像を選択',
+      filters: [
+        { name: '画像ファイル', extensions: ['png', 'jpg', 'jpeg', 'svg', 'ico'] },
+      ],
+      properties: ['openFile'],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) return null;
+
+    const srcPath = result.filePaths[0];
+    const ext = path.extname(srcPath);
+    const iconsDir = store.getIconsDir();
+    const destPath = path.join(iconsDir, `persona-${personaId}${ext}`);
+    fs.copyFileSync(srcPath, destPath);
+    return destPath;
+  });
+
   // --- スクリーンキャプチャ（全画面） ---
   ipcMain.handle(IPC_CHANNELS.CAPTURE_SCREEN, async (event) => {
     try {

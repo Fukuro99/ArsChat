@@ -16,6 +16,7 @@ const IPC_CHANNELS = {
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',
   ICON_SELECT: 'icon:select',
+  PERSONA_ICON_SELECT: 'persona:icon-select',
   CAPTURE_SCREEN: 'capture:screen',
   CLIPBOARD_READ_IMAGE: 'clipboard:read-image',
   WINDOW_MINIMIZE: 'window:minimize',
@@ -85,6 +86,9 @@ contextBridge.exposeInMainWorld('arisChatAPI', {
   // === アイコン ===
   selectIcon: (target: 'app' | 'tray' | 'avatar'): Promise<string | null> => {
     return ipcRenderer.invoke(IPC_CHANNELS.ICON_SELECT, target);
+  },
+  selectPersonaIcon: (personaId: string): Promise<string | null> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.PERSONA_ICON_SELECT, personaId);
   },
 
   // === スクリーンキャプチャ ===

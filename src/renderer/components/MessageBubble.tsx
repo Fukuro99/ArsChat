@@ -30,6 +30,7 @@ interface MessageBubbleProps {
   isStreaming?: boolean;
   showThinking?: boolean;
   isEditing?: boolean;
+  avatarSrc?: string | null; // カスタムアバター画像パス（null/undefined = デフォルト）
   onCopy?: () => void;
   onDelete?: () => void;
   onRegenerate?: () => void;
@@ -103,6 +104,7 @@ export default function MessageBubble({
   isStreaming = false,
   showThinking = false,
   isEditing = false,
+  avatarSrc,
   onCopy,
   onDelete,
   onRegenerate,
@@ -186,7 +188,11 @@ export default function MessageBubble({
         </div>
       ) : (
         <div className="shrink-0 w-8 h-8 rounded-full overflow-hidden bg-aria-primary/10 flex items-center justify-center">
-          <img src={ariaIconUrl} alt="ArisChat" className="w-full h-full object-contain" />
+          <img
+            src={avatarSrc ? `file://${avatarSrc}` : ariaIconUrl}
+            alt="ArisChat"
+            className="w-full h-full object-contain"
+          />
         </div>
       )}
 

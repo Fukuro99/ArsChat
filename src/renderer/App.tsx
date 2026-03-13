@@ -18,6 +18,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('chat');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [settingsVersion, setSettingsVersion] = useState(0);
 
   useEffect(() => {
     // メインプロセスからのナビゲーション指示
@@ -59,9 +60,10 @@ export default function App() {
             <ChatWindow
               sessionId={currentSessionId}
               onSessionCreated={setCurrentSessionId}
+              settingsVersion={settingsVersion}
             />
           ) : (
-            <Settings onBack={() => setCurrentPage('chat')} />
+            <Settings onBack={() => { setCurrentPage('chat'); setSettingsVersion((v) => v + 1); }} />
           )}
         </div>
       </div>

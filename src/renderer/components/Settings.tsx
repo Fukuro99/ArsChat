@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ArisChatSettings, DEFAULT_SETTINGS, LMStudioModelInfo, MCPConfig, MCPServerConfig, MCPServerStatus } from '../../shared/types';
+import { ArisChatSettings, DEFAULT_SETTINGS, LMStudioModelInfo, MCPConfig, MCPServerConfig, MCPServerStatus, Persona } from '../../shared/types';
 
 interface SettingsProps {
   onBack: () => void;
@@ -15,6 +15,12 @@ export default function Settings({ onBack }: SettingsProps) {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [isLoadingModel, setIsLoadingModel] = useState(false);
   const [loadStatus, setLoadStatus] = useState<string | null>(null);
+
+  // 人格（ペルソナ）関連
+  const [showPersonaForm, setShowPersonaForm] = useState(false);
+  const [editingPersonaId, setEditingPersonaId] = useState<string | null>(null);
+  const emptyPersona = (): Omit<Persona, 'id'> => ({ name: '', systemPrompt: '', avatarPath: null });
+  const [personaForm, setPersonaForm] = useState<Omit<Persona, 'id'>>(emptyPersona());
 
   // MCP 関連
   const [mcpConfig, setMcpConfig] = useState<MCPConfig>({ servers: [] });
@@ -215,6 +221,59 @@ export default function Settings({ onBack }: SettingsProps) {
       avatar: 'customAvatarPath',
     } as const;
     updateSetting(keyMap[target], null);
+  };
+
+  // ===== 人格（ペルソナ）ハンドラー =====
+
+  const openAddPersonaForm = () => {
+    setPersonaForm(emptyPersona());
+    setEditingPersonaId(null);
+    setShowPersonaForm(true);
+  };
+
+  const openEditPersonaForm = (persona: Persona) => {
+    setPersonaForm({ name: persona.name, systemPrompt: persona.systemPrompt, avatarPath: persona.avatarPath });
+    setEditingPersonaId(persona.id);
+    setShowPersonaForm(true);
+  };
+
+  const cancelPersonaForm = () => {
+    setShowPersonaForm(false);
+    setEditingPersonaId(null);
+  };
+
+  const handleSavePersona = () => {
+    if (!personaForm.name.trim()) return;
+    const personas = [...(settings.personas ?? [])];
+    if (editingPersonaId) {
+      const idx = personas.findIndex((p) => p.id === editingPersonaId);
+      if (idx >= 0) personas[idx] = { ...personas[idx], ...personaForm };
+    } else {
+      personas.push({ id: crypto.randomUUID(), ...personaForm });
+    }
+    setShowPersonaForm(false);
+    setEditingPersonaId(null);
+    updateSetting('personas', personas);
+  };
+
+  const handleDeletePersona = (id: string) => {
+    const personas = (settings.personas ?? []).filter((p) => p.id !== id);
+    updateSetting('personas', personas);
+    // 削除した人格がアクティブだった場合はリセット
+    if (settings.activePersonaId === id) {
+      updateSetting('activePersonaId', null);
+    }
+  };
+
+  const handleActivatePersona = (id: string | null) => {
+    updateSetting('activePersonaId', id);
+  };
+
+  const handlePersonaIconSelect = async (personaId: string) => {
+    const path = await window.arisChatAPI.selectPersonaIcon(personaId);
+    if (path) {
+      setPersonaForm((prev) => ({ ...prev, avatarPath: path }));
+    }
   };
 
   return (
@@ -424,9 +483,14 @@ export default function Settings({ onBack }: SettingsProps) {
             </>
           )}
 
-          {/* システムプロンプト（共通） */}
+          {/* システムプロンプト（共通・人格未選択時） */}
           <div className="space-y-2">
-            <label className="text-sm text-aria-text">システムプロンプト</label>
+            <label className="text-sm text-aria-text">
+              システムプロンプト
+              {settings.activePersonaId && (
+                <span className="ml-2 text-xs text-aria-primary">（人格選択中 — 人格のプロンプトが優先されます）</span>
+              )}
+            </label>
             <textarea
               value={settings.systemPrompt}
               onChange={(e) => updateSetting('systemPrompt', e.target.value)}
@@ -434,6 +498,181 @@ export default function Settings({ onBack }: SettingsProps) {
               className="w-full bg-aria-surface border border-aria-border rounded-lg px-3 py-2 text-sm text-aria-text resize-none focus:outline-none focus:border-aria-primary"
             />
           </div>
+        </section>
+
+        {/* === 人格（ペルソナ） === */}
+        <section className="space-y-4">
+          <h2 className="text-sm font-semibold text-aria-text-muted uppercase tracking-wider">人格 (ペルソナ)</h2>
+
+          {/* 人格なし（カスタム）オプション */}
+          <div
+            className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
+              !settings.activePersonaId
+                ? 'bg-aria-primary/15 border border-aria-primary/40'
+                : 'bg-aria-surface border border-transparent hover:border-aria-border'
+            }`}
+            onClick={() => handleActivatePersona(null)}
+          >
+            <div className="shrink-0 w-10 h-10 rounded-full bg-aria-bg flex items-center justify-center text-lg font-bold text-aria-primary">
+              ?
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-aria-text font-medium">カスタム（人格なし）</p>
+              <p className="text-xs text-aria-text-muted truncate">上記のシステムプロンプトを使用</p>
+            </div>
+            {!settings.activePersonaId && (
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="shrink-0 text-aria-primary">
+                <path d="M3 8l3.5 3.5L13 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+          </div>
+
+          {/* 人格リスト */}
+          {(settings.personas ?? []).map((persona) => (
+            <div
+              key={persona.id}
+              className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
+                settings.activePersonaId === persona.id
+                  ? 'bg-aria-primary/15 border border-aria-primary/40'
+                  : 'bg-aria-surface border border-transparent hover:border-aria-border'
+              }`}
+              onClick={() => handleActivatePersona(persona.id)}
+            >
+              <div className="shrink-0 w-10 h-10 rounded-full overflow-hidden bg-aria-primary/20 flex items-center justify-center">
+                {persona.avatarPath ? (
+                  <img src={`file://${persona.avatarPath}`} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-lg font-bold text-aria-primary">
+                    {persona.name.charAt(0).toUpperCase() || 'P'}
+                  </span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-aria-text font-medium">{persona.name}</p>
+                <p className="text-xs text-aria-text-muted truncate">{persona.systemPrompt}</p>
+              </div>
+              <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                {settings.activePersonaId === persona.id && (
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="mr-1 text-aria-primary">
+                    <path d="M3 8l3.5 3.5L13 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+                <button
+                  onClick={() => openEditPersonaForm(persona)}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-aria-text-muted hover:text-aria-text hover:bg-white/10 transition-colors"
+                  title="編集"
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                    <path d="M11 2.5l2.5 2.5L5 13.5H2.5V11L11 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                <button
+                  onClick={() => handleDeletePersona(persona.id)}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-aria-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                  title="削除"
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                    <path d="M3 4.5h10M6 4.5V3h4v1.5M5.5 4.5l.5 8h4l.5-8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {/* 新規追加ボタン */}
+          {!showPersonaForm && (
+            <button
+              onClick={openAddPersonaForm}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-aria-border text-aria-text-muted hover:text-aria-text hover:border-aria-primary/50 transition-colors text-sm"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+              人格を追加
+            </button>
+          )}
+
+          {/* 人格フォーム */}
+          {showPersonaForm && (
+            <div className="p-4 bg-aria-surface rounded-xl border border-aria-border space-y-3">
+              <h3 className="text-sm font-semibold text-aria-text">
+                {editingPersonaId ? '人格を編集' : '新しい人格'}
+              </h3>
+
+              {/* アバター選択 */}
+              <div className="flex items-center gap-3">
+                <div className="shrink-0 w-12 h-12 rounded-full overflow-hidden bg-aria-primary/20 flex items-center justify-center">
+                  {personaForm.avatarPath ? (
+                    <img src={`file://${personaForm.avatarPath}`} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-xl font-bold text-aria-primary">
+                      {personaForm.name.charAt(0).toUpperCase() || 'P'}
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <button
+                    onClick={() => {
+                      const id = editingPersonaId ?? 'new-' + Date.now();
+                      handlePersonaIconSelect(id);
+                    }}
+                    className="px-3 py-1.5 text-xs bg-aria-primary/20 text-aria-primary rounded-lg hover:bg-aria-primary/30 transition-colors"
+                  >
+                    アイコンを選択
+                  </button>
+                  {personaForm.avatarPath && (
+                    <button
+                      onClick={() => setPersonaForm((prev) => ({ ...prev, avatarPath: null }))}
+                      className="block px-3 py-1.5 text-xs bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20 transition-colors"
+                    >
+                      削除
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* 名前 */}
+              <div className="space-y-1">
+                <label className="text-xs text-aria-text-muted">名前</label>
+                <input
+                  type="text"
+                  value={personaForm.name}
+                  onChange={(e) => setPersonaForm((prev) => ({ ...prev, name: e.target.value }))}
+                  placeholder="例: 翻訳アシスタント"
+                  className="w-full bg-aria-bg-light border border-aria-border rounded-lg px-3 py-2 text-sm text-aria-text placeholder:text-aria-text-muted focus:outline-none focus:border-aria-primary"
+                />
+              </div>
+
+              {/* システムプロンプト */}
+              <div className="space-y-1">
+                <label className="text-xs text-aria-text-muted">システムプロンプト</label>
+                <textarea
+                  value={personaForm.systemPrompt}
+                  onChange={(e) => setPersonaForm((prev) => ({ ...prev, systemPrompt: e.target.value }))}
+                  rows={4}
+                  placeholder="例: あなたはプロの翻訳者です..."
+                  className="w-full bg-aria-bg-light border border-aria-border rounded-lg px-3 py-2 text-sm text-aria-text placeholder:text-aria-text-muted resize-none focus:outline-none focus:border-aria-primary"
+                />
+              </div>
+
+              {/* ボタン */}
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={cancelPersonaForm}
+                  className="px-3 py-1.5 text-xs rounded-lg border border-aria-border text-aria-text-muted hover:text-aria-text transition-colors"
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={handleSavePersona}
+                  disabled={!personaForm.name.trim()}
+                  className="px-3 py-1.5 text-xs rounded-lg bg-aria-primary text-white hover:bg-aria-primary/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  保存
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* === アイコン・外観 === */}

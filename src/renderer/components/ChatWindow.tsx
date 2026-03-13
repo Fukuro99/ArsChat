@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ChatMessage, ChatMessageStats } from '../../shared/types';
+import { ChatMessage, ChatMessageStats, ArisChatSettings, DEFAULT_SETTINGS, getEffectiveAvatarPath } from '../../shared/types';
 import MessageBubble from './MessageBubble';
 
 interface ChatWindowProps {
   sessionId: string | null;
   onSessionCreated: (id: string) => void;
+  settingsVersion?: number;
 }
 
 function readFileAsBase64(file: Blob): Promise<string> {
@@ -35,7 +36,7 @@ function getClipboardImageFile(clipboardData: DataTransfer | null): File | null 
   return file || null;
 }
 
-export default function ChatWindow({ sessionId, onSessionCreated }: ChatWindowProps) {
+export default function ChatWindow({ sessionId, onSessionCreated, settingsVersion = 0 }: ChatWindowProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [pendingImageBase64, setPendingImageBase64] = useState<string | null>(null);
@@ -44,6 +45,7 @@ export default function ChatWindow({ sessionId, onSessionCreated }: ChatWindowPr
   const [error, setError] = useState<string | null>(null);
   const [screenWatchMode, setScreenWatchMode] = useState(false);
   const [thinkMode, setThinkMode] = useState(false);
+  const [settings, setSettings] = useState<ArisChatSettings>(DEFAULT_SETTINGS);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const currentSessionIdRef = useRef<string | null>(sessionId);
@@ -52,6 +54,21 @@ export default function ChatWindow({ sessionId, onSessionCreated }: ChatWindowPr
   const rafIdRef = useRef<number | null>(null);
   // 編集中のメッセージID
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+
+  // 設定読み込み（アバター反映のため）— settingsVersion が変わるたびに再取得
+  useEffect(() => {
+    window.arisChatAPI.getSettings().then(setSettings);
+  }, [settingsVersion]);
+
+  useEffect(() => {
+    // メインプロセスからのナビゲーション時も再取得
+    const cleanup = window.arisChatAPI.onNavigate((page) => {
+      if (page === 'chat') {
+        window.arisChatAPI.getSettings().then(setSettings);
+      }
+    });
+    return cleanup;
+  }, []);
 
   // セッション読み込み
   useEffect(() => {
@@ -424,6 +441,7 @@ export default function ChatWindow({ sessionId, onSessionCreated }: ChatWindowPr
             message={msg}
             showThinking={thinkMode}
             isEditing={editingMessageId === msg.id}
+            avatarSrc={getEffectiveAvatarPath(settings)}
             onCopy={() => handleCopyMessage(msg.content)}
             onDelete={() => handleDeleteMessage(msg.id)}
             onRegenerate={msg.role === 'assistant' ? () => handleRegenerateMessage(msg.id) : undefined}
@@ -446,6 +464,7 @@ export default function ChatWindow({ sessionId, onSessionCreated }: ChatWindowPr
             }}
             isStreaming
             showThinking={thinkMode}
+            avatarSrc={getEffectiveAvatarPath(settings)}
           />
         )}
 

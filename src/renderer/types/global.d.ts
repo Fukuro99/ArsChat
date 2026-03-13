@@ -22,6 +22,7 @@ declare global {
 
       // アイコン
       selectIcon: (target: 'app' | 'tray' | 'avatar') => Promise<string | null>;
+      selectPersonaIcon: (personaId: string) => Promise<string | null>;
 
       // スクリーンキャプチャ
       captureScreen: () => Promise<string>;

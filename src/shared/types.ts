@@ -40,6 +40,14 @@ export interface LMStudioModelInfo {
 
 export type AIProvider = 'anthropic' | 'lmstudio';
 
+/** AI の人格設定 */
+export interface Persona {
+  id: string;
+  name: string;
+  systemPrompt: string;
+  avatarPath: string | null; // カスタムアバター画像パス
+}
+
 export interface ArisChatSettings {
   // AI プロバイダー
   provider: AIProvider;
@@ -53,8 +61,12 @@ export interface ArisChatSettings {
   lmstudioModel: string;
   lmstudioContextLength: number; // ロード時に使用するコンテキスト長
 
-  // 共通
+  // 共通（人格未選択時のカスタムプロンプト）
   systemPrompt: string;
+
+  // 人格
+  personas: Persona[];
+  activePersonaId: string | null; // null = カスタムプロンプトを使用
 
   // 外観
   theme: 'dark' | 'light';
@@ -71,6 +83,24 @@ export interface ArisChatSettings {
   windowHeight: number;
 }
 
+/** アクティブな人格のシステムプロンプトを返す */
+export function getEffectiveSystemPrompt(settings: ArisChatSettings): string {
+  if (settings.activePersonaId) {
+    const persona = settings.personas.find((p) => p.id === settings.activePersonaId);
+    if (persona) return persona.systemPrompt;
+  }
+  return settings.systemPrompt;
+}
+
+/** アクティブな人格のアバターパスを返す */
+export function getEffectiveAvatarPath(settings: ArisChatSettings): string | null {
+  if (settings.activePersonaId) {
+    const persona = settings.personas.find((p) => p.id === settings.activePersonaId);
+    if (persona) return persona.avatarPath;
+  }
+  return settings.customAvatarPath;
+}
+
 export const DEFAULT_SETTINGS: ArisChatSettings = {
   provider: 'anthropic',
   apiKey: '',
@@ -81,6 +111,9 @@ export const DEFAULT_SETTINGS: ArisChatSettings = {
   lmstudioContextLength: 4096,
 
   systemPrompt: 'あなたはArisChat（アリスチャット）という名前のAIアシスタントです。ユーザーの質問に丁寧かつ的確に日本語で回答してください。コードを含む回答にはマークダウンを使用してください。',
+
+  personas: [],
+  activePersonaId: null,
 
   theme: 'dark',
   accentColor: '#6366f1',
@@ -159,6 +192,7 @@ export const IPC_CHANNELS = {
   // アイコン
   ICON_SELECT: 'icon:select',
   ICON_RESET: 'icon:reset',
+  PERSONA_ICON_SELECT: 'persona:icon-select',
 
   // スクリーンキャプチャ
   CAPTURE_SCREEN: 'capture:screen',

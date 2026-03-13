@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { ArisChatSettings, ChatMessage, ChatMessageStats, LMStudioModelInfo } from '../shared/types';
+import { ArisChatSettings, ChatMessage, ChatMessageStats, LMStudioModelInfo, getEffectiveSystemPrompt } from '../shared/types';
 import type { MCPManager } from './mcp-manager';
 
 export function createClaudeService(mcpManager?: MCPManager) {
@@ -442,7 +442,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
     const stream = client.messages.stream({
       model: settings.model,
       max_tokens: 4096,
-      system: settings.systemPrompt,
+      system: getEffectiveSystemPrompt(settings),
       messages: apiMessages,
     });
 
@@ -532,8 +532,9 @@ export function createClaudeService(mcpManager?: MCPManager) {
 
     // OpenAI互換メッセージ形式を構築
     const apiMessages: any[] = [];
-    if (settings.systemPrompt) {
-      apiMessages.push({ role: 'system', content: settings.systemPrompt });
+    const effectiveSystemPrompt = getEffectiveSystemPrompt(settings);
+    if (effectiveSystemPrompt) {
+      apiMessages.push({ role: 'system', content: effectiveSystemPrompt });
     }
     for (const msg of messages) {
       if (msg.imageBase64) {
