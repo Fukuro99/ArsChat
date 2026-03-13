@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.js.map
+*.d.ts.map
+
+# Environment
+.env
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Claude Code
+.claude/
+
+# Vite cache
+.vite/
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
