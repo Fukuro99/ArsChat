@@ -76,7 +76,7 @@ export const DEFAULT_SETTINGS: ArisChatSettings = {
   apiKey: '',
   model: 'claude-sonnet-4-20250514',
 
-  lmstudioBaseUrl: 'http://localhost:1234/api/v1',
+  lmstudioBaseUrl: 'http://localhost:1234/v1',
   lmstudioModel: '',
   lmstudioContextLength: 4096,
 

@@ -459,7 +459,7 @@ function createWidgetWindow(): BrowserWindow {
   win.webContents.on('context-menu', () => {
     const menu = Menu.buildFromTemplate([
       {
-        label: 'ARIA を開く',
+        label: 'Aris を開く',
         click: () => {
           showMainWindow({ mini: false });
           mainWindow?.webContents.send('navigate', 'chat');
@@ -502,7 +502,7 @@ function createTray(): Tray {
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'ARIA を開く',
+      label: 'Aris を開く',
       click: () => {
         showMainWindow({ mini: false });
       },

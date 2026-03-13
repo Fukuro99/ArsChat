@@ -24,7 +24,7 @@ export default function TitleBar({ onMenuClick, onSettingsClick, currentPage }: 
           <div className="w-4 h-4 rounded-full bg-aria-primary flex items-center justify-center">
             <span className="text-[8px] font-bold text-white">A</span>
           </div>
-          <span className="text-sm font-medium text-aria-text">ARIA</span>
+          <span className="text-sm font-medium text-aria-text">Aris</span>
         </div>
       </div>
 

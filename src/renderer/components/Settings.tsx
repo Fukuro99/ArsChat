@@ -612,7 +612,7 @@ export default function Settings({ onBack }: SettingsProps) {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-aria-text">OS起動時に自動起動</p>
-              <p className="text-xs text-aria-text-muted">PCを起動した時に自動的にARIAを起動</p>
+              <p className="text-xs text-aria-text-muted">PCを起動した時に自動的にArisを起動</p>
             </div>
             <button
               onClick={() => updateSetting('launchAtStartup', !settings.launchAtStartup)}
@@ -856,7 +856,7 @@ export default function Settings({ onBack }: SettingsProps) {
 
         {/* バージョン情報 */}
         <div className="text-center pb-6">
-          <p className="text-xs text-aria-text-muted">ARIA v1.0.0 — AI Responsive Interactive Assistant</p>
+          <p className="text-xs text-aria-text-muted">Aris v1.0.0 — AI Responsive Interactive System</p>
         </div>
       </div>
     </div>

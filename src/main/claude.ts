@@ -13,14 +13,21 @@ export function createClaudeService(mcpManager?: MCPManager) {
   /** baseUrl から OpenAI互換の /v1/chat/completions エンドポイントを解決 */
   function resolveChatEndpoint(baseUrl: string): string {
     const normalized = normalizeBaseUrl(baseUrl);
-    if (/\/v1$/i.test(normalized)) {
-      return `${normalized}/chat/completions`;
+    // 既に /v1/chat/completions が含まれていればそのまま
+    if (/\/v1\/chat\/completions$/i.test(normalized)) {
+      return normalized;
     }
-    // /api/v1 が付いている場合も /v1 に正規化
+    // /api/v1 が付いている場合は /v1 に正規化 (LM Studio旧設定互換)
+    // ※ /v1$ より先にチェック（/api/v1 も /v1$ にマッチするため）
     if (/\/api\/v1$/i.test(normalized)) {
       const base = normalized.replace(/\/api\/v1$/i, '');
       return `${base}/v1/chat/completions`;
     }
+    // /v1 で終わっている場合は /chat/completions を追加
+    if (/\/v1$/i.test(normalized)) {
+      return `${normalized}/chat/completions`;
+    }
+    // ベースURLのみの場合 (例: http://localhost:1234)
     return `${normalized}/v1/chat/completions`;
   }
 

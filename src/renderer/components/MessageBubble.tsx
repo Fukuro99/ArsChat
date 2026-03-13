@@ -1,7 +1,29 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { marked } from 'marked';
+import markedKatex from 'marked-katex-extension';
+import 'katex/dist/katex.min.css';
 import { ChatMessage } from '../../shared/types';
 import ariaIconUrl from '../assets/aria-icon.png';
+
+// KaTeX 拡張を marked に登録（インライン $...$ とブロック $$...$$ 両対応）
+marked.use(markedKatex({ throwOnError: false, output: 'html' }));
+
+/**
+ * 日本語環境で LLM が ¥（U+00A5）や ￥（U+FFE5 全角）を \ の代わりに出力することがある。
+ * KaTeX は \ しか認識しないため、$...$ / $$...$$ ブロック内に限定して \ に正規化する。
+ */
+function normalizeYenToBackslash(text: string): string {
+  const yen = /[¥\uFFE5]/g;
+  // $$...$$ ブロック（複数行対応）を先に処理
+  let result = text.replace(/\$\$([\s\S]*?)\$\$/g, (_, math) =>
+    `$$${math.replace(yen, '\\')}$$`
+  );
+  // $...$ ブロック（改行を含まないインライン数式）を処理
+  result = result.replace(/\$([^\$\n]+?)\$/g, (_, math) =>
+    `$${math.replace(yen, '\\')}$`
+  );
+  return result;
+}
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -116,11 +138,15 @@ export default function MessageBubble({
 
     const { thinking, response, isThinkingInProgress } = parseThinkBlocks(message.content);
 
+    // 円記号（¥）をバックスラッシュ（\）に正規化してから KaTeX に渡す
+    const normalizedThinking = normalizeYenToBackslash(thinking);
+    const normalizedResponse = normalizeYenToBackslash(response || '');
+
     let tHtml = '';
     let rHtml = '';
     try {
-      if (thinking) tHtml = marked.parse(thinking, { breaks: true, gfm: true }) as string;
-      rHtml = marked.parse(response || '', { breaks: true, gfm: true }) as string;
+      if (normalizedThinking) tHtml = marked.parse(normalizedThinking, { breaks: true, gfm: true }) as string;
+      rHtml = marked.parse(normalizedResponse, { breaks: true, gfm: true }) as string;
     } catch {
       rHtml = response || '';
     }

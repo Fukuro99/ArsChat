@@ -411,7 +411,7 @@ export default function ChatWindow({ sessionId, onSessionCreated }: ChatWindowPr
             <div className="w-16 h-16 rounded-2xl bg-aria-primary/20 flex items-center justify-center mb-4">
               <span className="text-2xl font-bold text-aria-primary">A</span>
             </div>
-            <h2 className="text-lg font-semibold text-aria-text mb-2">ARIA へようこそ</h2>
+            <h2 className="text-lg font-semibold text-aria-text mb-2">Aris へようこそ</h2>
             <p className="text-sm text-aria-text-muted max-w-xs">
               何でも聞いてください。テキストで質問するか、画面キャプチャを添付して質問できます。
             </p>
