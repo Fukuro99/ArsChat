@@ -83,13 +83,28 @@ export interface ArisChatSettings {
   windowHeight: number;
 }
 
-/** アクティブな人格のシステムプロンプトを返す */
+/** 現在日時を [yyyy:MM:DD;hh:mm] 形式で返す */
+function currentDateTimeTag(): string {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const MM = String(now.getMonth() + 1).padStart(2, '0');
+  const DD = String(now.getDate()).padStart(2, '0');
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  return `[${yyyy}:${MM}:${DD};${hh}:${mm}]`;
+}
+
+/** アクティブな人格のシステムプロンプトを返す（人格名・日時を付加） */
 export function getEffectiveSystemPrompt(settings: ArisChatSettings): string {
+  const dateTime = currentDateTimeTag();
   if (settings.activePersonaId) {
     const persona = settings.personas.find((p) => p.id === settings.activePersonaId);
-    if (persona) return persona.systemPrompt;
+    if (persona) {
+      const namePrefix = `あなたの名前は「${persona.name}」です。\n\n`;
+      return namePrefix + persona.systemPrompt + `\n\n現在日時: ${dateTime}`;
+    }
   }
-  return settings.systemPrompt;
+  return settings.systemPrompt + `\n\n現在日時: ${dateTime}`;
 }
 
 /** アクティブな人格のアバターパスを返す */
