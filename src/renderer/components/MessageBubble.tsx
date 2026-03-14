@@ -43,6 +43,9 @@ interface MessageBubbleProps {
   onEditSave?: (newContent: string) => void;
   onEditCancel?: () => void;
   onInteractiveUIAction?: (uiId: string, action: string, data: Record<string, any>) => void;
+  onLiveUIAction?: (uiId: string, action: string, data: Record<string, any>, currentState: Record<string, any>) => void;
+  /** ライブUI状態マップ（uiId → state） */
+  liveUIStates?: Map<string, Record<string, any>>;
 }
 
 /** <think>...</think> ブロックを分離する（ストリーミング途中・タグ欠け対応） */
@@ -118,6 +121,8 @@ export default function MessageBubble({
   onEditSave,
   onEditCancel,
   onInteractiveUIAction,
+  onLiveUIAction,
+  liveUIStates,
 }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const [thinkOpen, setThinkOpen] = useState(false);
@@ -310,8 +315,15 @@ export default function MessageBubble({
                               onInteractiveUIAction?.(uiId, action, data);
                             }}
                             onAction={(uiId, actionId, data) => {
-                              onInteractiveUIAction?.(uiId, actionId, data || {});
+                              if (block.mode === 'live') {
+                                const currentState = liveUIStates?.get(block.id) ?? block.state ?? {};
+                                onLiveUIAction?.(uiId, actionId, data || {}, currentState);
+                              } else {
+                                onInteractiveUIAction?.(uiId, actionId, data || {});
+                              }
                             }}
+                            onLiveAction={block.mode === 'live' ? onLiveUIAction : undefined}
+                            liveState={block.mode === 'live' ? liveUIStates?.get(block.id) : undefined}
                           />
                         );
                       }

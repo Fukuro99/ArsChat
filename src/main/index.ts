@@ -623,6 +623,20 @@ function setupIPC(): void {
     claude.abort();
   });
 
+  // --- サイレント送信（ライブUIモード用・ストリーミングなし・履歴保存なし） ---
+  ipcMain.handle(IPC_CHANNELS.CHAT_SEND_SILENT, async (_event, messages: ChatMessage[], _sessionId: string) => {
+    const settings = store.getSettings();
+    if (settings.provider === 'anthropic' && !settings.apiKey) {
+      return { content: '', error: 'APIキーが設定されていません。設定画面からAPIキーを入力してください。' };
+    }
+    try {
+      const result = await claude.sendSilent(settings, messages);
+      return result;
+    } catch (err: any) {
+      return { content: '', error: err.message || 'Unknown error', stats: {} };
+    }
+  });
+
   // --- セッション管理 ---
   ipcMain.handle(IPC_CHANNELS.SESSION_LIST, () => {
     return store.listSessions();

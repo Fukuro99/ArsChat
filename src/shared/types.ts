@@ -168,7 +168,25 @@ const INTERACTIVE_UI_INSTRUCTIONS = `
 - 単純なyes/noにはUIを使わず通常のテキストで十分
 - 3つ以上の選択肢や複数入力が必要な場面でUIを活用
 - UIブロックの前後に説明テキストを添える
-- ユーザーがUIを操作すると [interactive-ui-response] として送信されるので、それを受けて次の応答をする`;
+- ユーザーがUIを操作すると [interactive-ui-response] として送信されるので、それを受けて次の応答をする
+
+### ライブUIモード（mode: "live"）
+
+継続的なインタラクション（ゲーム、タスクボード等）には mode: "live" を使用:
+- ユーザーの操作はチャットに表示されず、AIに直接送信される
+- AIは \`\`\`interactive-ui-update ブロックで状態だけを返す
+
+\`\`\`interactive-ui-update
+{
+  "id": "ブロックID",
+  "patch": { "更新するstateキー": "値" }
+}
+\`\`\`
+
+- patch に "status": "finished" を含めるとUI終了（操作不可）
+- ゲーム終了時などは update ブロックの後に通常テキストで締めのコメントを書く
+- ライブUIには actions（submitボタン）を含めない
+- ユーザーの操作は {"_type":"live_ui_action","ui_id":"...","action":"...","data":{...}} 形式で届く`;
 
 /** アクティブな人格のシステムプロンプトを返す（人格名・日時・Interactive UI指示を付加） */
 export function getEffectiveSystemPrompt(settings: ArisChatSettings): string {
@@ -304,6 +322,9 @@ export const IPC_CHANNELS = {
   // LM Studio モデル操作
   LMSTUDIO_LIST_MODELS: 'lmstudio:list-models',
   LMSTUDIO_LOAD_MODEL: 'lmstudio:load-model',
+
+  // チャット（サイレント送信）
+  CHAT_SEND_SILENT: 'chat:send-silent',
 
   // MCP
   MCP_GET_CONFIG: 'mcp:get-config',

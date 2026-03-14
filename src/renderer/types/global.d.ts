@@ -9,6 +9,7 @@ declare global {
       onStreamEnd: (callback: (stats: ChatMessageStats) => void) => () => void;
       onStreamError: (callback: (error: string) => void) => () => void;
       abortChat: () => void;
+      sendSilentMessage: (messages: ChatMessage[], sessionId: string) => Promise<{ content: string; stats?: ChatMessageStats; error?: string }>;
 
       // セッション
       listSessions: () => Promise<ChatSession[]>;

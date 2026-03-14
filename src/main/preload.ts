@@ -33,6 +33,7 @@ const IPC_CHANNELS = {
   MCP_GET_STATUS: 'mcp:get-status',
   MCP_LIST_TOOLS: 'mcp:list-tools',
   MCP_RECONNECT: 'mcp:reconnect',
+  CHAT_SEND_SILENT: 'chat:send-silent',
 } as const;
 const IPC_CAPTURE_IMAGE_READY = 'capture:image-ready';
 
@@ -59,6 +60,9 @@ contextBridge.exposeInMainWorld('arisChatAPI', {
   },
   abortChat: () => {
     ipcRenderer.send(IPC_CHANNELS.CHAT_ABORT);
+  },
+  sendSilentMessage: (messages: ChatMessage[], sessionId: string): Promise<{ content: string; stats?: ChatMessageStats; error?: string }> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND_SILENT, messages, sessionId);
   },
 
   // === セッション管理 ===

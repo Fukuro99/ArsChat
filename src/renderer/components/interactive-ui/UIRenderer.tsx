@@ -1,6 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { UINode, InteractiveUIBlock, UIAction } from './types';
 import { primitiveRegistry } from './primitives/index';
+import { mergePatch } from './state-manager';
 
 // ===== キーパス解決ユーティリティ =====
 
@@ -125,24 +126,48 @@ interface BlockRendererProps {
   block: InteractiveUIBlock;
   onSubmit: (uiId: string, action: string, data: Record<string, any>) => void;
   onAction?: (uiId: string, actionId: string, data?: any) => void;
+  /** ライブUIアクションハンドラ（mode: "live" のブロック用） */
+  onLiveAction?: (uiId: string, action: string, data: Record<string, any>, currentState: Record<string, any>) => void;
+  /** 外部から注入されるライブUI状態（mode: "live" のブロック用） */
+  liveState?: Record<string, any>;
   isLoading?: boolean;
 }
 
-export function BlockRenderer({ block, onSubmit, onAction, isLoading }: BlockRendererProps) {
+export function BlockRenderer({ block, onSubmit, onAction, onLiveAction, liveState, isLoading }: BlockRendererProps) {
+  const isLive = block.mode === 'live';
+
+  // ライブモードの場合は外部stateを使い、デフォルトモードはローカルstate
   const [localState, setLocalState] = useState<Record<string, any>>(block.state || {});
   const [submitted, setSubmitted] = useState(false);
 
+  // 外部からliveStateが更新されたらローカルに反映する
+  useEffect(() => {
+    if (isLive && liveState !== undefined) {
+      setLocalState(liveState);
+    }
+  }, [isLive, liveState]);
+
+  const currentState = isLive && liveState !== undefined ? liveState : localState;
+  const isFinished = isLive && currentState.status === 'finished';
+
   const handleStateChange = useCallback((keyPath: string, value: any) => {
-    setLocalState((prev) => updateKeyPath(prev, keyPath, value));
-  }, []);
+    if (!isLive) {
+      setLocalState((prev) => updateKeyPath(prev, keyPath, value));
+    }
+  }, [isLive]);
 
   const handleAction = useCallback(
     (nodeId: string | undefined, actionId: string, data?: any) => {
-      if (onAction) {
+      if (isFinished) return; // finishedなら操作不可
+
+      if (isLive && onLiveAction) {
+        // ライブモード: onLiveActionを呼ぶ
+        onLiveAction(block.id, actionId, { ...data, nodeId }, currentState);
+      } else if (onAction) {
         onAction(block.id, actionId, { ...data, nodeId });
       }
     },
-    [block.id, onAction]
+    [block.id, onAction, onLiveAction, isLive, isFinished, currentState]
   );
 
   const handleSubmit = useCallback(
@@ -167,26 +192,31 @@ export function BlockRenderer({ block, onSubmit, onAction, isLoading }: BlockRen
   }
 
   return (
-    <div className="iui-block">
+    <div className={`iui-block${isLive ? ' iui-block-live' : ''}${isFinished ? ' iui-block-finished' : ''}`}>
       {/* タイトル */}
       {block.title && (
         <div className="iui-block-title">
           {block.title}
+          {isLive && (
+            <span className={`iui-live-badge${isFinished ? ' iui-live-badge-finished' : ''}`}>
+              {isFinished ? '終了' : 'LIVE'}
+            </span>
+          )}
         </div>
       )}
 
       {/* UIツリー */}
-      <div className="iui-block-content">
+      <div className={`iui-block-content${isFinished ? ' iui-block-content-disabled' : ''}`}>
         <UIRenderer
           node={block.root}
-          state={localState}
+          state={currentState}
           onAction={handleAction}
           onStateChange={handleStateChange}
         />
       </div>
 
-      {/* アクションボタン（submit/cancel等） */}
-      {block.actions && block.actions.length > 0 && !submitted && (
+      {/* アクションボタン（defaultモードのsubmit/cancel等のみ） */}
+      {!isLive && block.actions && block.actions.length > 0 && !submitted && (
         <div className="iui-block-actions">
           {block.actions.map((action: UIAction, i: number) => (
             <ActionButton
@@ -198,10 +228,17 @@ export function BlockRenderer({ block, onSubmit, onAction, isLoading }: BlockRen
         </div>
       )}
 
-      {/* 送信済み表示 */}
-      {submitted && (
+      {/* 送信済み表示（defaultモードのみ） */}
+      {!isLive && submitted && (
         <div className="iui-block-submitted">
           <span>送信済み</span>
+        </div>
+      )}
+
+      {/* ライブUI終了表示 */}
+      {isLive && isFinished && (
+        <div className="iui-block-submitted">
+          <span>ゲーム終了</span>
         </div>
       )}
     </div>

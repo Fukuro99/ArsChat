@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ChatMessage, ChatMessageStats, ArisChatSettings, DEFAULT_SETTINGS, getEffectiveAvatarPath } from '../../shared/types';
 import MessageBubble from './MessageBubble';
+import { parseUIUpdate } from './interactive-ui/parser';
+import { mergePatch, LiveUIAction } from './interactive-ui/state-manager';
 
 interface ChatWindowProps {
   sessionId: string | null;
@@ -54,6 +56,12 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
   const rafIdRef = useRef<number | null>(null);
   // 編集中のメッセージID
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+
+  // ===== ライブUI状態管理 =====
+  // uiId → 現在のstate
+  const [liveUIStates, setLiveUIStates] = useState<Map<string, Record<string, any>>>(new Map());
+  // uiId → 操作履歴（ローリングコンテキスト用）
+  const liveUIActionsRef = useRef<Map<string, LiveUIAction[]>>(new Map());
 
   // 設定読み込み（アバター反映のため）— settingsVersion が変わるたびに再取得
   useEffect(() => {
@@ -280,7 +288,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     setEditingMessageId(null);
   }, []);
 
-  /** Interactive UIアクションハンドラ */
+  /** Interactive UIアクションハンドラ（defaultモード） */
   const handleInteractiveUIAction = useCallback((uiId: string, action: string, data: Record<string, any>) => {
     // 構造化データをユーザーメッセージとして整形
     const responseContent = `[interactive-ui-response]\n${JSON.stringify({ ui_id: uiId, action, data })}`;
@@ -296,6 +304,140 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     setStreamingContent('');
     window.arisChatAPI.sendMessage(newMessages, currentSessionIdRef.current || '', { thinkMode });
   }, [messages, thinkMode]);
+
+  /** ライブUIのstate更新 */
+  const setLiveUIState = useCallback((uiId: string, newState: Record<string, any>) => {
+    setLiveUIStates((prev) => {
+      const next = new Map(prev);
+      next.set(uiId, newState);
+      return next;
+    });
+  }, []);
+
+  /**
+   * ローリングコンテキストを構築する。
+   * 元の会話コンテキスト（最初のメッセージまで）＋現在のstate＋直近の操作履歴。
+   */
+  const buildLiveUIContext = useCallback((
+    uiId: string,
+    action: string,
+    data: Record<string, any>,
+    currentState: Record<string, any>,
+  ): ChatMessage[] => {
+    const contextMessages: ChatMessage[] = [];
+
+    // 元の会話から最初のユーザーメッセージとAI応答（UIブロックを含む）を取り込む
+    // interactive-ui-response は含めない（サイレントなので）
+    const baseMessages = messages.filter(
+      (m) => !m.content.startsWith('[interactive-ui-response]')
+    );
+    // 最大6メッセージ（システムプロンプトが長くならないように）
+    const recentBaseMessages = baseMessages.slice(-6);
+    for (const m of recentBaseMessages) {
+      contextMessages.push({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        timestamp: m.timestamp,
+      });
+    }
+
+    // 現在のstate（サマリ）を追加
+    contextMessages.push({
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: `[Live UI State]\n${JSON.stringify({ ui_id: uiId, current_state: currentState })}`,
+      timestamp: Date.now(),
+    });
+
+    // 直近の操作履歴（最新6手）を追加
+    const actions = liveUIActionsRef.current.get(uiId) || [];
+    const recentActions = actions.slice(-6);
+    for (const a of recentActions) {
+      contextMessages.push({
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: JSON.stringify({ _type: 'live_ui_action', ui_id: a.uiId, action: a.action, data: a.data }),
+        timestamp: a.timestamp,
+      });
+    }
+
+    // 今回のアクション
+    contextMessages.push({
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: JSON.stringify({ _type: 'live_ui_action', ui_id: uiId, action, data }),
+      timestamp: Date.now(),
+    });
+
+    return contextMessages;
+  }, [messages]);
+
+  /** ライブUIアクションハンドラ（liveモード） */
+  const handleLiveUIAction = useCallback(async (
+    uiId: string,
+    action: string,
+    data: Record<string, any>,
+    currentState: Record<string, any>,
+  ) => {
+    // 1. 楽観的更新（UIのstateを即座に更新）
+    // アクション情報をstateに反映（例: buttonクリック等）
+    const optimisticState = { ...currentState };
+    setLiveUIState(uiId, optimisticState);
+
+    // 操作履歴を記録
+    const newAction: LiveUIAction = { uiId, action, data, timestamp: Date.now() };
+    const prevActions = liveUIActionsRef.current.get(uiId) || [];
+    liveUIActionsRef.current.set(uiId, [...prevActions, newAction]);
+
+    // 2. サイレントメッセージを構築
+    const contextMessages = buildLiveUIContext(uiId, action, data, currentState);
+
+    try {
+      // 3. AIにサイレント送信
+      const response = await window.arisChatAPI.sendSilentMessage(
+        contextMessages,
+        currentSessionIdRef.current || '',
+      );
+
+      if (response.error) {
+        console.error('[LiveUI] サイレント送信エラー:', response.error);
+        return;
+      }
+
+      const responseContent = response.content || '';
+
+      // 4. interactive-ui-update を抽出してstate更新
+      const updatePatch = parseUIUpdate(responseContent);
+      if (updatePatch && updatePatch.id === uiId) {
+        const latestState = liveUIStates.get(uiId) ?? currentState;
+        const newState = mergePatch(latestState, updatePatch.patch);
+        setLiveUIState(uiId, newState);
+      }
+
+      // 5. 通常テキスト部分があればチャットに追加
+      const textContent = responseContent
+        .replace(/```interactive-ui-update[\s\S]*?```/g, '')
+        .trim();
+
+      if (textContent) {
+        const assistantMsg: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: textContent,
+          timestamp: Date.now(),
+          stats: response.stats,
+        };
+        setMessages((msgs) => {
+          const newMsgs = [...msgs, assistantMsg];
+          saveSession(newMsgs);
+          return newMsgs;
+        });
+      }
+    } catch (err: any) {
+      console.error('[LiveUI] サイレント送信に失敗しました:', err?.message);
+    }
+  }, [buildLiveUIContext, liveUIStates, saveSession, setLiveUIState]);
 
   // メッセージ送信
   const handleSend = useCallback(async () => {
@@ -468,6 +610,8 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
             onEditSave={(newContent) => handleEditSave(msg.id, newContent)}
             onEditCancel={handleEditCancel}
             onInteractiveUIAction={msg.role === 'assistant' ? handleInteractiveUIAction : undefined}
+            onLiveUIAction={msg.role === 'assistant' ? handleLiveUIAction : undefined}
+            liveUIStates={msg.role === 'assistant' ? liveUIStates : undefined}
           />
         ))}
 
