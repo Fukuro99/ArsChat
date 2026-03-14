@@ -1,6 +1,6 @@
 # ARIA 実装進捗メモ
 
-> 最終更新: 2026-03-13
+> 最終更新: 2026-03-14
 
 ---
 
@@ -90,8 +90,64 @@ APIキー不要。`mcp-remote` が OAuth フロー（ブラウザ認可）とト
 
 ---
 
+## インタラクティブUI実装
+
+### 実装フェーズ
+
+#### ✅ Phase 1 — 基盤 (コア描画エンジン)
+- **コミット**: `feature/interactive-ui` ブランチ上
+- JSONスキーマ定義: `UIBlock`, `UIElement` 型 (`src/shared/types.ts`)
+- `UIRenderer.tsx`: `BlockRenderer` + `ElementRenderer` — フォーム/テキスト/ボタン/グリッドを再帰描画
+- `styles.css`: `.iui-*` セレクタ群
+- `MessageBubble.tsx`: AIメッセージ中の ` ```interactive-ui ``` ` コードブロックを検出・描画
+- アクション送信: ユーザー操作 → `onInteractiveUIAction(blockId, actionType, data)` コールバック → ChatWindow へ
+
+#### ✅ Phase 2 — システムプロンプト統合
+- `INTERACTIVE_UI_INSTRUCTIONS` 定数を `src/shared/types.ts` に追加
+- `getEffectiveSystemPrompt()` が上記指示を常にシステムプロンプトへ連結
+- AIが ` ```interactive-ui ``` ` ブロックを正しく生成できるようになった
+
+#### ✅ Phase 3 — Live UI モード (2026-03-14, commit `d4c781d`)
+
+**概要**: ユーザー操作をチャット履歴に残さず、サイレント IPC でリアルタイムに UI 状態を更新するモード。
+
+| コンポーネント | ファイル | 内容 |
+|---|---|---|
+| サイレント IPC | `src/main/claude.ts` | `sendSilent()` — ストリーミングなし、履歴保存なし |
+| IPC ハンドラ | `src/main/index.ts` | `chat:send-silent` チャンネルを追加 |
+| Preload 公開 | `src/main/preload.ts` | `sendSilentMessage()` を `contextBridge` 経由で公開 |
+| 型定義 | `src/renderer/types/global.d.ts` | `arisChatAPI.sendSilentMessage()` 型追加 |
+| 状態管理 Hook | `src/renderer/components/interactive-ui/state-manager.ts` | `useLiveUIState`, `mergePatch` |
+| Live 描画 | `src/renderer/components/interactive-ui/UIRenderer.tsx` | `mode: "live"` / `status: "finished"` 対応 |
+| スタイル | `src/renderer/components/interactive-ui/styles.css` | `.iui-block-live`, `.iui-live-badge` 等 |
+| バブル連携 | `src/renderer/components/MessageBubble.tsx` | `onLiveUIAction` / `liveUIStates` props |
+| ウィンドウ統合 | `src/renderer/components/ChatWindow.tsx` | `liveUIStates` Map, `buildLiveUIContext()`, `handleLiveUIAction()` |
+
+**Live UI フロー:**
+1. `mode: "live"` ブロックでユーザー操作 → `onLiveUIAction(blockId, action, data)`
+2. `ChatWindow`: 楽観的更新（即時UI反映）→ 操作履歴を Ref に蓄積
+3. `buildLiveUIContext()` でローリングコンテキスト構築（トークン節約）
+4. `sendSilentMessage()` — 非ストリーミング、チャット履歴に保存しない
+5. AI 応答の ` ```interactive-ui-update ``` ` ブロックをパース → `mergePatch()` で状態マージ
+6. テキスト付き応答があれば通常チャットへ追記
+
+**`interactive-ui-update` フォーマット例:**
+```json
+{
+  "uiId": "block-id",
+  "patch": { "score": 42 },
+  "status": "active"
+}
+```
+- `status: "finished"` → ブロック全体を `pointer-events: none` + バッジ「終了」表示
+
+**ビルド検証**: `npx tsc --noEmit` ✓ / `npx vite build` ✓ (3.15s)
+
+---
+
 ## 今後の課題 / 検討事項
 
 - [ ] チャット画面の最大幅制限・中央寄せ（ウィンドウ拡大時に左右に広がる問題）
 - [ ] Electron コンソールの文字化け（UTF-8対応: `chcp 65001`）
 - [ ] ツール数削減の仕組み（不要なツールをリクエストに含めない選択肢）
+- [ ] Phase 4: インタラクティブUI 拡張プリミティブ（画像, progress-bar, scroll, showIf 条件表示 + ポリッシュ）
