@@ -799,6 +799,144 @@ export function createClaudeService(mcpManager?: MCPManager) {
     onEnd({ timeSeconds: Math.round(elapsed * 100) / 100 });
   }
 
+  // ===== サイレント送信（非ストリーミング、履歴保存なし） =====
+
+  async function sendChatSilent(
+    settings: ArisChatSettings,
+    messages: ChatMessage[],
+  ): Promise<{ content: string; stats: ChatMessageStats }> {
+    const provider = settings.provider ?? 'anthropic';
+
+    if (provider === 'lmstudio') {
+      return sendChatSilentLMStudio(settings, messages);
+    } else {
+      return sendChatSilentAnthropic(settings, messages);
+    }
+  }
+
+  async function sendChatSilentAnthropic(
+    settings: ArisChatSettings,
+    messages: ChatMessage[],
+  ): Promise<{ content: string; stats: ChatMessageStats }> {
+    const client = new Anthropic({ apiKey: settings.apiKey });
+    const requestStartTime = Date.now();
+
+    const apiMessages = messages.map((msg) => {
+      const content: any[] = [];
+      if (msg.content) content.push({ type: 'text', text: msg.content });
+      if (msg.imageBase64) {
+        content.push({
+          type: 'image',
+          source: { type: 'base64', media_type: 'image/png', data: msg.imageBase64 },
+        });
+      }
+      return { role: msg.role as 'user' | 'assistant', content };
+    });
+
+    const response = await client.messages.create({
+      model: settings.model,
+      max_tokens: 4096,
+      system: getEffectiveSystemPrompt(settings),
+      messages: apiMessages,
+    });
+
+    const endTime = Date.now();
+    const elapsed = (endTime - requestStartTime) / 1000;
+    const outputTokens = response.usage?.output_tokens ?? 0;
+
+    const content = response.content
+      .filter((block) => block.type === 'text')
+      .map((block) => (block as any).text as string)
+      .join('');
+
+    const stats: ChatMessageStats = {
+      totalTokens: outputTokens || undefined,
+      timeSeconds: Math.round(elapsed * 100) / 100,
+      tokensPerSec: outputTokens > 0 && elapsed > 0
+        ? Math.round((outputTokens / elapsed) * 100) / 100
+        : undefined,
+      finishReason: formatFinishReason(response.stop_reason ?? undefined),
+    };
+
+    return { content, stats };
+  }
+
+  async function sendChatSilentLMStudio(
+    settings: ArisChatSettings,
+    messages: ChatMessage[],
+  ): Promise<{ content: string; stats: ChatMessageStats }> {
+    const baseUrl = normalizeBaseUrl(settings.lmstudioBaseUrl);
+    if (!baseUrl) {
+      throw new Error('LM Studio のサーバーURLが空です。設定画面からURLを入力してください。');
+    }
+
+    const chatEndpoint = resolveChatEndpoint(baseUrl);
+    const attemptedUrls: string[] = [];
+
+    // モデル解決
+    let model = settings.lmstudioModel.trim();
+    if (!model) {
+      const tempController = new AbortController();
+      const autoModel = await resolveAutoModel(baseUrl, tempController.signal, attemptedUrls, false);
+      model = autoModel || 'local-model';
+    }
+
+    // OpenAI互換メッセージ形式を構築
+    const apiMessages: any[] = [];
+    const effectiveSystemPrompt = getEffectiveSystemPrompt(settings);
+    if (effectiveSystemPrompt) {
+      apiMessages.push({ role: 'system', content: effectiveSystemPrompt });
+    }
+    for (const msg of messages) {
+      apiMessages.push({ role: msg.role, content: msg.content });
+    }
+
+    const requestStartTime = Date.now();
+
+    const response = await fetchWithFallback(
+      chatEndpoint,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: apiMessages,
+          stream: false,
+        }),
+      },
+      attemptedUrls,
+    );
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(
+        `LM Studio エラー ${response.status}: ${errText.replace(/\s+/g, ' ').trim().slice(0, 200)}`
+      );
+    }
+
+    const endTime = Date.now();
+    const elapsed = (endTime - requestStartTime) / 1000;
+    const json: any = await response.json();
+
+    const content =
+      json?.choices?.[0]?.message?.content ??
+      json?.choices?.[0]?.delta?.content ?? '';
+
+    const usage = json?.usage;
+    const completionTokens = usage?.completion_tokens ?? 0;
+
+    const stats: ChatMessageStats = {
+      totalTokens: completionTokens || undefined,
+      timeSeconds: Math.round(elapsed * 100) / 100,
+      tokensPerSec: completionTokens > 0 && elapsed > 0
+        ? Math.round((completionTokens / elapsed) * 100) / 100
+        : undefined,
+      finishReason: formatFinishReason(json?.choices?.[0]?.finish_reason),
+    };
+
+    return { content, stats };
+  }
+
   // ===== 公開API =====
   return {
     async streamChat(
@@ -827,6 +965,14 @@ export function createClaudeService(mcpManager?: MCPManager) {
 
     abort(): void {
       currentAbortController?.abort();
+    },
+
+    /** サイレント送信（非ストリーミング・履歴保存なし） */
+    async sendSilent(
+      settings: ArisChatSettings,
+      messages: ChatMessage[],
+    ): Promise<{ content: string; stats: ChatMessageStats }> {
+      return sendChatSilent(settings, messages);
     },
 
     /** LM Studio のダウンロード済みモデル一覧を取得 */

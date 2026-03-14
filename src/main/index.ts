@@ -35,7 +35,8 @@ let isQuitting = false;
 let miniModeActive = false;
 let normalWindowBounds: Rectangle | null = null;
 
-const isDev = process.env.NODE_ENV === 'development';
+const isDev = !app.isPackaged;
+const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
 const CAPTURE_HOTKEY = 'CommandOrControl+Shift+S';
 const MINI_WINDOW_WIDTH = 380;
 const MINI_WINDOW_HEIGHT = 560;
@@ -365,7 +366,7 @@ function createMainWindow(): BrowserWindow {
 
   // 読み込み
   if (isDev) {
-    win.loadURL('http://localhost:5173');
+    win.loadURL(DEV_SERVER_URL);
     win.webContents.openDevTools({ mode: 'detach' });
   } else {
     win.loadFile(path.join(__dirname, '../renderer/index.html'));
@@ -446,7 +447,7 @@ function createWidgetWindow(): BrowserWindow {
   });
 
   if (isDev) {
-    win.loadURL('http://localhost:5173/?mode=widget');
+    win.loadURL(`${DEV_SERVER_URL}/?mode=widget`);
   } else {
     win.loadFile(path.join(__dirname, '../renderer/index.html'), { query: { mode: 'widget' } });
   }
@@ -620,6 +621,20 @@ function setupIPC(): void {
   // --- チャット中断 ---
   ipcMain.on(IPC_CHANNELS.CHAT_ABORT, () => {
     claude.abort();
+  });
+
+  // --- サイレント送信（ライブUIモード用・ストリーミングなし・履歴保存なし） ---
+  ipcMain.handle(IPC_CHANNELS.CHAT_SEND_SILENT, async (_event, messages: ChatMessage[], _sessionId: string) => {
+    const settings = store.getSettings();
+    if (settings.provider === 'anthropic' && !settings.apiKey) {
+      return { content: '', error: 'APIキーが設定されていません。設定画面からAPIキーを入力してください。' };
+    }
+    try {
+      const result = await claude.sendSilent(settings, messages);
+      return result;
+    } catch (err: any) {
+      return { content: '', error: err.message || 'Unknown error', stats: {} };
+    }
   });
 
   // --- セッション管理 ---

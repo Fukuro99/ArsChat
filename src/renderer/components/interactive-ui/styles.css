@@ -1,0 +1,273 @@
+/* ===== Interactive UI コンポーネント スタイル ===== */
+
+/* ブロック全体 */
+.iui-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px;
+  background-color: var(--aria-surface);
+  border: 1px solid var(--aria-border);
+  border-radius: 10px;
+  margin: 6px 0;
+  font-size: 0.875rem;
+  color: var(--aria-text);
+}
+
+/* ローディング状態 */
+.iui-block-loading {
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+}
+
+/* ブロックタイトル */
+.iui-block-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--aria-text);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--aria-border);
+}
+
+/* ブロックコンテンツ */
+.iui-block-content {
+  /* 内部のUIツリーを表示 */
+}
+
+/* アクションボタン群 */
+.iui-block-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+  border-top: 1px solid var(--aria-border);
+}
+
+/* 送信済み表示 */
+.iui-block-submitted {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--aria-text-muted);
+  padding-top: 4px;
+  border-top: 1px solid var(--aria-border);
+}
+
+.iui-block-submitted::before {
+  content: '✓';
+  color: #22c55e;
+  font-size: 0.875rem;
+}
+
+/* ===== ライブUIモード ===== */
+
+/* ライブブロック */
+.iui-block-live {
+  border-color: var(--aria-primary, #6366f1);
+  border-width: 1.5px;
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 1rem;
+}
+
+/* 終了状態のライブブロック */
+.iui-block-finished {
+  border-color: var(--aria-border);
+  opacity: 0.85;
+}
+
+/* タイトル行のLIVEバッジ */
+.iui-block-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.iui-live-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  border-radius: 4px;
+  background: var(--aria-primary, #6366f1);
+  color: #fff;
+  text-transform: uppercase;
+}
+
+.iui-live-badge-finished {
+  background: var(--aria-border);
+  color: var(--aria-text-muted);
+}
+
+/* 無効化されたコンテンツ（finished状態） */
+.iui-block-content-disabled {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+/* ===== アクションボタン ===== */
+
+.iui-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  border: none;
+  outline: none;
+}
+
+.iui-action-btn:focus-visible {
+  outline: 2px solid var(--aria-primary);
+  outline-offset: 2px;
+}
+
+.iui-action-btn-primary {
+  background-color: var(--aria-primary);
+  color: #ffffff;
+}
+
+.iui-action-btn-primary:hover {
+  background-color: var(--aria-primary-dark, var(--aria-primary));
+  opacity: 0.9;
+}
+
+.iui-action-btn-secondary {
+  background-color: transparent;
+  color: var(--aria-text-muted);
+  border: 1px solid var(--aria-border);
+}
+
+.iui-action-btn-secondary:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--aria-text);
+}
+
+.iui-action-btn-danger {
+  background-color: #ef4444;
+  color: #ffffff;
+}
+
+.iui-action-btn-danger:hover {
+  opacity: 0.85;
+}
+
+/* ===== プリミティブ共通 ===== */
+
+/* ボタン */
+.iui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  outline: none;
+  white-space: nowrap;
+}
+
+.iui-button:focus-visible {
+  outline: 2px solid var(--aria-primary);
+  outline-offset: 2px;
+}
+
+.iui-button-primary:hover {
+  opacity: 0.85;
+}
+
+.iui-button-secondary:hover {
+  background-color: rgba(255, 255, 255, 0.07);
+  color: var(--aria-text);
+}
+
+.iui-button-danger:hover {
+  opacity: 0.85;
+}
+
+/* 入力フォーム共通 */
+.iui-input:focus,
+.iui-select:focus {
+  border-color: var(--aria-primary) !important;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+/* スライダー */
+.iui-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--aria-border);
+}
+
+.iui-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--aria-primary);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.iui-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--aria-primary);
+  cursor: pointer;
+  border: none;
+}
+
+/* スクロール領域 */
+.iui-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--aria-border) transparent;
+}
+
+.iui-scroll::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.iui-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.iui-scroll::-webkit-scrollbar-thumb {
+  background: var(--aria-border);
+  border-radius: 9999px;
+}
+
+/* ===== スピナー ===== */
+
+.iui-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--aria-border);
+  border-top-color: var(--aria-primary);
+  border-radius: 50%;
+  animation: iui-spin 0.7s linear infinite;
+}
+
+@keyframes iui-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

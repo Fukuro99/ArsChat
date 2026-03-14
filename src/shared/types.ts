@@ -94,17 +94,159 @@ function currentDateTimeTag(): string {
   return `[${yyyy}:${MM}:${DD};${hh}:${mm}]`;
 }
 
-/** アクティブな人格のシステムプロンプトを返す（人格名・日時を付加） */
+const INTERACTIVE_UI_INSTRUCTIONS = `
+## Interactive UI
+
+あなたはチャットメッセージ内にインタラクティブなUIコンポーネントを埋め込むことができます。
+ユーザーとの対話をより効率的にするために、適切な場面でUIコンポーネントを活用してください。
+
+### 使用方法
+
+\`\`\`interactive-ui ブロック内にJSON定義を記述します:
+
+\`\`\`interactive-ui
+{
+  "id": "ユニークなID",
+  "title": "タイトル（省略可）",
+  "root": { ...UIノードツリー },
+  "actions": [ ...submitボタン等 ]
+}
+\`\`\`
+
+### 利用可能なプリミティブ
+
+**レイアウト系**: box（direction/gap/padding/align/bg/rounded）, grid（cols/rows/cellWidth/cellHeight）, scroll, divider
+**表示系**: text（content/size/weight/color）, icon（emoji/size）, badge（content/color/bg）, progress-bar（value/max/color/showLabel）, image（src/alt/width/height/rounded/fit）
+**入力系**: button（label/actionId/variant）, input（inputId/placeholder/multiline）, select（inputId/options）, checkbox（inputId/label）, slider（inputId/min/max/step）, chips（inputId/options/multi）, clickable（actionId）
+
+### UIノード構造
+
+\`\`\`json
+{
+  "primitive": "プリミティブ名",
+  "props": { "プロパティ": "値" },
+  "bind": "state内のキーパス（入力系のみ）",
+  "children": [ ...子ノード ]
+}
+\`\`\`
+
+### progress-bar の bind サポート
+
+progress-bar は \`bind\` でstateの値を動的に参照できる:
+\`\`\`json
+{ "primitive": "progress-bar", "bind": "hp", "props": { "max": 100, "color": "success", "showLabel": true } }
+\`\`\`
+AIが patch で hp の値を更新すると自動的に反映される。
+
+### image プリミティブ
+
+\`\`\`json
+{ "primitive": "image", "props": { "src": "data:image/...", "width": 200, "height": 150, "rounded": "md", "fit": "cover" } }
+\`\`\`
+- src: data:image/... または blob: URL（外部URLは表示されません）
+- fit: "cover" / "contain" / "fill" / "none" / "scale-down"（デフォルト: "cover"）
+- bind でstateの画像URLを動的に参照可能
+
+### actionsのsubmit
+
+\`\`\`json
+"actions": [{ "type": "submit", "label": "送信", "variant": "primary" }]
+\`\`\`
+
+### デザイントークン（colorプロパティ）
+
+アプリはダークテーマです。コントラストを意識して色を選んでください。
+
+**セマンティック**: "primary" / "secondary" / "success" / "warning" / "danger" / "muted" / "text" / "text-inverse" / "bg" / "surface" / "border"
+**高コントラスト**: "black"（濃紺） / "white"（オフホワイト） / "dark"（ダークスレート） / "light"（ライトスレート）
+**カスタム**: "#RRGGBB"（例: "#000000", "#ffffff", "#8b5cf6"）
+
+**ゲーム・ボードUI での推奨:**
+- 黒駒の背景: "black" または "#111111" → テキスト色: "white"
+- 白駒の背景: "white" または "#eeeeee" → テキスト色: "black"
+- 盤面マス（空）: "surface" → ホバー: "border"
+- ハイライトマス: "primary"
+
+### 例: ボタン選択肢
+
+\`\`\`interactive-ui
+{
+  "id": "choice-1",
+  "root": {
+    "primitive": "box",
+    "props": { "direction": "column", "gap": 8 },
+    "children": [
+      { "primitive": "text", "props": { "content": "どれにしますか？", "size": "sm" } },
+      {
+        "primitive": "box",
+        "props": { "direction": "row", "gap": 8 },
+        "children": [
+          { "primitive": "button", "props": { "label": "選択肢A", "actionId": "choose_a", "variant": "primary" } },
+          { "primitive": "button", "props": { "label": "選択肢B", "actionId": "choose_b", "variant": "secondary" } }
+        ]
+      }
+    ]
+  }
+}
+\`\`\`
+
+### ガイドライン
+
+- 単純なyes/noにはUIを使わず通常のテキストで十分
+- 3つ以上の選択肢や複数入力が必要な場面でUIを活用
+- UIブロックの前後に説明テキストを添える
+- ユーザーがUIを操作すると [interactive-ui-response] として送信されるので、それを受けて次の応答をする
+
+### ライブUIモード（mode: "live"）
+
+継続的なインタラクション（ゲーム、タスクボード等）には mode: "live" を使用:
+- ユーザーの操作はチャットに表示されず、AIに直接送信される
+- AIは \`\`\`interactive-ui-update ブロックで状態だけを返す
+
+\`\`\`interactive-ui-update
+{
+  "id": "ブロックID",
+  "patch": { "更新するstateキー": "値" }
+}
+\`\`\`
+
+- patch に "status": "finished" を含めるとUI終了（操作不可）
+- ゲーム終了時などは update ブロックの後に通常テキストで締めのコメントを書く
+- ライブUIには actions（submitボタン）を含めない
+- ユーザーの操作は {"_type":"live_ui_action","ui_id":"...","action":"...","data":{...}} 形式で届く
+
+### ローカルアクション（local: true）
+
+ライブUIでAIに送信せずstateだけ更新したい要素（選択・ハイライト・入力途中等）には **local: true** を指定:
+- button / clickable に \`"local": true\` を付けるとクリックしてもAIに送信されない
+- ノードの \`bind\` プロパティで更新するstateキーを指定
+- button は \`value\` プロパティ、clickable は \`stateValue\` プロパティで設定する値を指定
+
+例: ボード上のマスをクリックで選択し、「置く」ボタンでAIに送信
+\`\`\`json
+{
+  "primitive": "clickable",
+  "bind": "selectedCell",
+  "props": { "local": true, "stateValue": "A5" },
+  "children": [{ "primitive": "text", "props": { "content": "A5" } }]
+}
+\`\`\`
+\`\`\`json
+{ "primitive": "button", "props": { "label": "ここに置く", "actionId": "place_stone" } }
+\`\`\`
+AIには selectedCell の値が currentState に含まれた状態で届く。`;
+
+/** アクティブな人格のシステムプロンプトを返す（人格名・日時・Interactive UI指示を付加） */
 export function getEffectiveSystemPrompt(settings: ArisChatSettings): string {
   const dateTime = currentDateTimeTag();
   if (settings.activePersonaId) {
     const persona = settings.personas.find((p) => p.id === settings.activePersonaId);
     if (persona) {
       const namePrefix = `あなたの名前は「${persona.name}」です。\n\n`;
-      return namePrefix + persona.systemPrompt + `\n\n現在日時: ${dateTime}`;
+      return namePrefix + persona.systemPrompt + INTERACTIVE_UI_INSTRUCTIONS + `\n\n現在日時: ${dateTime}`;
     }
   }
-  return settings.systemPrompt + `\n\n現在日時: ${dateTime}`;
+  return settings.systemPrompt + INTERACTIVE_UI_INSTRUCTIONS + `\n\n現在日時: ${dateTime}`;
 }
 
 /** アクティブな人格のアバターパスを返す */
@@ -228,6 +370,9 @@ export const IPC_CHANNELS = {
   // LM Studio モデル操作
   LMSTUDIO_LIST_MODELS: 'lmstudio:list-models',
   LMSTUDIO_LOAD_MODEL: 'lmstudio:load-model',
+
+  // チャット（サイレント送信）
+  CHAT_SEND_SILENT: 'chat:send-silent',
 
   // MCP
   MCP_GET_CONFIG: 'mcp:get-config',
