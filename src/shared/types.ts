@@ -94,17 +94,93 @@ function currentDateTimeTag(): string {
   return `[${yyyy}:${MM}:${DD};${hh}:${mm}]`;
 }
 
-/** アクティブな人格のシステムプロンプトを返す（人格名・日時を付加） */
+const INTERACTIVE_UI_INSTRUCTIONS = `
+## Interactive UI
+
+あなたはチャットメッセージ内にインタラクティブなUIコンポーネントを埋め込むことができます。
+ユーザーとの対話をより効率的にするために、適切な場面でUIコンポーネントを活用してください。
+
+### 使用方法
+
+\`\`\`interactive-ui ブロック内にJSON定義を記述します:
+
+\`\`\`interactive-ui
+{
+  "id": "ユニークなID",
+  "title": "タイトル（省略可）",
+  "root": { ...UIノードツリー },
+  "actions": [ ...submitボタン等 ]
+}
+\`\`\`
+
+### 利用可能なプリミティブ
+
+**レイアウト系**: box（direction/gap/padding/align/bg/rounded）, grid（cols/rows/cellWidth/cellHeight）, scroll, divider
+**表示系**: text（content/size/weight/color）, icon（emoji/size）, badge（content/color/bg）, progress-bar（value/max）
+**入力系**: button（label/actionId/variant）, input（inputId/placeholder/multiline）, select（inputId/options）, checkbox（inputId/label）, slider（inputId/min/max/step）, chips（inputId/options/multi）, clickable（actionId）
+
+### UIノード構造
+
+\`\`\`json
+{
+  "primitive": "プリミティブ名",
+  "props": { "プロパティ": "値" },
+  "bind": "state内のキーパス（入力系のみ）",
+  "children": [ ...子ノード ]
+}
+\`\`\`
+
+### actionsのsubmit
+
+\`\`\`json
+"actions": [{ "type": "submit", "label": "送信", "variant": "primary" }]
+\`\`\`
+
+### デザイントークン（colorプロパティ）
+
+"primary" / "secondary" / "success" / "warning" / "danger" / "muted" / "text" / "#RRGGBB"
+
+### 例: ボタン選択肢
+
+\`\`\`interactive-ui
+{
+  "id": "choice-1",
+  "root": {
+    "primitive": "box",
+    "props": { "direction": "column", "gap": 8 },
+    "children": [
+      { "primitive": "text", "props": { "content": "どれにしますか？", "size": "sm" } },
+      {
+        "primitive": "box",
+        "props": { "direction": "row", "gap": 8 },
+        "children": [
+          { "primitive": "button", "props": { "label": "選択肢A", "actionId": "choose_a", "variant": "primary" } },
+          { "primitive": "button", "props": { "label": "選択肢B", "actionId": "choose_b", "variant": "secondary" } }
+        ]
+      }
+    ]
+  }
+}
+\`\`\`
+
+### ガイドライン
+
+- 単純なyes/noにはUIを使わず通常のテキストで十分
+- 3つ以上の選択肢や複数入力が必要な場面でUIを活用
+- UIブロックの前後に説明テキストを添える
+- ユーザーがUIを操作すると [interactive-ui-response] として送信されるので、それを受けて次の応答をする`;
+
+/** アクティブな人格のシステムプロンプトを返す（人格名・日時・Interactive UI指示を付加） */
 export function getEffectiveSystemPrompt(settings: ArisChatSettings): string {
   const dateTime = currentDateTimeTag();
   if (settings.activePersonaId) {
     const persona = settings.personas.find((p) => p.id === settings.activePersonaId);
     if (persona) {
       const namePrefix = `あなたの名前は「${persona.name}」です。\n\n`;
-      return namePrefix + persona.systemPrompt + `\n\n現在日時: ${dateTime}`;
+      return namePrefix + persona.systemPrompt + INTERACTIVE_UI_INSTRUCTIONS + `\n\n現在日時: ${dateTime}`;
     }
   }
-  return settings.systemPrompt + `\n\n現在日時: ${dateTime}`;
+  return settings.systemPrompt + INTERACTIVE_UI_INSTRUCTIONS + `\n\n現在日時: ${dateTime}`;
 }
 
 /** アクティブな人格のアバターパスを返す */
