@@ -81,6 +81,7 @@ export interface ArisChatSettings {
   alwaysOnTop: boolean;
   windowWidth: number;
   windowHeight: number;
+  enableInteractiveUI: boolean; // インタラクティブAI機能
 }
 
 /** 現在日時を [yyyy:MM:DD;hh:mm] 形式で返す */
@@ -315,14 +316,15 @@ AIには selectedCell の値が currentState に含まれた状態で届く。
 /** アクティブな人格のシステムプロンプトを返す（人格名・日時・Interactive UI指示を付加） */
 export function getEffectiveSystemPrompt(settings: ArisChatSettings): string {
   const dateTime = currentDateTimeTag();
+  const uiInstructions = settings.enableInteractiveUI !== false ? INTERACTIVE_UI_INSTRUCTIONS : '';
   if (settings.activePersonaId) {
     const persona = settings.personas.find((p) => p.id === settings.activePersonaId);
     if (persona) {
       const namePrefix = `あなたの名前は「${persona.name}」です。\n\n`;
-      return namePrefix + persona.systemPrompt + INTERACTIVE_UI_INSTRUCTIONS + `\n\n現在日時: ${dateTime}`;
+      return namePrefix + persona.systemPrompt + uiInstructions + `\n\n現在日時: ${dateTime}`;
     }
   }
-  return settings.systemPrompt + INTERACTIVE_UI_INSTRUCTIONS + `\n\n現在日時: ${dateTime}`;
+  return settings.systemPrompt + uiInstructions + `\n\n現在日時: ${dateTime}`;
 }
 
 /** アクティブな人格のアバターパスを返す */
@@ -359,6 +361,7 @@ export const DEFAULT_SETTINGS: ArisChatSettings = {
   alwaysOnTop: false,
   windowWidth: 480,
   windowHeight: 720,
+  enableInteractiveUI: true,
 };
 
 // ===== MCP 設定 =====
