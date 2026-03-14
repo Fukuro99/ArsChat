@@ -4,6 +4,9 @@ import markedKatex from 'marked-katex-extension';
 import 'katex/dist/katex.min.css';
 import { ChatMessage } from '../../shared/types';
 import ariaIconUrl from '../assets/aria-icon.png';
+import { parseInteractiveUI } from './interactive-ui/parser';
+import { BlockRenderer } from './interactive-ui/UIRenderer';
+import './interactive-ui/styles.css';
 
 // KaTeX 拡張を marked に登録（インライン $...$ とブロック $$...$$ 両対応）
 marked.use(markedKatex({ throwOnError: false, output: 'html' }));
@@ -39,6 +42,7 @@ interface MessageBubbleProps {
   onEditStart?: () => void;
   onEditSave?: (newContent: string) => void;
   onEditCancel?: () => void;
+  onInteractiveUIAction?: (uiId: string, action: string, data: Record<string, any>) => void;
 }
 
 /** <think>...</think> ブロックを分離する（ストリーミング途中・タグ欠け対応） */
@@ -113,6 +117,7 @@ export default function MessageBubble({
   onEditStart,
   onEditSave,
   onEditCancel,
+  onInteractiveUIAction,
 }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const [thinkOpen, setThinkOpen] = useState(false);
@@ -132,30 +137,46 @@ export default function MessageBubble({
     }
   }, [isEditing, message.content]);
 
-  // thinkブロック分離 & マークダウン変換
-  const { thinkingHtml, responseHtml, hasThinking, isThinkingInProgress } = useMemo(() => {
+  // thinkブロック分離 & マークダウン変換 & Interactive UIパース
+  const { thinkingHtml, parsedContent, hasThinking, isThinkingInProgress } = useMemo(() => {
     if (isUser || !message.content) {
-      return { thinkingHtml: '', responseHtml: '', hasThinking: false, isThinkingInProgress: false };
+      return {
+        thinkingHtml: '',
+        parsedContent: null,
+        hasThinking: false,
+        isThinkingInProgress: false,
+      };
     }
 
     const { thinking, response, isThinkingInProgress } = parseThinkBlocks(message.content);
 
     // 円記号（¥）をバックスラッシュ（\）に正規化してから KaTeX に渡す
     const normalizedThinking = normalizeYenToBackslash(thinking);
-    const normalizedResponse = normalizeYenToBackslash(response || '');
 
     let tHtml = '';
-    let rHtml = '';
     try {
       if (normalizedThinking) tHtml = marked.parse(normalizedThinking, { breaks: true, gfm: true }) as string;
-      rHtml = marked.parse(normalizedResponse, { breaks: true, gfm: true }) as string;
     } catch {
-      rHtml = response || '';
+      tHtml = '';
     }
+
+    // Interactive UIブロックをパース
+    const uiParsed = parseInteractiveUI(response || '');
+
+    // 各テキストパートをMarkdownに変換
+    const textHtmlParts = uiParsed.textParts.map((part) => {
+      if (part === null) return null;
+      try {
+        const normalized = normalizeYenToBackslash(part);
+        return marked.parse(normalized, { breaks: true, gfm: true }) as string;
+      } catch {
+        return part;
+      }
+    });
 
     return {
       thinkingHtml: tHtml,
-      responseHtml: rHtml,
+      parsedContent: { ...uiParsed, textHtmlParts },
       hasThinking: !!thinking,
       isThinkingInProgress,
     };
@@ -273,11 +294,47 @@ export default function MessageBubble({
                 </div>
               )}
 
-              {/* メインレスポンス */}
-              <div
-                className={`markdown-body ${isStreaming ? 'streaming-cursor' : ''}`}
-                dangerouslySetInnerHTML={{ __html: responseHtml }}
-              />
+              {/* メインレスポンス（Markdown + Interactive UI混在） */}
+              {parsedContent ? (
+                <div className={isStreaming ? 'streaming-cursor' : ''}>
+                  {parsedContent.textParts.map((part, i) => {
+                    if (part === null) {
+                      // UIブロックのプレースホルダー位置
+                      const block = parsedContent.blocks.find((b) => b._index === i);
+                      if (block) {
+                        return (
+                          <BlockRenderer
+                            key={block.id}
+                            block={block}
+                            onSubmit={(uiId, action, data) => {
+                              onInteractiveUIAction?.(uiId, action, data);
+                            }}
+                            onAction={(uiId, actionId, data) => {
+                              onInteractiveUIAction?.(uiId, actionId, data || {});
+                            }}
+                          />
+                        );
+                      }
+                      return null;
+                    }
+                    const html = parsedContent.textHtmlParts[i];
+                    if (!html && !part) return null;
+                    return (
+                      <div
+                        key={i}
+                        className="markdown-body"
+                        dangerouslySetInnerHTML={{ __html: html || part }}
+                      />
+                    );
+                  })}
+                  {/* 未閉じUIブロック（ストリーミング中） */}
+                  {parsedContent.isLoading && (
+                    <div className="iui-block iui-block-loading">
+                      <div className="iui-spinner" />
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </>
           )}
 

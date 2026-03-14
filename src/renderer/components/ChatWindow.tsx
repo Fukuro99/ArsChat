@@ -280,6 +280,23 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     setEditingMessageId(null);
   }, []);
 
+  /** Interactive UIアクションハンドラ */
+  const handleInteractiveUIAction = useCallback((uiId: string, action: string, data: Record<string, any>) => {
+    // 構造化データをユーザーメッセージとして整形
+    const responseContent = `[interactive-ui-response]\n${JSON.stringify({ ui_id: uiId, action, data })}`;
+    const userMsg: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: responseContent,
+      timestamp: Date.now(),
+    };
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
+    setIsStreaming(true);
+    setStreamingContent('');
+    window.arisChatAPI.sendMessage(newMessages, currentSessionIdRef.current || '', { thinkMode });
+  }, [messages, thinkMode]);
+
   // メッセージ送信
   const handleSend = useCallback(async () => {
     const text = input.trim();
@@ -450,6 +467,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
             onEditStart={() => handleEditStart(msg.id)}
             onEditSave={(newContent) => handleEditSave(msg.id, newContent)}
             onEditCancel={handleEditCancel}
+            onInteractiveUIAction={msg.role === 'assistant' ? handleInteractiveUIAction : undefined}
           />
         ))}
 
