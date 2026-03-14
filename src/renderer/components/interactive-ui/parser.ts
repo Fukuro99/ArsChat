@@ -1,61 +1,67 @@
-import { InteractiveUIBlock, ParsedContent, UIUpdatePatch } from './types';
+import { InteractiveUIBlock, ParsedContent, UIUpdatePatch, SandboxHTMLBlock } from './types';
 
-/**
- * AIレスポンス文字列から ```interactive-ui ブロックを抽出し、
- * テキスト部分とUIブロックを分離する。
- * ストリーミング中（未閉じブロック）も安全に処理する。
- */
 export function parseInteractiveUI(content: string): ParsedContent {
   const blocks: InteractiveUIBlock[] = [];
+  const sandboxBlocks: SandboxHTMLBlock[] = [];
   const textParts: (string | null)[] = [];
 
-  // 閉じた ```interactive-ui ... ``` ブロックを検出
-  const regex = /```interactive-ui\n([\s\S]*?)```/g;
+  // interactive-ui と interactive-html の両方を1パスで処理
+  const regex = /```(interactive-ui|interactive-html)\n([\s\S]*?)```/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
   while ((match = regex.exec(content)) !== null) {
-    // マッチ前のテキスト部分を保持
     textParts.push(content.slice(lastIndex, match.index));
 
-    try {
-      const parsed = JSON.parse(match[1]) as InteractiveUIBlock;
-      if (!parsed.id || !parsed.root) {
-        throw new Error('id or root is missing');
+    const blockType = match[1];
+    const blockContent = match[2];
+
+    if (blockType === 'interactive-ui') {
+      try {
+        const parsed = JSON.parse(blockContent) as InteractiveUIBlock;
+        if (!parsed.id || !parsed.root) throw new Error('id or root is missing');
+        blocks.push({ ...parsed, _index: textParts.length });
+        textParts.push(null);
+      } catch {
+        textParts.push(match[0]);
       }
-      const block: InteractiveUIBlock = {
-        ...parsed,
-        _index: textParts.length,
-      };
-      blocks.push(block);
-      textParts.push(null); // UIブロックのプレースホルダー
-    } catch {
-      // パース失敗 → Markdownとしてフォールバック表示
-      textParts.push(match[0]);
+    } else if (blockType === 'interactive-html') {
+      try {
+        const sepIdx = blockContent.indexOf('\n---\n');
+        if (sepIdx === -1) throw new Error('separator not found');
+        const metaJson = blockContent.slice(0, sepIdx);
+        const html = blockContent.slice(sepIdx + 5); // '\n---\n'.length === 5
+        const meta = JSON.parse(metaJson) as Omit<SandboxHTMLBlock, 'html'>;
+        if (!meta.id) throw new Error('id is missing');
+        sandboxBlocks.push({ ...meta, html, _index: textParts.length });
+        textParts.push(null);
+      } catch {
+        textParts.push(match[0]);
+      }
     }
 
     lastIndex = regex.lastIndex;
   }
 
-  // 末尾の残りテキスト
+  // 末尾残りテキスト＋未閉じブロック検出
   const unclosed = content.slice(lastIndex);
-
-  // 未閉じブロックの検出
-  const hasUnclosedBlock = unclosed.includes('```interactive-ui');
+  const hasUnclosedUI = unclosed.includes('```interactive-ui');
+  const hasUnclosedHTML = unclosed.includes('```interactive-html');
+  const hasUnclosedBlock = hasUnclosedUI || hasUnclosedHTML;
 
   if (hasUnclosedBlock) {
-    // 未閉じブロックの前のテキスト部分のみ表示
-    const beforeUnclosed = unclosed.replace(/```interactive-ui[\s\S]*$/, '');
+    // 最も早い未閉じブロックの手前までのテキストのみ表示
+    let beforeUnclosed = unclosed;
+    const uiIdx = hasUnclosedUI ? beforeUnclosed.indexOf('```interactive-ui') : Infinity;
+    const htmlIdx = hasUnclosedHTML ? beforeUnclosed.indexOf('```interactive-html') : Infinity;
+    const cutIdx = Math.min(uiIdx, htmlIdx);
+    if (cutIdx !== Infinity) beforeUnclosed = beforeUnclosed.slice(0, cutIdx);
     textParts.push(beforeUnclosed);
   } else {
     textParts.push(unclosed);
   }
 
-  return {
-    textParts,
-    blocks,
-    isLoading: hasUnclosedBlock,
-  };
+  return { textParts, blocks, sandboxBlocks, isLoading: hasUnclosedBlock };
 }
 
 /**

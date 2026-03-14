@@ -41,6 +41,8 @@ export interface ParsedContent {
   textParts: (string | null)[];
   /** UIブロック配列 */
   blocks: InteractiveUIBlock[];
+  /** サンドボックスHTMLブロック配列 */
+  sandboxBlocks: SandboxHTMLBlock[];
   /** 未閉じのUIブロックがあるか（ストリーミング中） */
   isLoading: boolean;
 }
@@ -49,6 +51,19 @@ export interface ParsedContent {
 export interface UIUpdatePatch {
   id: string;
   patch: Record<string, any>;
+}
+
+/** サンドボックスHTML UIブロック */
+export interface SandboxHTMLBlock {
+  id: string;
+  mode?: 'default' | 'live';
+  title?: string;
+  width?: string;
+  height?: string;
+  libs?: string[];       // 将来の外部ライブラリ注入用（現在は無視）
+  html: string;          // 実際のHTMLコンテンツ
+  /** 内部用: テキストパーツ内での位置インデックス */
+  _index?: number;
 }
 
 /** プリミティブコンポーネントの共通Props */

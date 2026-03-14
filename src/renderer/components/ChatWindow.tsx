@@ -4,6 +4,8 @@ import { ChatMessage, ChatMessageStats, ArisChatSettings, DEFAULT_SETTINGS, getE
 import MessageBubble from './MessageBubble';
 import { parseInteractiveUI, parseUIUpdate } from './interactive-ui/parser';
 import { BlockRenderer } from './interactive-ui/UIRenderer';
+import { SandboxRenderer } from './interactive-ui/SandboxRenderer';
+import { SandboxHTMLBlock } from './interactive-ui/types';
 import { mergePatch, LiveUIAction } from './interactive-ui/state-manager';
 import './interactive-ui/styles.css';
 
@@ -65,34 +67,49 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
   const [liveUIStates, setLiveUIStates] = useState<Map<string, Record<string, any>>>(new Map());
   // uiId → 操作履歴（ローリングコンテキスト用）
   const liveUIActionsRef = useRef<Map<string, LiveUIAction[]>>(new Map());
+  // サンドボックスiframeのDOMエレメント登録（パッチ転送用）
+  const sandboxIframeRefs = useRef<Map<string, HTMLIFrameElement | null>>(new Map());
   // ライブUIアクション処理中フラグ
   const [isLiveProcessing, setIsLiveProcessing] = useState(false);
   // ライブUIアクション後のAIテキスト返答（インプレース更新）
   const [liveResponseText, setLiveResponseText] = useState<string | null>(null);
 
-  // アクティブなライブUIブロック（未終了のもの）を検出
-  const activeLiveBlock = useMemo(() => {
+  // アクティブなライブUIブロック（プリミティブ or サンドボックス、未終了のもの）を検出
+  const activeLiveUI = useMemo((): { type: 'primitive'; block: any } | { type: 'sandbox'; block: SandboxHTMLBlock } | null => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
       if (msg.role !== 'assistant') continue;
       const parsed = parseInteractiveUI(msg.content);
-      const liveBlock = parsed.blocks.find((b) => b.mode === 'live');
-      if (liveBlock) {
-        const state = liveUIStates.get(liveBlock.id);
+
+      // サンドボックスライブブロック
+      const sandboxLive = parsed.sandboxBlocks.find((b) => b.mode === 'live');
+      if (sandboxLive) {
+        const state = liveUIStates.get(sandboxLive.id);
         if (!state || state.status !== 'finished') {
-          return liveBlock;
+          return { type: 'sandbox', block: sandboxLive };
+        }
+      }
+
+      // プリミティブライブブロック
+      const primitiveLive = parsed.blocks.find((b) => b.mode === 'live');
+      if (primitiveLive) {
+        const state = liveUIStates.get(primitiveLive.id);
+        if (!state || state.status !== 'finished') {
+          return { type: 'primitive', block: primitiveLive };
         }
       }
     }
     return null;
   }, [messages, liveUIStates]);
 
-  const isLiveMode = activeLiveBlock !== null;
+  const activeLiveBlock = activeLiveUI?.type === 'primitive' ? activeLiveUI.block : null;
+  const activeSandboxBlock = activeLiveUI?.type === 'sandbox' ? activeLiveUI.block : null;
+  const isLiveMode = activeLiveUI !== null;
 
   // ライブUIブロックが切り替わったら返答テキストをリセット
   useEffect(() => {
     setLiveResponseText(null);
-  }, [activeLiveBlock?.id]);
+  }, [activeLiveUI?.block.id]);
 
   // ライブモード中の最新AIテキスト（UIブロック・updateブロック・thinkブロックを除去）
   const latestLiveAIText = useMemo(() => {
@@ -103,6 +120,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
       const text = msg.content
         .replace(/<think>[\s\S]*?<\/think>/g, '')
         .replace(/```interactive-ui[\s\S]*?```/g, '')
+        .replace(/```interactive-html[\s\S]*?```/g, '')
         .replace(/```interactive-ui-update[\s\S]*?```/g, '')
         .trim();
       if (text) return text;
@@ -391,6 +409,14 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     });
   }, []);
 
+  const handleSandboxIframeReady = useCallback((uiId: string, iframe: HTMLIFrameElement | null) => {
+    if (iframe) {
+      sandboxIframeRefs.current.set(uiId, iframe);
+    } else {
+      sandboxIframeRefs.current.delete(uiId);
+    }
+  }, []);
+
   /**
    * ローリングコンテキストを構築する。
    * 元の会話コンテキスト（最初のメッセージまで）＋現在のstate＋直近の操作履歴。
@@ -491,6 +517,15 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
         const latestState = liveUIStates.get(uiId) ?? currentState;
         const newState = mergePatch(latestState, updatePatch.patch);
         setLiveUIState(uiId, newState);
+
+        // サンドボックスiframeにもパッチを転送（サンドボックスブロックの場合）
+        const sandboxIframe = sandboxIframeRefs.current.get(uiId);
+        if (sandboxIframe?.contentWindow) {
+          sandboxIframe.contentWindow.postMessage(
+            { type: 'interactive-ui-update', uiId, patch: updatePatch.patch },
+            '*',
+          );
+        }
       }
 
       // 5. 通常テキスト部分があれば固定ゾーンにインプレース表示（チャットに追加しない）
@@ -684,6 +719,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
             onLiveUIAction={msg.role === 'assistant' ? handleLiveUIAction : undefined}
             liveUIStates={msg.role === 'assistant' ? liveUIStates : undefined}
             hideLiveUIBlocks={isLiveMode}
+            onSandboxIframeReady={handleSandboxIframeReady}
           />
         ))}
 
@@ -699,6 +735,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
             isStreaming
             showThinking={thinkMode}
             avatarSrc={getEffectiveAvatarPath(settings)}
+            onSandboxIframeReady={handleSandboxIframeReady}
           />
         )}
 
@@ -714,21 +751,36 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
       </div>
 
       {/* ===== ライブモード: 固定UIゾーン（入力欄の上に固定） ===== */}
-      {isLiveMode && activeLiveBlock && (
+      {isLiveMode && (
         <div className="shrink-0 border-t border-aria-primary/40 bg-aria-bg-light">
           <div className="max-w-3xl mx-auto px-4 pt-4 pb-3">
-            {/* Live UI ブロック本体 */}
-            <BlockRenderer
-              block={activeLiveBlock}
-              onSubmit={(uiId, action, data) => handleInteractiveUIAction(uiId, action, data)}
-              onAction={(uiId, actionId, data) => {
-                const currentState = liveUIStates.get(activeLiveBlock.id) ?? activeLiveBlock.state ?? {};
-                void handleLiveUIAction(uiId, actionId, data || {}, currentState);
-              }}
-              onLiveAction={handleLiveUIAction}
-              onLocalStateChange={handleLiveLocalStateChange}
-              liveState={liveUIStates.get(activeLiveBlock.id)}
-            />
+            {/* プリミティブライブUIブロック */}
+            {activeLiveBlock && (
+              <BlockRenderer
+                block={activeLiveBlock}
+                onSubmit={(uiId, action, data) => handleInteractiveUIAction(uiId, action, data)}
+                onAction={(uiId, actionId, data) => {
+                  const currentState = liveUIStates.get(activeLiveBlock.id) ?? activeLiveBlock.state ?? {};
+                  void handleLiveUIAction(uiId, actionId, data || {}, currentState);
+                }}
+                onLiveAction={handleLiveUIAction}
+                onLocalStateChange={handleLiveLocalStateChange}
+                liveState={liveUIStates.get(activeLiveBlock.id)}
+              />
+            )}
+
+            {/* サンドボックスライブUIブロック */}
+            {activeSandboxBlock && (
+              <SandboxRenderer
+                block={activeSandboxBlock}
+                onAction={(uiId, action, data) => {
+                  const currentState = liveUIStates.get(activeSandboxBlock.id) ?? {};
+                  void handleLiveUIAction(uiId, action, data, currentState);
+                }}
+                onIframeReady={handleSandboxIframeReady}
+                isFinished={liveUIStates.get(activeSandboxBlock.id)?.status === 'finished'}
+              />
+            )}
 
             {/* AIの最新返答（インプレース更新） */}
             <div className="mt-2 min-h-[1.5rem]">
