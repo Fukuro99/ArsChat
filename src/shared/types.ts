@@ -234,7 +234,83 @@ AIが patch で hp の値を更新すると自動的に反映される。
 \`\`\`json
 { "primitive": "button", "props": { "label": "ここに置く", "actionId": "place_stone" } }
 \`\`\`
-AIには selectedCell の値が currentState に含まれた状態で届く。`;
+AIには selectedCell の値が currentState に含まれた状態で届く。
+
+### サンドボックスHTML（interactive-html）
+
+プリミティブでは表現できない複雑なUIには HTML/CSS/JS を直接記述できます:
+
+\`\`\`interactive-html
+{"id": "gomoku", "mode": "live", "title": "五目並べ", "width": "500px", "height": "540px"}
+---
+<!DOCTYPE html>
+<html>
+<style>
+  body { margin: 0; background: #DEB887; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; }
+  canvas { cursor: pointer; }
+  #status { padding: 8px; color: #333; font-size: 14px; }
+</style>
+<body>
+  <div id="status">あなたの番です（● 黒）</div>
+  <canvas id="board" width="480" height="480"></canvas>
+<script>
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+  const SIZE = 15, CELL = 32;
+  const board = Array(SIZE).fill(null).map(() => Array(SIZE).fill(0));
+  let gameOver = false;
+
+  function drawBoard() {
+    ctx.clearRect(0, 0, 480, 480);
+    ctx.strokeStyle = '#000';
+    for (let i = 0; i < SIZE; i++) {
+      ctx.beginPath(); ctx.moveTo(16 + i*CELL, 16); ctx.lineTo(16 + i*CELL, 16+14*CELL); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(16, 16+i*CELL); ctx.lineTo(16+14*CELL, 16+i*CELL); ctx.stroke();
+    }
+    for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) {
+      if (board[r][c]) {
+        ctx.beginPath(); ctx.arc(16+c*CELL, 16+r*CELL, 13, 0, Math.PI*2);
+        ctx.fillStyle = board[r][c] === 1 ? '#000' : '#fff'; ctx.fill(); ctx.stroke();
+      }
+    }
+  }
+
+  canvas.addEventListener('click', (e) => {
+    if (gameOver) return;
+    const col = Math.round((e.offsetX - 16) / CELL);
+    const row = Math.round((e.offsetY - 16) / CELL);
+    if (row < 0 || row >= SIZE || col < 0 || col >= SIZE || board[row][col]) return;
+    board[row][col] = 1;
+    drawBoard();
+    window.parent.postMessage({ type: 'interactive-ui-action', uiId: 'gomoku', action: 'place_stone', data: { row, col } }, '*');
+  });
+
+  window.addEventListener('message', (e) => {
+    if (e.data.type !== 'interactive-ui-update' || e.data.uiId !== 'gomoku') return;
+    const p = e.data.patch;
+    if (p.row !== undefined) board[p.row][p.col] = 2;
+    if (p.status === 'finished') gameOver = true;
+    if (p.message) document.getElementById('status').textContent = p.message;
+    drawBoard();
+  });
+
+  drawBoard();
+</script>
+</body>
+</html>
+\`\`\`
+
+**ルール:**
+- ブロックの最初はJSON（id必須、mode/title/width/height省略可）、次の行に \`---\`、その後HTMLを記述
+- iframeはネットワーク切断環境で動作する（外部CDNは使用不可）
+- 親への通知: \`window.parent.postMessage({ type: 'interactive-ui-action', uiId: 'YOUR_ID', action: 'ACTION', data: {...} }, '*')\`
+- 親からの更新受信: \`window.addEventListener('message', e => { if (e.data.type === 'interactive-ui-update') {...} })\`
+- live モードで patch に "status": "finished" を含めると終了（通常の \`\`\`interactive-ui-update と同じ）
+- ゲーム・アニメーション・グラフなど複雑なビジュアルに使用する
+
+**使い分け:**
+- ボタン・フォーム・簡単な選択肢 → \`\`\`interactive-ui（プリミティブ）
+- ゲーム・Canvas描画・複雑なアニメーション → \`\`\`interactive-html（サンドボックス）`;
 
 /** アクティブな人格のシステムプロンプトを返す（人格名・日時・Interactive UI指示を付加） */
 export function getEffectiveSystemPrompt(settings: ArisChatSettings): string {

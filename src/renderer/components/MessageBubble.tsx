@@ -6,6 +6,7 @@ import { ChatMessage } from '../../shared/types';
 import ariaIconUrl from '../assets/aria-icon.png';
 import { parseInteractiveUI } from './interactive-ui/parser';
 import { BlockRenderer } from './interactive-ui/UIRenderer';
+import { SandboxRenderer } from './interactive-ui/SandboxRenderer';
 import './interactive-ui/styles.css';
 
 // KaTeX 拡張を marked に登録（インライン $...$ とブロック $$...$$ 両対応）
@@ -48,6 +49,8 @@ interface MessageBubbleProps {
   liveUIStates?: Map<string, Record<string, any>>;
   /** true のとき、ライブUIブロックをチャット内に表示しない（固定ゾーンで表示するため） */
   hideLiveUIBlocks?: boolean;
+  /** サンドボックスHTML iframeの登録コールバック */
+  onSandboxIframeReady?: (uiId: string, iframe: HTMLIFrameElement | null) => void;
 }
 
 /** <think>...</think> ブロックを分離する（ストリーミング途中・タグ欠け対応） */
@@ -126,6 +129,7 @@ export default function MessageBubble({
   onLiveUIAction,
   liveUIStates,
   hideLiveUIBlocks = false,
+  onSandboxIframeReady,
 }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const [thinkOpen, setThinkOpen] = useState(false);
@@ -307,10 +311,9 @@ export default function MessageBubble({
                 <div className={isStreaming ? 'streaming-cursor' : ''}>
                   {parsedContent.textParts.map((part, i) => {
                     if (part === null) {
-                      // UIブロックのプレースホルダー位置
+                      // プリミティブUIブロックを探す
                       const block = parsedContent.blocks.find((b) => b._index === i);
                       if (block) {
-                        // ライブUIブロックは固定ゾーンで表示するためここでは非表示
                         if (hideLiveUIBlocks && block.mode === 'live') return null;
                         return (
                           <BlockRenderer
@@ -332,6 +335,31 @@ export default function MessageBubble({
                           />
                         );
                       }
+
+                      // サンドボックスHTMLブロックを探す
+                      const sandboxBlock = parsedContent.sandboxBlocks.find((b) => b._index === i);
+                      if (sandboxBlock) {
+                        if (hideLiveUIBlocks && sandboxBlock.mode === 'live') return null;
+                        const sbState = liveUIStates?.get(sandboxBlock.id);
+                        const isFinished = sbState?.status === 'finished';
+                        return (
+                          <SandboxRenderer
+                            key={sandboxBlock.id}
+                            block={sandboxBlock}
+                            onAction={(uiId, action, data) => {
+                              if (sandboxBlock.mode === 'live') {
+                                const currentState = liveUIStates?.get(sandboxBlock.id) ?? {};
+                                onLiveUIAction?.(uiId, action, data, currentState);
+                              } else {
+                                onInteractiveUIAction?.(uiId, action, data);
+                              }
+                            }}
+                            onIframeReady={onSandboxIframeReady}
+                            isFinished={isFinished}
+                          />
+                        );
+                      }
+
                       return null;
                     }
                     const html = parsedContent.textHtmlParts[i];
