@@ -35,7 +35,8 @@ let isQuitting = false;
 let miniModeActive = false;
 let normalWindowBounds: Rectangle | null = null;
 
-const isDev = process.env.NODE_ENV === 'development';
+const isDev = !app.isPackaged;
+const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
 const CAPTURE_HOTKEY = 'CommandOrControl+Shift+S';
 const MINI_WINDOW_WIDTH = 380;
 const MINI_WINDOW_HEIGHT = 560;
@@ -365,7 +366,7 @@ function createMainWindow(): BrowserWindow {
 
   // 読み込み
   if (isDev) {
-    win.loadURL('http://localhost:5173');
+    win.loadURL(DEV_SERVER_URL);
     win.webContents.openDevTools({ mode: 'detach' });
   } else {
     win.loadFile(path.join(__dirname, '../renderer/index.html'));
@@ -446,7 +447,7 @@ function createWidgetWindow(): BrowserWindow {
   });
 
   if (isDev) {
-    win.loadURL('http://localhost:5173/?mode=widget');
+    win.loadURL(`${DEV_SERVER_URL}/?mode=widget`);
   } else {
     win.loadFile(path.join(__dirname, '../renderer/index.html'), { query: { mode: 'widget' } });
   }
