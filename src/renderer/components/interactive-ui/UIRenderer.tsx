@@ -7,6 +7,7 @@ import { mergePatch } from './state-manager';
 
 /** ドット区切りキーパスでオブジェクトの値を取得する */
 function resolveKeyPath(obj: Record<string, any>, keyPath: string): any {
+  if (typeof keyPath !== 'string') return undefined;
   const keys = keyPath.split('.');
   let current: any = obj;
   for (const key of keys) {
@@ -20,6 +21,7 @@ function resolveKeyPath(obj: Record<string, any>, keyPath: string): any {
 
 /** ドット区切りキーパスでオブジェクトの値を更新する（イミュータブル） */
 function updateKeyPath(obj: Record<string, any>, keyPath: string, value: any): Record<string, any> {
+  if (typeof keyPath !== 'string') return obj;
   const keys = keyPath.split('.');
   const result = { ...obj };
   let current: Record<string, any> = result;
@@ -77,8 +79,8 @@ export function UIRenderer({ node, state, onAction, onStateChange }: UIRendererP
     return <UnknownPrimitive name={node.primitive} />;
   }
 
-  // stateバインディングの解決
-  const boundValue = node.bind ? resolveKeyPath(state, node.bind) : undefined;
+  // stateバインディングの解決（bind が文字列以外の場合は無視）
+  const boundValue = (node.bind && typeof node.bind === 'string') ? resolveKeyPath(state, node.bind) : undefined;
 
   const handleChange = useCallback(
     (v: any) => {
@@ -128,12 +130,14 @@ interface BlockRendererProps {
   onAction?: (uiId: string, actionId: string, data?: any) => void;
   /** ライブUIアクションハンドラ（mode: "live" のブロック用） */
   onLiveAction?: (uiId: string, action: string, data: Record<string, any>, currentState: Record<string, any>) => void;
+  /** ライブモードでAI送信せずにstateだけ更新するハンドラ（local: true のアクション用） */
+  onLocalStateChange?: (uiId: string, keyPath: string, value: any) => void;
   /** 外部から注入されるライブUI状態（mode: "live" のブロック用） */
   liveState?: Record<string, any>;
   isLoading?: boolean;
 }
 
-export function BlockRenderer({ block, onSubmit, onAction, onLiveAction, liveState, isLoading }: BlockRendererProps) {
+export function BlockRenderer({ block, onSubmit, onAction, onLiveAction, onLocalStateChange, liveState, isLoading }: BlockRendererProps) {
   const isLive = block.mode === 'live';
 
   // ライブモードの場合は外部stateを使い、デフォルトモードはローカルstate
@@ -153,8 +157,11 @@ export function BlockRenderer({ block, onSubmit, onAction, onLiveAction, liveSta
   const handleStateChange = useCallback((keyPath: string, value: any) => {
     if (!isLive) {
       setLocalState((prev) => updateKeyPath(prev, keyPath, value));
+    } else if (onLocalStateChange) {
+      // ライブモードの local: true アクション → AI送信なしでstateだけ更新
+      onLocalStateChange(block.id, keyPath, value);
     }
-  }, [isLive]);
+  }, [isLive, block.id, onLocalStateChange]);
 
   const handleAction = useCallback(
     (nodeId: string | undefined, actionId: string, data?: any) => {

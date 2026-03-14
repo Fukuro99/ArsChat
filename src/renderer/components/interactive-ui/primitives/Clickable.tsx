@@ -2,17 +2,26 @@ import React, { useState } from 'react';
 import { PrimitiveProps } from '../types';
 import { resolveColor } from '../design-tokens';
 
-export default function Clickable({ props, onAction, children }: PrimitiveProps) {
+export default function Clickable({ props, onAction, onChange, children }: PrimitiveProps) {
   const {
     actionId,
     cursor = 'pointer',
     hoverBg,
+    local = false,   // true: AIに送信せずローカルstateのみ更新
+    stateValue,      // local: true のとき bind で指定したキーに設定する値
   } = props || {};
 
   const [hovered, setHovered] = useState(false);
 
   const handleClick = (e: React.MouseEvent) => {
-    if (actionId && onAction) {
+    if (local) {
+      // ローカルアクション: onChange で state を更新するだけ（AI送信なし）
+      const target = e.currentTarget as HTMLElement;
+      const row = target.dataset.row;
+      const col = target.dataset.col;
+      const val = stateValue ?? (row !== undefined && col !== undefined ? { row: Number(row), col: Number(col) } : true);
+      onChange?.(val);
+    } else if (actionId && onAction) {
       // data-row / data-col をDOMから取得してアクションに含める
       const target = e.currentTarget as HTMLElement;
       const row = target.dataset.row;

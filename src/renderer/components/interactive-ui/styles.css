@@ -67,6 +67,9 @@
 .iui-block-live {
   border-color: var(--aria-primary, #6366f1);
   border-width: 1.5px;
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 1rem;
 }
 
 /* 終了状態のライブブロック */

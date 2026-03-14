@@ -8,6 +8,7 @@ export type SizeToken = typeof ALLOWED_SIZES[number];
 export const ALLOWED_COLORS = [
   'primary', 'secondary', 'success', 'warning', 'danger', 'muted',
   'text', 'text-inverse', 'bg', 'surface', 'border',
+  'black', 'white', 'dark', 'light',
 ] as const;
 export type ColorToken = typeof ALLOWED_COLORS[number];
 
@@ -58,6 +59,11 @@ export const colorMap: Record<ColorToken, string> = {
   success: '#22c55e',
   warning: '#f59e0b',
   danger: '#ef4444',
+  // ダークテーマでも高コントラストな色
+  black: '#0f172a',
+  white: '#f1f5f9',
+  dark: '#1e293b',
+  light: '#cbd5e1',
 };
 
 /**

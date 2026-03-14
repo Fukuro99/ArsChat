@@ -14,6 +14,7 @@ import Select from './Select';
 import Checkbox from './Checkbox';
 import Slider from './Slider';
 import Chips from './Chips';
+import Image from './Image';
 import { PrimitiveProps } from '../types';
 
 /** プリミティブ名 → Reactコンポーネントのマッピング */
@@ -33,4 +34,5 @@ export const primitiveRegistry: Record<string, React.ComponentType<PrimitiveProp
   checkbox: Checkbox,
   slider: Slider,
   chips: Chips,
+  image: Image,
 };

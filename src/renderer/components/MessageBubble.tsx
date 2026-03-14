@@ -46,6 +46,8 @@ interface MessageBubbleProps {
   onLiveUIAction?: (uiId: string, action: string, data: Record<string, any>, currentState: Record<string, any>) => void;
   /** ライブUI状態マップ（uiId → state） */
   liveUIStates?: Map<string, Record<string, any>>;
+  /** true のとき、ライブUIブロックをチャット内に表示しない（固定ゾーンで表示するため） */
+  hideLiveUIBlocks?: boolean;
 }
 
 /** <think>...</think> ブロックを分離する（ストリーミング途中・タグ欠け対応） */
@@ -123,6 +125,7 @@ export default function MessageBubble({
   onInteractiveUIAction,
   onLiveUIAction,
   liveUIStates,
+  hideLiveUIBlocks = false,
 }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const [thinkOpen, setThinkOpen] = useState(false);
@@ -307,6 +310,8 @@ export default function MessageBubble({
                       // UIブロックのプレースホルダー位置
                       const block = parsedContent.blocks.find((b) => b._index === i);
                       if (block) {
+                        // ライブUIブロックは固定ゾーンで表示するためここでは非表示
+                        if (hideLiveUIBlocks && block.mode === 'live') return null;
                         return (
                           <BlockRenderer
                             key={block.id}

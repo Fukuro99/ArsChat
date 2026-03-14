@@ -116,7 +116,7 @@ const INTERACTIVE_UI_INSTRUCTIONS = `
 ### 利用可能なプリミティブ
 
 **レイアウト系**: box（direction/gap/padding/align/bg/rounded）, grid（cols/rows/cellWidth/cellHeight）, scroll, divider
-**表示系**: text（content/size/weight/color）, icon（emoji/size）, badge（content/color/bg）, progress-bar（value/max）
+**表示系**: text（content/size/weight/color）, icon（emoji/size）, badge（content/color/bg）, progress-bar（value/max/color/showLabel）, image（src/alt/width/height/rounded/fit）
 **入力系**: button（label/actionId/variant）, input（inputId/placeholder/multiline）, select（inputId/options）, checkbox（inputId/label）, slider（inputId/min/max/step）, chips（inputId/options/multi）, clickable（actionId）
 
 ### UIノード構造
@@ -130,6 +130,23 @@ const INTERACTIVE_UI_INSTRUCTIONS = `
 }
 \`\`\`
 
+### progress-bar の bind サポート
+
+progress-bar は \`bind\` でstateの値を動的に参照できる:
+\`\`\`json
+{ "primitive": "progress-bar", "bind": "hp", "props": { "max": 100, "color": "success", "showLabel": true } }
+\`\`\`
+AIが patch で hp の値を更新すると自動的に反映される。
+
+### image プリミティブ
+
+\`\`\`json
+{ "primitive": "image", "props": { "src": "data:image/...", "width": 200, "height": 150, "rounded": "md", "fit": "cover" } }
+\`\`\`
+- src: data:image/... または blob: URL（外部URLは表示されません）
+- fit: "cover" / "contain" / "fill" / "none" / "scale-down"（デフォルト: "cover"）
+- bind でstateの画像URLを動的に参照可能
+
 ### actionsのsubmit
 
 \`\`\`json
@@ -138,7 +155,17 @@ const INTERACTIVE_UI_INSTRUCTIONS = `
 
 ### デザイントークン（colorプロパティ）
 
-"primary" / "secondary" / "success" / "warning" / "danger" / "muted" / "text" / "#RRGGBB"
+アプリはダークテーマです。コントラストを意識して色を選んでください。
+
+**セマンティック**: "primary" / "secondary" / "success" / "warning" / "danger" / "muted" / "text" / "text-inverse" / "bg" / "surface" / "border"
+**高コントラスト**: "black"（濃紺） / "white"（オフホワイト） / "dark"（ダークスレート） / "light"（ライトスレート）
+**カスタム**: "#RRGGBB"（例: "#000000", "#ffffff", "#8b5cf6"）
+
+**ゲーム・ボードUI での推奨:**
+- 黒駒の背景: "black" または "#111111" → テキスト色: "white"
+- 白駒の背景: "white" または "#eeeeee" → テキスト色: "black"
+- 盤面マス（空）: "surface" → ホバー: "border"
+- ハイライトマス: "primary"
 
 ### 例: ボタン選択肢
 
@@ -186,7 +213,28 @@ const INTERACTIVE_UI_INSTRUCTIONS = `
 - patch に "status": "finished" を含めるとUI終了（操作不可）
 - ゲーム終了時などは update ブロックの後に通常テキストで締めのコメントを書く
 - ライブUIには actions（submitボタン）を含めない
-- ユーザーの操作は {"_type":"live_ui_action","ui_id":"...","action":"...","data":{...}} 形式で届く`;
+- ユーザーの操作は {"_type":"live_ui_action","ui_id":"...","action":"...","data":{...}} 形式で届く
+
+### ローカルアクション（local: true）
+
+ライブUIでAIに送信せずstateだけ更新したい要素（選択・ハイライト・入力途中等）には **local: true** を指定:
+- button / clickable に \`"local": true\` を付けるとクリックしてもAIに送信されない
+- ノードの \`bind\` プロパティで更新するstateキーを指定
+- button は \`value\` プロパティ、clickable は \`stateValue\` プロパティで設定する値を指定
+
+例: ボード上のマスをクリックで選択し、「置く」ボタンでAIに送信
+\`\`\`json
+{
+  "primitive": "clickable",
+  "bind": "selectedCell",
+  "props": { "local": true, "stateValue": "A5" },
+  "children": [{ "primitive": "text", "props": { "content": "A5" } }]
+}
+\`\`\`
+\`\`\`json
+{ "primitive": "button", "props": { "label": "ここに置く", "actionId": "place_stone" } }
+\`\`\`
+AIには selectedCell の値が currentState に含まれた状態で届く。`;
 
 /** アクティブな人格のシステムプロンプトを返す（人格名・日時・Interactive UI指示を付加） */
 export function getEffectiveSystemPrompt(settings: ArisChatSettings): string {

@@ -18,7 +18,7 @@ export default function Grid({ props, children }: PrimitiveProps) {
   style.gridTemplateColumns = `repeat(${cols}, ${cellWidth ? `${cellWidth}px` : '1fr'})`;
 
   if (rows) {
-    style.gridTemplateRows = `repeat(${rows}, ${cellHeight ? `${cellHeight}px` : 'auto'})`;
+    style.gridTemplateRows = `repeat(${rows}, ${cellHeight ? `${cellHeight}px` : '1fr'})`;
   }
 
   if (gap !== undefined) {
@@ -38,8 +38,18 @@ export default function Grid({ props, children }: PrimitiveProps) {
 
   // グリッドセルのスタイル
   const cellStyle: React.CSSProperties = {};
-  if (cellWidth) cellStyle.width = `${cellWidth}px`;
-  if (cellHeight) cellStyle.height = `${cellHeight}px`;
+  if (cellWidth) {
+    cellStyle.width = `${cellWidth}px`;
+  }
+  if (cellHeight) {
+    cellStyle.height = `${cellHeight}px`;
+  } else if (!cellWidth) {
+    // 幅・高さ未指定の場合はアスペクト比1:1（正方形）にする
+    cellStyle.aspectRatio = '1';
+  }
+  cellStyle.minWidth = cellWidth ? `${cellWidth}px` : '32px';
+  cellStyle.minHeight = cellHeight ? `${cellHeight}px` : '32px';
+  cellStyle.overflow = 'hidden';
   if (borderColor) {
     const resolved = resolveColor(borderColor) || borderColor;
     cellStyle.border = `0.5px solid ${resolved}`;

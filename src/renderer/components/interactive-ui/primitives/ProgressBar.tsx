@@ -2,13 +2,16 @@ import React from 'react';
 import { PrimitiveProps } from '../types';
 import { resolveColor } from '../design-tokens';
 
-export default function ProgressBar({ props }: PrimitiveProps) {
+export default function ProgressBar({ props, value: boundValue }: PrimitiveProps) {
   const {
-    value = 0,
+    value: propValue = 0,
     max = 100,
     color = 'primary',
     showLabel = false,
   } = props || {};
+
+  // bind で動的 value を受け取れる（boundValue が優先）
+  const value = boundValue !== undefined && boundValue !== null ? boundValue : propValue;
 
   const percentage = Math.min(100, Math.max(0, (Number(value) / Number(max)) * 100));
   const resolvedColor = resolveColor(color) || 'var(--aria-primary)';

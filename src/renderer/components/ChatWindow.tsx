@@ -1,8 +1,11 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { marked } from 'marked';
 import { ChatMessage, ChatMessageStats, ArisChatSettings, DEFAULT_SETTINGS, getEffectiveAvatarPath } from '../../shared/types';
 import MessageBubble from './MessageBubble';
-import { parseUIUpdate } from './interactive-ui/parser';
+import { parseInteractiveUI, parseUIUpdate } from './interactive-ui/parser';
+import { BlockRenderer } from './interactive-ui/UIRenderer';
 import { mergePatch, LiveUIAction } from './interactive-ui/state-manager';
+import './interactive-ui/styles.css';
 
 interface ChatWindowProps {
   sessionId: string | null;
@@ -62,6 +65,61 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
   const [liveUIStates, setLiveUIStates] = useState<Map<string, Record<string, any>>>(new Map());
   // uiId → 操作履歴（ローリングコンテキスト用）
   const liveUIActionsRef = useRef<Map<string, LiveUIAction[]>>(new Map());
+  // ライブUIアクション処理中フラグ
+  const [isLiveProcessing, setIsLiveProcessing] = useState(false);
+  // ライブUIアクション後のAIテキスト返答（インプレース更新）
+  const [liveResponseText, setLiveResponseText] = useState<string | null>(null);
+
+  // アクティブなライブUIブロック（未終了のもの）を検出
+  const activeLiveBlock = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.role !== 'assistant') continue;
+      const parsed = parseInteractiveUI(msg.content);
+      const liveBlock = parsed.blocks.find((b) => b.mode === 'live');
+      if (liveBlock) {
+        const state = liveUIStates.get(liveBlock.id);
+        if (!state || state.status !== 'finished') {
+          return liveBlock;
+        }
+      }
+    }
+    return null;
+  }, [messages, liveUIStates]);
+
+  const isLiveMode = activeLiveBlock !== null;
+
+  // ライブUIブロックが切り替わったら返答テキストをリセット
+  useEffect(() => {
+    setLiveResponseText(null);
+  }, [activeLiveBlock?.id]);
+
+  // ライブモード中の最新AIテキスト（UIブロック・updateブロック・thinkブロックを除去）
+  const latestLiveAIText = useMemo(() => {
+    if (!isLiveMode) return null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.role !== 'assistant') continue;
+      const text = msg.content
+        .replace(/<think>[\s\S]*?<\/think>/g, '')
+        .replace(/```interactive-ui[\s\S]*?```/g, '')
+        .replace(/```interactive-ui-update[\s\S]*?```/g, '')
+        .trim();
+      if (text) return text;
+    }
+    return null;
+  }, [messages, isLiveMode]);
+
+  // ライブモード最新AIテキストのマークダウン → HTML（liveResponseText 優先）
+  const liveResponseHtml = useMemo(() => {
+    const src = liveResponseText ?? latestLiveAIText;
+    if (!src) return null;
+    try {
+      return marked.parse(src) as string;
+    } catch {
+      return src;
+    }
+  }, [liveResponseText, latestLiveAIText]);
 
   // 設定読み込み（アバター反映のため）— settingsVersion が変わるたびに再取得
   useEffect(() => {
@@ -305,6 +363,25 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     window.arisChatAPI.sendMessage(newMessages, currentSessionIdRef.current || '', { thinkMode });
   }, [messages, thinkMode]);
 
+  /** ライブUIのローカルstate更新（local: true アクション用・AI送信なし） */
+  const handleLiveLocalStateChange = useCallback((uiId: string, keyPath: string, value: any) => {
+    setLiveUIStates((prev) => {
+      const next = new Map(prev);
+      const current = next.get(uiId) ?? {};
+      // ドット区切りキーパスに対応した浅い更新
+      const keys = typeof keyPath === 'string' ? keyPath.split('.') : [String(keyPath)];
+      const newState = { ...current };
+      let obj: Record<string, any> = newState;
+      for (let i = 0; i < keys.length - 1; i++) {
+        obj[keys[i]] = { ...(obj[keys[i]] ?? {}) };
+        obj = obj[keys[i]];
+      }
+      obj[keys[keys.length - 1]] = value;
+      next.set(uiId, newState);
+      return next;
+    });
+  }, []);
+
   /** ライブUIのstate更新 */
   const setLiveUIState = useCallback((uiId: string, newState: Record<string, any>) => {
     setLiveUIStates((prev) => {
@@ -393,6 +470,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     // 2. サイレントメッセージを構築
     const contextMessages = buildLiveUIContext(uiId, action, data, currentState);
 
+    setIsLiveProcessing(true);
     try {
       // 3. AIにサイレント送信
       const response = await window.arisChatAPI.sendSilentMessage(
@@ -415,27 +493,19 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
         setLiveUIState(uiId, newState);
       }
 
-      // 5. 通常テキスト部分があればチャットに追加
+      // 5. 通常テキスト部分があれば固定ゾーンにインプレース表示（チャットに追加しない）
       const textContent = responseContent
+        .replace(/<think>[\s\S]*?<\/think>/g, '')
         .replace(/```interactive-ui-update[\s\S]*?```/g, '')
         .trim();
 
       if (textContent) {
-        const assistantMsg: ChatMessage = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: textContent,
-          timestamp: Date.now(),
-          stats: response.stats,
-        };
-        setMessages((msgs) => {
-          const newMsgs = [...msgs, assistantMsg];
-          saveSession(newMsgs);
-          return newMsgs;
-        });
+        setLiveResponseText(textContent);
       }
     } catch (err: any) {
       console.error('[LiveUI] サイレント送信に失敗しました:', err?.message);
+    } finally {
+      setIsLiveProcessing(false);
     }
   }, [buildLiveUIContext, liveUIStates, saveSession, setLiveUIState]);
 
@@ -579,7 +649,8 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden relative">
-      {/* メッセージ一覧 */}
+
+      {/* ===== チャット履歴（通常モード・ライブモード共通） ===== */}
       <div className="flex-1 overflow-y-auto py-4">
         <div className="max-w-3xl mx-auto px-4 space-y-4">
         {messages.length === 0 && !isStreaming && (
@@ -612,6 +683,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
             onInteractiveUIAction={msg.role === 'assistant' ? handleInteractiveUIAction : undefined}
             onLiveUIAction={msg.role === 'assistant' ? handleLiveUIAction : undefined}
             liveUIStates={msg.role === 'assistant' ? liveUIStates : undefined}
+            hideLiveUIBlocks={isLiveMode}
           />
         ))}
 
@@ -641,7 +713,43 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
         </div>{/* max-w container end */}
       </div>
 
-      {/* 入力エリア */}
+      {/* ===== ライブモード: 固定UIゾーン（入力欄の上に固定） ===== */}
+      {isLiveMode && activeLiveBlock && (
+        <div className="shrink-0 border-t border-aria-primary/40 bg-aria-bg-light">
+          <div className="max-w-3xl mx-auto px-4 pt-4 pb-3">
+            {/* Live UI ブロック本体 */}
+            <BlockRenderer
+              block={activeLiveBlock}
+              onSubmit={(uiId, action, data) => handleInteractiveUIAction(uiId, action, data)}
+              onAction={(uiId, actionId, data) => {
+                const currentState = liveUIStates.get(activeLiveBlock.id) ?? activeLiveBlock.state ?? {};
+                void handleLiveUIAction(uiId, actionId, data || {}, currentState);
+              }}
+              onLiveAction={handleLiveUIAction}
+              onLocalStateChange={handleLiveLocalStateChange}
+              liveState={liveUIStates.get(activeLiveBlock.id)}
+            />
+
+            {/* AIの最新返答（インプレース更新） */}
+            <div className="mt-2 min-h-[1.5rem]">
+              {isLiveProcessing ? (
+                <div className="flex items-center gap-1.5 py-1">
+                  <div className="w-1.5 h-1.5 rounded-full bg-aria-primary animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-1.5 h-1.5 rounded-full bg-aria-primary animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-1.5 h-1.5 rounded-full bg-aria-primary animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              ) : liveResponseHtml ? (
+                <div
+                  className="text-sm text-aria-text-muted leading-relaxed markdown-body"
+                  dangerouslySetInnerHTML={{ __html: liveResponseHtml }}
+                />
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 入力エリア（常に下部・全幅） */}
       <div className="shrink-0 border-t border-aria-border bg-aria-bg-light p-3">
         <div className="max-w-3xl mx-auto">
         {/* 添付画像プレビュー */}

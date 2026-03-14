@@ -2,17 +2,23 @@ import React from 'react';
 import { PrimitiveProps } from '../types';
 import { resolveColor } from '../design-tokens';
 
-export default function Button({ props, onAction }: PrimitiveProps) {
+export default function Button({ props, onAction, onChange }: PrimitiveProps) {
   const {
     label = 'Button',
     actionId,
     variant = 'secondary',
     disabled = false,
     color,
+    local = false,   // true: AIに送信せずローカルstateのみ更新
+    value,           // local: true のとき bind で指定したキーに設定する値
   } = props || {};
 
   const handleClick = () => {
-    if (!disabled && actionId && onAction) {
+    if (disabled) return;
+    if (local) {
+      // ローカルアクション: onChange で state を更新するだけ（AI送信なし）
+      onChange?.(value ?? true);
+    } else if (actionId && onAction) {
       onAction(actionId, { label });
     }
   };
@@ -38,9 +44,9 @@ export default function Button({ props, onAction }: PrimitiveProps) {
   } else {
     // secondary (default)
     buttonStyle = {
-      backgroundColor: 'transparent',
+      backgroundColor: 'rgba(255, 255, 255, 0.06)',
       color: resolveColor(color) || 'var(--aria-text)',
-      border: '1px solid var(--aria-border)',
+      border: '1px solid rgba(255, 255, 255, 0.15)',
     };
     className += ' iui-button-secondary';
   }
