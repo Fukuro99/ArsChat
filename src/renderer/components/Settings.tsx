@@ -864,6 +864,23 @@ export default function Settings({ onBack }: SettingsProps) {
               }`} />
             </button>
           </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-aria-text">インタラクティブAI</p>
+              <p className="text-xs text-aria-text-muted">AIがUIコンポーネントやサンドボックスHTMLを生成できるようにする</p>
+            </div>
+            <button
+              onClick={() => updateSetting('enableInteractiveUI', !settings.enableInteractiveUI)}
+              className={`relative w-11 h-6 rounded-full transition-colors ${
+                settings.enableInteractiveUI !== false ? 'bg-aria-primary' : 'bg-aria-border'
+              }`}
+            >
+              <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-md transition-transform ${
+                settings.enableInteractiveUI !== false ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
+          </div>
         </section>
 
         {/* === MCP サーバー設定 === */}
