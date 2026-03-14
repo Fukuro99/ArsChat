@@ -9,6 +9,7 @@ export default defineConfig({
     {
       name: 'electron-html-patch',
       enforce: 'post' as const,
+      apply: 'build' as const,
       transformIndexHtml(html: string) {
         return html
           .replace(/<script type="module"/g, '<script defer')
