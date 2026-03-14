@@ -1,6 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { ArisChatSettings, ChatMessage, ChatMessageStats, LMStudioModelInfo, getEffectiveSystemPrompt } from '../shared/types';
+import { ArisChatSettings, ChatMessage, ChatMessageStats, LMStudioModelInfo, Skill, getEffectiveSystemPrompt } from '../shared/types';
 import type { MCPManager } from './mcp-manager';
+
+/** スキルコンテキスト（チャット時にスキル情報を渡すための構造体） */
+export interface SkillContext {
+  skills: Skill[];
+  getContent: (skillId: string) => string | null;
+  invokeScript: (skillId: string) => Promise<string>;
+}
 
 export function createClaudeService(mcpManager?: MCPManager) {
   let currentAbortController: AbortController | null = null;
@@ -421,13 +428,41 @@ export function createClaudeService(mcpManager?: MCPManager) {
     messages: ChatMessage[],
     onChunk: (chunk: string) => void,
     onEnd: (stats: ChatMessageStats) => void,
+    skillContext?: SkillContext,
   ): Promise<void> {
     const client = new Anthropic({ apiKey: settings.apiKey });
     const requestStartTime = Date.now();
     let firstChunkTime: number | undefined;
     let completionTokens = 0;
 
-    const apiMessages = messages.map((msg) => {
+    // スキルツール定義
+    const tools: Anthropic.Tool[] = [];
+    if (skillContext && skillContext.skills.length > 0) {
+      tools.push({
+        name: 'get_skill_details',
+        description: 'スキルの詳細なプロンプト・手順を取得します。スキルを活用する前に呼び出してください。',
+        input_schema: {
+          type: 'object',
+          properties: {
+            skill_id: { type: 'string', description: 'スキルのID（スキル一覧のIDカラムの値）' },
+          },
+          required: ['skill_id'],
+        },
+      });
+      tools.push({
+        name: 'invoke_skill_script',
+        description: 'スキルに紐付けられたスクリプト・ファイル・URLを実行または開きます。',
+        input_schema: {
+          type: 'object',
+          properties: {
+            skill_id: { type: 'string', description: 'スキルのID' },
+          },
+          required: ['skill_id'],
+        },
+      });
+    }
+
+    let apiMessages: Anthropic.MessageParam[] = messages.map((msg) => {
       const content: any[] = [];
       if (msg.content) content.push({ type: 'text', text: msg.content });
       if (msg.imageBase64) {
@@ -439,47 +474,86 @@ export function createClaudeService(mcpManager?: MCPManager) {
       return { role: msg.role as 'user' | 'assistant', content };
     });
 
-    const stream = client.messages.stream({
-      model: settings.model,
-      max_tokens: 4096,
-      system: getEffectiveSystemPrompt(settings),
-      messages: apiMessages,
-    });
+    const systemPrompt = getEffectiveSystemPrompt(settings, skillContext?.skills);
+    const MAX_ROUNDS = 5;
 
-    stream.on('text', (text) => {
-      if (!currentAbortController?.signal.aborted) {
-        if (firstChunkTime === undefined) firstChunkTime = Date.now();
-        completionTokens++;
-        onChunk(text);
-      }
-    });
-    stream.on('end', () => {
-      const endTime = Date.now();
-      const genTime = firstChunkTime ? (endTime - firstChunkTime) / 1000 : (endTime - requestStartTime) / 1000;
-      const stats: ChatMessageStats = {
-        timeSeconds: Math.round(((endTime - requestStartTime) / 1000) * 100) / 100,
-        tokensPerSec: completionTokens > 0 && genTime > 0
-          ? Math.round((completionTokens / genTime) * 100) / 100 : undefined,
+    for (let round = 0; round < MAX_ROUNDS; round++) {
+      if (currentAbortController?.signal.aborted) break;
+
+      const streamParams: Parameters<typeof client.messages.stream>[0] = {
+        model: settings.model,
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages: apiMessages,
       };
-      onEnd(stats);
-      currentAbortController = null;
-    });
-    stream.on('error', (error) => { throw error; });
+      if (tools.length > 0) streamParams.tools = tools;
 
-    currentAbortController!.signal.addEventListener('abort', () => stream.abort());
+      const stream = client.messages.stream(streamParams);
 
-    try {
-      const finalMsg = await stream.finalMessage();
-      completionTokens = finalMsg.usage?.output_tokens ?? completionTokens;
-    } catch (err: any) {
-      if (err.name === 'AbortError' || currentAbortController?.signal.aborted) {
-        onEnd({});
+      stream.on('text', (text) => {
+        if (!currentAbortController?.signal.aborted) {
+          if (firstChunkTime === undefined) firstChunkTime = Date.now();
+          completionTokens++;
+          onChunk(text);
+        }
+      });
+      stream.on('error', (error) => { throw error; });
+
+      currentAbortController!.signal.addEventListener('abort', () => stream.abort());
+
+      let finalMsg: Anthropic.Message;
+      try {
+        finalMsg = await stream.finalMessage();
+        completionTokens = finalMsg.usage?.output_tokens ?? completionTokens;
+      } catch (err: any) {
+        if (err.name === 'AbortError' || currentAbortController?.signal.aborted) {
+          onEnd({});
+          currentAbortController = null;
+          return;
+        }
+        throw err;
+      }
+
+      // ツール呼び出しでない場合 → 完了
+      if (finalMsg.stop_reason !== 'tool_use') {
+        const endTime = Date.now();
+        const genTime = firstChunkTime ? (endTime - firstChunkTime) / 1000 : (endTime - requestStartTime) / 1000;
+        onEnd({
+          timeSeconds: Math.round(((endTime - requestStartTime) / 1000) * 100) / 100,
+          totalTokens: completionTokens || undefined,
+          tokensPerSec: completionTokens > 0 && genTime > 0
+            ? Math.round((completionTokens / genTime) * 100) / 100 : undefined,
+          finishReason: formatFinishReason(finalMsg.stop_reason ?? undefined),
+        });
+        currentAbortController = null;
         return;
       }
-      throw err;
-    } finally {
-      currentAbortController = null;
+
+      // ツール呼び出し処理
+      apiMessages.push({ role: 'assistant', content: finalMsg.content });
+
+      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+      for (const block of finalMsg.content) {
+        if (block.type !== 'tool_use') continue;
+        let result = '';
+        if (skillContext) {
+          const skillId = (block.input as any).skill_id as string;
+          if (block.name === 'get_skill_details') {
+            result = skillContext.getContent(skillId) ?? `スキル "${skillId}" が見つかりません`;
+          } else if (block.name === 'invoke_skill_script') {
+            result = await skillContext.invokeScript(skillId);
+          }
+        }
+        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
+      }
+      apiMessages.push({ role: 'user', content: toolResults });
     }
+
+    // 最大ラウンド到達
+    onChunk('\n\n`（最大ツール呼び出し回数に達しました）`');
+    const elapsed = (Date.now() - requestStartTime) / 1000;
+    onEnd({ timeSeconds: Math.round(elapsed * 100) / 100 });
+    currentAbortController = null;
   }
 
   // ===== LM Studio (OpenAI互換) ストリーミング =====
@@ -488,7 +562,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
     messages: ChatMessage[],
     onChunk: (chunk: string) => void,
     onEnd: (stats: ChatMessageStats) => void,
-    options?: { thinkMode?: boolean },
+    options?: { thinkMode?: boolean; skillContext?: SkillContext },
   ): Promise<void> {
     const baseUrl = normalizeBaseUrl(settings.lmstudioBaseUrl);
     if (!baseUrl) {
@@ -532,7 +606,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
 
     // OpenAI互換メッセージ形式を構築
     const apiMessages: any[] = [];
-    const effectiveSystemPrompt = getEffectiveSystemPrompt(settings);
+    const effectiveSystemPrompt = getEffectiveSystemPrompt(settings, options?.skillContext?.skills);
     if (effectiveSystemPrompt) {
       apiMessages.push({ role: 'system', content: effectiveSystemPrompt });
     }
@@ -550,24 +624,59 @@ export function createClaudeService(mcpManager?: MCPManager) {
       }
     }
 
+    // スキルツール（OpenAI形式）
+    const skillTools: any[] = [];
+    if (options?.skillContext && options.skillContext.skills.length > 0) {
+      skillTools.push({
+        type: 'function',
+        function: {
+          name: 'get_skill_details',
+          description: 'スキルの詳細なプロンプト・手順を取得します。スキルを活用する前に呼び出してください。',
+          parameters: {
+            type: 'object',
+            properties: {
+              skill_id: { type: 'string', description: 'スキルのID' },
+            },
+            required: ['skill_id'],
+          },
+        },
+      });
+      skillTools.push({
+        type: 'function',
+        function: {
+          name: 'invoke_skill_script',
+          description: 'スキルに紐付けられたスクリプト・ファイル・URLを実行または開きます。',
+          parameters: {
+            type: 'object',
+            properties: {
+              skill_id: { type: 'string', description: 'スキルのID' },
+            },
+            required: ['skill_id'],
+          },
+        },
+      });
+    }
+
     // MCP ツールが有効かつ LM Studio の場合にツール呼び出しループを実行
     const mcpTools = mcpManager?.getOpenAITools() ?? [];
+    const allTools = [...mcpTools, ...skillTools];
     const hasMCPTools = mcpTools.length > 0;
 
     const requestStartTime = Date.now();
 
     try {
-      if (hasMCPTools) {
+      if (allTools.length > 0) {
         await executeWithMCPTools(
           chatEndpoint,
           model,
           apiMessages,
-          mcpTools,
+          allTools,
           options?.thinkMode ?? false,
           attemptedUrls,
           onChunk,
           onEnd,
           requestStartTime,
+          options?.skillContext,
         );
       } else {
         const response = await fetchWithFallback(
@@ -717,7 +826,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
     return { type: 'content' };
   }
 
-  /** MCP ツール呼び出しループ（全ラウンドストリーミング） */
+  /** MCP/スキルツール呼び出しループ（全ラウンドストリーミング） */
   async function executeWithMCPTools(
     chatEndpoint: string,
     model: string,
@@ -728,6 +837,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
     onChunk: (chunk: string) => void,
     onEnd: (stats: ChatMessageStats) => void,
     requestStartTime: number,
+    skillContext?: SkillContext,
   ): Promise<void> {
     const MAX_ROUNDS = 10;
     const messages = [...initialMessages];
@@ -783,10 +893,18 @@ export function createClaudeService(mcpManager?: MCPManager) {
         try { args = JSON.parse(tc.function.arguments || '{}'); } catch { /* 無視 */ }
 
         let toolResult: string;
-        try {
-          toolResult = await mcpManager!.executeTool(tc.function.name, args);
-        } catch (err: any) {
-          toolResult = `エラー: ${err?.message ?? '不明なエラー'}`;
+        const skillId = args.skill_id as string | undefined;
+
+        if (tc.function.name === 'get_skill_details' && skillContext && skillId) {
+          toolResult = skillContext.getContent(skillId) ?? `スキル "${skillId}" が見つかりません`;
+        } else if (tc.function.name === 'invoke_skill_script' && skillContext && skillId) {
+          toolResult = await skillContext.invokeScript(skillId);
+        } else {
+          try {
+            toolResult = await mcpManager!.executeTool(tc.function.name, args);
+          } catch (err: any) {
+            toolResult = `エラー: ${err?.message ?? '不明なエラー'}`;
+          }
         }
 
         messages.push({ role: 'tool', tool_call_id: tc.id || `call_0`, content: toolResult });
@@ -944,7 +1062,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
       messages: ChatMessage[],
       onChunk: (chunk: string) => void,
       onEnd: (stats: ChatMessageStats) => void,
-      options?: { thinkMode?: boolean },
+      options?: { thinkMode?: boolean; skillContext?: SkillContext },
     ): Promise<void> {
       currentAbortController = new AbortController();
       const provider = settings.provider ?? 'anthropic';
@@ -953,7 +1071,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
         if (provider === 'lmstudio') {
           await streamLMStudio(settings, messages, onChunk, onEnd, options);
         } else {
-          await streamAnthropic(settings, messages, onChunk, onEnd);
+          await streamAnthropic(settings, messages, onChunk, onEnd, options?.skillContext);
         }
       } catch (err: any) {
         if (err.name === 'AbortError') { onEnd({}); return; }

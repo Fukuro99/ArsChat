@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ArisChatSettings, DEFAULT_SETTINGS, LMStudioModelInfo, MCPConfig, MCPServerConfig, MCPServerStatus, Persona } from '../../shared/types';
+import { ArisChatSettings, DEFAULT_SETTINGS, LMStudioModelInfo, MCPConfig, MCPServerConfig, MCPServerStatus, Persona, Skill } from '../../shared/types';
 
 interface SettingsProps {
   onBack: () => void;
@@ -21,6 +21,11 @@ export default function Settings({ onBack }: SettingsProps) {
   const [editingPersonaId, setEditingPersonaId] = useState<string | null>(null);
   const emptyPersona = (): Omit<Persona, 'id'> => ({ name: '', systemPrompt: '', avatarPath: null });
   const [personaForm, setPersonaForm] = useState<Omit<Persona, 'id'>>(emptyPersona());
+
+  // スキル管理関連
+  const [skillsPersonaId, setSkillsPersonaId] = useState<string | null>(null);
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [isLoadingSkills, setIsLoadingSkills] = useState(false);
 
   // MCP 関連
   const [mcpConfig, setMcpConfig] = useState<MCPConfig>({ servers: [] });
@@ -273,6 +278,47 @@ export default function Settings({ onBack }: SettingsProps) {
     const path = await window.arisChatAPI.selectPersonaIcon(personaId);
     if (path) {
       setPersonaForm((prev) => ({ ...prev, avatarPath: path }));
+    }
+  };
+
+  // ===== スキルハンドラー =====
+
+  const openSkillsPanel = useCallback(async (personaId: string) => {
+    if (skillsPersonaId === personaId) {
+      setSkillsPersonaId(null);
+      return;
+    }
+    setSkillsPersonaId(personaId);
+    setIsLoadingSkills(true);
+    try {
+      const list = await window.arisChatAPI.listSkills(personaId);
+      setSkills(list);
+    } finally {
+      setIsLoadingSkills(false);
+    }
+  }, [skillsPersonaId]);
+
+  const handleCreateSkill = async (personaId: string) => {
+    await window.arisChatAPI.createSkill(personaId);
+    // 少し待ってリロード（エディタで開いた後にファイルが作成される）
+    setTimeout(async () => {
+      const list = await window.arisChatAPI.listSkills(personaId);
+      setSkills(list);
+    }, 500);
+  };
+
+  const handleDeleteSkill = async (personaId: string, skillId: string) => {
+    await window.arisChatAPI.deleteSkill(personaId, skillId);
+    setSkills((prev) => prev.filter((s) => s.id !== skillId));
+  };
+
+  const handleRefreshSkills = async (personaId: string) => {
+    setIsLoadingSkills(true);
+    try {
+      const list = await window.arisChatAPI.listSkills(personaId);
+      setSkills(list);
+    } finally {
+      setIsLoadingSkills(false);
     }
   };
 
@@ -529,53 +575,161 @@ export default function Settings({ onBack }: SettingsProps) {
 
           {/* 人格リスト */}
           {(settings.personas ?? []).map((persona) => (
-            <div
-              key={persona.id}
-              className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
-                settings.activePersonaId === persona.id
-                  ? 'bg-aria-primary/15 border border-aria-primary/40'
-                  : 'bg-aria-surface border border-transparent hover:border-aria-border'
-              }`}
-              onClick={() => handleActivatePersona(persona.id)}
-            >
-              <div className="shrink-0 w-10 h-10 rounded-full overflow-hidden bg-aria-primary/20 flex items-center justify-center">
-                {persona.avatarPath ? (
-                  <img src={`file://${persona.avatarPath}`} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-lg font-bold text-aria-primary">
-                    {persona.name.charAt(0).toUpperCase() || 'P'}
-                  </span>
-                )}
+            <div key={persona.id} className="space-y-0">
+              <div
+                className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
+                  skillsPersonaId === persona.id
+                    ? 'rounded-b-none border-b-0'
+                    : ''
+                } ${
+                  settings.activePersonaId === persona.id
+                    ? 'bg-aria-primary/15 border border-aria-primary/40'
+                    : 'bg-aria-surface border border-transparent hover:border-aria-border'
+                }`}
+                onClick={() => handleActivatePersona(persona.id)}
+              >
+                <div className="shrink-0 w-10 h-10 rounded-full overflow-hidden bg-aria-primary/20 flex items-center justify-center">
+                  {persona.avatarPath ? (
+                    <img src={`file://${persona.avatarPath}`} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-lg font-bold text-aria-primary">
+                      {persona.name.charAt(0).toUpperCase() || 'P'}
+                    </span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-aria-text font-medium">{persona.name}</p>
+                  <p className="text-xs text-aria-text-muted truncate">{persona.systemPrompt}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  {settings.activePersonaId === persona.id && (
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="mr-1 text-aria-primary">
+                      <path d="M3 8l3.5 3.5L13 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                  {/* スキル管理ボタン */}
+                  <button
+                    onClick={() => openSkillsPanel(persona.id)}
+                    className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${
+                      skillsPersonaId === persona.id
+                        ? 'text-aria-primary bg-aria-primary/20'
+                        : 'text-aria-text-muted hover:text-aria-primary hover:bg-aria-primary/10'
+                    }`}
+                    title="スキルを管理"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                      <path d="M8 1l1.9 3.8L14 5.8l-3 2.9.7 4.1L8 10.8l-3.7 1.9.7-4.1L2 5.8l4.1-.9L8 1z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => openEditPersonaForm(persona)}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg text-aria-text-muted hover:text-aria-text hover:bg-white/10 transition-colors"
+                    title="編集"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                      <path d="M11 2.5l2.5 2.5L5 13.5H2.5V11L11 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => handleDeletePersona(persona.id)}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg text-aria-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                    title="削除"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                      <path d="M3 4.5h10M6 4.5V3h4v1.5M5.5 4.5l.5 8h4l.5-8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-aria-text font-medium">{persona.name}</p>
-                <p className="text-xs text-aria-text-muted truncate">{persona.systemPrompt}</p>
-              </div>
-              <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                {settings.activePersonaId === persona.id && (
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="mr-1 text-aria-primary">
-                    <path d="M3 8l3.5 3.5L13 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                )}
-                <button
-                  onClick={() => openEditPersonaForm(persona)}
-                  className="w-7 h-7 flex items-center justify-center rounded-lg text-aria-text-muted hover:text-aria-text hover:bg-white/10 transition-colors"
-                  title="編集"
-                >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                    <path d="M11 2.5l2.5 2.5L5 13.5H2.5V11L11 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-                <button
-                  onClick={() => handleDeletePersona(persona.id)}
-                  className="w-7 h-7 flex items-center justify-center rounded-lg text-aria-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                  title="削除"
-                >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                    <path d="M3 4.5h10M6 4.5V3h4v1.5M5.5 4.5l.5 8h4l.5-8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-              </div>
+
+              {/* スキルパネル（展開時） */}
+              {skillsPersonaId === persona.id && (
+                <div className="bg-aria-surface border border-t-0 border-aria-border rounded-b-xl p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-aria-text-muted uppercase tracking-wider">スキル</span>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => handleRefreshSkills(persona.id)}
+                        className="w-6 h-6 flex items-center justify-center rounded text-aria-text-muted hover:text-aria-text transition-colors"
+                        title="更新"
+                      >
+                        <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+                          <path d="M14 8A6 6 0 1 1 8 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                          <path d="M14 2v4h-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => window.arisChatAPI.openSkillsFolder(persona.id)}
+                        className="w-6 h-6 flex items-center justify-center rounded text-aria-text-muted hover:text-aria-text transition-colors"
+                        title="フォルダを開く"
+                      >
+                        <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+                          <path d="M2 4.5C2 3.7 2.7 3 3.5 3H7l1.5 2H12.5C13.3 5 14 5.7 14 6.5v6c0 .8-.7 1.5-1.5 1.5h-9C2.7 14 2 13.3 2 12.5v-8z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => handleCreateSkill(persona.id)}
+                        className="flex items-center gap-1 px-2 py-1 text-xs bg-aria-primary/20 text-aria-primary rounded hover:bg-aria-primary/30 transition-colors"
+                      >
+                        <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
+                          <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                        </svg>
+                        新規作成
+                      </button>
+                    </div>
+                  </div>
+
+                  {isLoadingSkills ? (
+                    <div className="flex items-center gap-2 py-2 text-xs text-aria-text-muted">
+                      <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                      読み込み中...
+                    </div>
+                  ) : skills.length === 0 ? (
+                    <p className="text-xs text-aria-text-muted py-2">
+                      スキルがありません。「新規作成」でテンプレートを生成してください。
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {skills.map((skill) => (
+                        <div key={skill.id} className="flex items-start gap-2 p-2 bg-aria-bg rounded-lg">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-medium text-aria-text">{skill.name}</span>
+                              {skill.trigger && (
+                                <span className="text-xs font-mono text-aria-primary bg-aria-primary/10 px-1 rounded">{skill.trigger}</span>
+                              )}
+                              {skill.script && (
+                                <span className="text-xs text-emerald-400 bg-emerald-500/10 px-1 rounded">{skill.script.type}</span>
+                              )}
+                            </div>
+                            <p className="text-xs text-aria-text-muted truncate mt-0.5">{skill.description}</p>
+                          </div>
+                          <div className="flex gap-1 shrink-0">
+                            <button
+                              onClick={() => window.arisChatAPI.openSkillInEditor(skill.filePath)}
+                              className="w-6 h-6 flex items-center justify-center rounded text-aria-text-muted hover:text-aria-text hover:bg-white/10 transition-colors"
+                              title="エディタで開く"
+                            >
+                              <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+                                <path d="M11 2.5l2.5 2.5L5 13.5H2.5V11L11 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSkill(persona.id, skill.id)}
+                              className="w-6 h-6 flex items-center justify-center rounded text-aria-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                              title="削除"
+                            >
+                              <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+                                <path d="M3 4.5h10M6 4.5V3h4v1.5M5.5 4.5l.5 8h4l.5-8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
 
