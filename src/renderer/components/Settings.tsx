@@ -1,6 +1,103 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ArisChatSettings, DEFAULT_SETTINGS, LMStudioModelInfo, MCPConfig, MCPServerConfig, MCPServerStatus, Persona, Skill } from '../../shared/types';
 
+// ===== スキル共通コンポーネント =====
+
+interface SkillFormState { name: string; description: string; trigger: string; scriptType: string; scriptValue: string; body: string; }
+
+function SkillRow({ skill, onEdit, onOpenEditor, onDelete }: { skill: Skill; onEdit: () => void; onOpenEditor: () => void; onDelete: () => void; }) {
+  return (
+    <div className="flex items-start gap-2 p-2">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-medium text-aria-text">{skill.name}</span>
+          {skill.trigger && (
+            <span className="text-xs font-mono text-aria-primary bg-aria-primary/10 px-1 rounded">{skill.trigger}</span>
+          )}
+          {skill.script && (
+            <span className="text-xs text-emerald-400 bg-emerald-500/10 px-1 rounded">{skill.script.type}</span>
+          )}
+        </div>
+        <p className="text-xs text-aria-text-muted truncate mt-0.5">{skill.description}</p>
+      </div>
+      <div className="flex gap-1 shrink-0">
+        <button onClick={onEdit} className="flex items-center gap-0.5 px-1.5 py-1 rounded text-xs text-aria-text-muted hover:text-aria-primary hover:bg-aria-primary/10 transition-colors" title="アプリ内で編集">
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none"><path d="M11 2.5l2.5 2.5L5 13.5H2.5V11L11 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          編集
+        </button>
+        <button onClick={onOpenEditor} className="w-6 h-6 flex items-center justify-center rounded text-aria-text-muted hover:text-aria-text hover:bg-white/10 transition-colors" title="外部エディタで開く">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M10 2H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6M10 2l4 4M10 2v4h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+        <button onClick={onDelete} className="w-6 h-6 flex items-center justify-center rounded text-aria-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors" title="削除">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M6 4.5V3h4v1.5M5.5 4.5l.5 8h4l.5-8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SkillEditFormPanel({ form, onChange, onSave, onCancel, isSaving }: {
+  form: SkillFormState;
+  onChange: (f: SkillFormState) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  isSaving: boolean;
+}) {
+  const set = (k: keyof SkillFormState, v: string) => onChange({ ...form, [k]: v });
+  return (
+    <div className="p-3 space-y-2.5">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <label className="text-xs text-aria-text-muted">名前</label>
+          <input type="text" value={form.name} onChange={(e) => set('name', e.target.value)}
+            className="w-full bg-aria-surface border border-aria-border rounded-lg px-2 py-1.5 text-xs text-aria-text focus:outline-none focus:border-aria-primary" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-aria-text-muted">トリガー（例: /skill）</label>
+          <input type="text" value={form.trigger} onChange={(e) => set('trigger', e.target.value)} placeholder="/skill-name"
+            className="w-full bg-aria-surface border border-aria-border rounded-lg px-2 py-1.5 text-xs text-aria-text placeholder:text-aria-text-muted focus:outline-none focus:border-aria-primary" />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs text-aria-text-muted">概要</label>
+        <input type="text" value={form.description} onChange={(e) => set('description', e.target.value)}
+          className="w-full bg-aria-surface border border-aria-border rounded-lg px-2 py-1.5 text-xs text-aria-text focus:outline-none focus:border-aria-primary" />
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="space-y-1">
+          <label className="text-xs text-aria-text-muted">スクリプト種別</label>
+          <select value={form.scriptType} onChange={(e) => set('scriptType', e.target.value)}
+            className="w-full bg-aria-surface border border-aria-border rounded-lg px-2 py-1.5 text-xs text-aria-text focus:outline-none focus:border-aria-primary">
+            <option value="">なし</option>
+            <option value="command">command</option>
+            <option value="file">file</option>
+            <option value="url">url</option>
+          </select>
+        </div>
+        <div className="col-span-2 space-y-1">
+          <label className="text-xs text-aria-text-muted">スクリプト値</label>
+          <input type="text" value={form.scriptValue} onChange={(e) => set('scriptValue', e.target.value)} placeholder="コマンド / ファイルパス / URL"
+            disabled={!form.scriptType}
+            className="w-full bg-aria-surface border border-aria-border rounded-lg px-2 py-1.5 text-xs text-aria-text placeholder:text-aria-text-muted focus:outline-none focus:border-aria-primary disabled:opacity-50" />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs text-aria-text-muted">詳細内容（AIへの指示、Markdown）</label>
+        <textarea value={form.body} onChange={(e) => set('body', e.target.value)} rows={6}
+          className="w-full bg-aria-surface border border-aria-border rounded-lg px-2 py-1.5 text-xs text-aria-text font-mono resize-y focus:outline-none focus:border-aria-primary" />
+      </div>
+      <div className="flex gap-2 justify-end">
+        <button onClick={onCancel} className="px-3 py-1.5 text-xs border border-aria-border text-aria-text-muted rounded-lg hover:text-aria-text transition-colors">キャンセル</button>
+        <button onClick={onSave} disabled={isSaving || !form.name.trim()}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs bg-aria-primary text-white rounded-lg hover:bg-aria-primary/80 disabled:opacity-50 transition-colors">
+          {isSaving ? <span className="w-3 h-3 border border-white/30 border-t-white rounded-full animate-spin" /> : null}
+          保存
+        </button>
+      </div>
+    </div>
+  );
+}
+
 interface SettingsProps {
   onBack: () => void;
 }
@@ -26,6 +123,12 @@ export default function Settings({ onBack }: SettingsProps) {
   const [skillsPersonaId, setSkillsPersonaId] = useState<string | null>(null);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [isLoadingSkills, setIsLoadingSkills] = useState(false);
+  // インライン編集
+  const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
+  interface SkillEditForm { name: string; description: string; trigger: string; scriptType: string; scriptValue: string; body: string; }
+  const emptySkillForm = (): SkillEditForm => ({ name: '', description: '', trigger: '', scriptType: '', scriptValue: '', body: '' });
+  const [skillForm, setSkillForm] = useState<SkillEditForm>(emptySkillForm());
+  const [isSavingSkill, setIsSavingSkill] = useState(false);
 
   // MCP 関連
   const [mcpConfig, setMcpConfig] = useState<MCPConfig>({ servers: [] });
@@ -297,6 +400,40 @@ export default function Settings({ onBack }: SettingsProps) {
       setIsLoadingSkills(false);
     }
   }, [skillsPersonaId]);
+
+  const openEditSkillForm = async (personaId: string, skill: Skill) => {
+    const body = await window.arisChatAPI.getSkillContent(personaId, skill.id) ?? '';
+    setSkillForm({
+      name: skill.name,
+      description: skill.description,
+      trigger: skill.trigger ?? '',
+      scriptType: skill.script?.type ?? '',
+      scriptValue: skill.script?.value ?? '',
+      body,
+    });
+    setEditingSkillId(skill.id);
+  };
+
+  const handleSaveSkill = async (personaId: string) => {
+    if (!editingSkillId) return;
+    setIsSavingSkill(true);
+    try {
+      const updated = await window.arisChatAPI.saveSkill(personaId, editingSkillId, {
+        name: skillForm.name,
+        description: skillForm.description,
+        trigger: skillForm.trigger || undefined,
+        scriptType: skillForm.scriptType || undefined,
+        scriptValue: skillForm.scriptValue || undefined,
+        body: skillForm.body,
+      });
+      if (updated) {
+        setSkills((prev) => prev.map((s) => s.id === editingSkillId ? updated : s));
+      }
+      setEditingSkillId(null);
+    } finally {
+      setIsSavingSkill(false);
+    }
+  };
 
   const handleCreateSkill = async (personaId: string) => {
     await window.arisChatAPI.createSkill(personaId);
@@ -692,39 +829,23 @@ export default function Settings({ onBack }: SettingsProps) {
                   ) : (
                     <div className="space-y-1.5">
                       {skills.map((skill) => (
-                        <div key={skill.id} className="flex items-start gap-2 p-2 bg-aria-bg rounded-lg">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs font-medium text-aria-text">{skill.name}</span>
-                              {skill.trigger && (
-                                <span className="text-xs font-mono text-aria-primary bg-aria-primary/10 px-1 rounded">{skill.trigger}</span>
-                              )}
-                              {skill.script && (
-                                <span className="text-xs text-emerald-400 bg-emerald-500/10 px-1 rounded">{skill.script.type}</span>
-                              )}
-                            </div>
-                            <p className="text-xs text-aria-text-muted truncate mt-0.5">{skill.description}</p>
-                          </div>
-                          <div className="flex gap-1 shrink-0">
-                            <button
-                              onClick={() => window.arisChatAPI.openSkillInEditor(skill.filePath)}
-                              className="w-6 h-6 flex items-center justify-center rounded text-aria-text-muted hover:text-aria-text hover:bg-white/10 transition-colors"
-                              title="エディタで開く"
-                            >
-                              <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
-                                <path d="M11 2.5l2.5 2.5L5 13.5H2.5V11L11 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
-                            </button>
-                            <button
-                              onClick={() => handleDeleteSkill(persona.id, skill.id)}
-                              className="w-6 h-6 flex items-center justify-center rounded text-aria-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                              title="削除"
-                            >
-                              <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
-                                <path d="M3 4.5h10M6 4.5V3h4v1.5M5.5 4.5l.5 8h4l.5-8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
-                            </button>
-                          </div>
+                        <div key={skill.id} className="bg-aria-bg rounded-lg overflow-hidden">
+                          {editingSkillId === skill.id ? (
+                            <SkillEditFormPanel
+                              form={skillForm}
+                              onChange={setSkillForm}
+                              onSave={() => handleSaveSkill(persona.id)}
+                              onCancel={() => setEditingSkillId(null)}
+                              isSaving={isSavingSkill}
+                            />
+                          ) : (
+                            <SkillRow
+                              skill={skill}
+                              onEdit={() => openEditSkillForm(persona.id, skill)}
+                              onOpenEditor={() => window.arisChatAPI.openSkillInEditor(skill.filePath)}
+                              onDelete={() => handleDeleteSkill(persona.id, skill.id)}
+                            />
+                          )}
                         </div>
                       ))}
                     </div>
@@ -903,39 +1024,23 @@ export default function Settings({ onBack }: SettingsProps) {
                 ) : (
                   <div className="space-y-1.5">
                     {skills.map((skill) => (
-                      <div key={skill.id} className="flex items-start gap-2 p-2 bg-aria-bg rounded-lg">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-medium text-aria-text">{skill.name}</span>
-                            {skill.trigger && (
-                              <span className="text-xs font-mono text-aria-primary bg-aria-primary/10 px-1 rounded">{skill.trigger}</span>
-                            )}
-                            {skill.script && (
-                              <span className="text-xs text-emerald-400 bg-emerald-500/10 px-1 rounded">{skill.script.type}</span>
-                            )}
-                          </div>
-                          <p className="text-xs text-aria-text-muted truncate mt-0.5">{skill.description}</p>
-                        </div>
-                        <div className="flex gap-1 shrink-0">
-                          <button
-                            onClick={() => window.arisChatAPI.openSkillInEditor(skill.filePath)}
-                            className="w-6 h-6 flex items-center justify-center rounded text-aria-text-muted hover:text-aria-text hover:bg-white/10 transition-colors"
-                            title="エディタで開く"
-                          >
-                            <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
-                              <path d="M11 2.5l2.5 2.5L5 13.5H2.5V11L11 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => handleDeleteSkill(skillsPersonaId, skill.id)}
-                            className="w-6 h-6 flex items-center justify-center rounded text-aria-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                            title="削除"
-                          >
-                            <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
-                              <path d="M3 4.5h10M6 4.5V3h4v1.5M5.5 4.5l.5 8h4l.5-8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          </button>
-                        </div>
+                      <div key={skill.id} className="bg-aria-bg rounded-lg overflow-hidden">
+                        {editingSkillId === skill.id ? (
+                          <SkillEditFormPanel
+                            form={skillForm}
+                            onChange={setSkillForm}
+                            onSave={() => handleSaveSkill(skillsPersonaId!)}
+                            onCancel={() => setEditingSkillId(null)}
+                            isSaving={isSavingSkill}
+                          />
+                        ) : (
+                          <SkillRow
+                            skill={skill}
+                            onEdit={() => openEditSkillForm(skillsPersonaId!, skill)}
+                            onOpenEditor={() => window.arisChatAPI.openSkillInEditor(skill.filePath)}
+                            onDelete={() => handleDeleteSkill(skillsPersonaId!, skill.id)}
+                          />
+                        )}
                       </div>
                     ))}
                   </div>

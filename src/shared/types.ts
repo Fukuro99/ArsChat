@@ -489,6 +489,7 @@ export const IPC_CHANNELS = {
   // スキル
   SKILL_LIST: 'skill:list',
   SKILL_GET_CONTENT: 'skill:get-content',
+  SKILL_SAVE: 'skill:save',
   SKILL_CREATE: 'skill:create',
   SKILL_DELETE: 'skill:delete',
   SKILL_OPEN_EDITOR: 'skill:open-editor',

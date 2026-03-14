@@ -919,6 +919,11 @@ function setupIPC(): void {
     return skillManager.createSkill(personaId);
   });
 
+  // --- スキル: 保存（インライン編集） ---
+  ipcMain.handle(IPC_CHANNELS.SKILL_SAVE, (_e, personaId: string, skillId: string, fields: { name: string; description: string; trigger?: string; scriptType?: string; scriptValue?: string; body: string }) => {
+    return skillManager.saveSkill(personaId, skillId, fields);
+  });
+
   // --- スキル: 削除 ---
   ipcMain.handle(IPC_CHANNELS.SKILL_DELETE, (_e, personaId: string, skillId: string) => {
     skillManager.deleteSkill(personaId, skillId);

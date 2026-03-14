@@ -36,6 +36,7 @@ const IPC_CHANNELS = {
   CHAT_SEND_SILENT: 'chat:send-silent',
   SKILL_LIST: 'skill:list',
   SKILL_GET_CONTENT: 'skill:get-content',
+  SKILL_SAVE: 'skill:save',
   SKILL_CREATE: 'skill:create',
   SKILL_DELETE: 'skill:delete',
   SKILL_OPEN_EDITOR: 'skill:open-editor',
@@ -157,6 +158,9 @@ contextBridge.exposeInMainWorld('arisChatAPI', {
   },
   getSkillContent: (personaId: string, skillId: string): Promise<string | null> => {
     return ipcRenderer.invoke(IPC_CHANNELS.SKILL_GET_CONTENT, personaId, skillId);
+  },
+  saveSkill: (personaId: string, skillId: string, fields: { name: string; description: string; trigger?: string; scriptType?: string; scriptValue?: string; body: string }): Promise<Skill | null> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.SKILL_SAVE, personaId, skillId, fields);
   },
   createSkill: (personaId: string): Promise<string> => {
     return ipcRenderer.invoke(IPC_CHANNELS.SKILL_CREATE, personaId);

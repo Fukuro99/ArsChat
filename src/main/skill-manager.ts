@@ -150,6 +150,22 @@ export function createSkillManager(dataDir: string) {
       return readSkillBody(filePath);
     },
 
+    /** スキルをフロントマターと本文から保存 */
+    saveSkill(personaId: string, skillId: string, fields: { name: string; description: string; trigger?: string; scriptType?: string; scriptValue?: string; body: string }): Skill | null {
+      const filePath = path.join(getSkillsDir(personaId), `${skillId}.md`);
+      if (!fs.existsSync(filePath)) return null;
+
+      let frontmatter = `name: ${fields.name}\ndescription: ${fields.description}`;
+      if (fields.trigger) frontmatter += `\ntrigger: ${fields.trigger}`;
+      if (fields.scriptType && fields.scriptValue) {
+        frontmatter += `\nscript:\n  type: ${fields.scriptType}\n  value: ${fields.scriptValue}`;
+      }
+
+      const content = `---\n${frontmatter}\n---\n\n${fields.body}`;
+      fs.writeFileSync(filePath, content, 'utf-8');
+      return parseSkillFile(filePath);
+    },
+
     /** テンプレートファイルを生成してエディタで開く */
     createSkill(personaId: string): string {
       const dir = ensureSkillsDir(personaId);
