@@ -43,6 +43,8 @@ export interface ParsedContent {
   blocks: InteractiveUIBlock[];
   /** サンドボックスHTMLブロック配列 */
   sandboxBlocks: SandboxHTMLBlock[];
+  /** iframeHTMLブロック配列 */
+  iframeBlocks: IframeHTMLBlock[];
   /** 未閉じのUIブロックがあるか（ストリーミング中） */
   isLoading: boolean;
 }
@@ -62,6 +64,17 @@ export interface SandboxHTMLBlock {
   height?: string;
   libs?: string[];       // 将来の外部ライブラリ注入用（現在は無視）
   html: string;          // 実際のHTMLコンテンツ
+  /** 内部用: テキストパーツ内での位置インデックス */
+  _index?: number;
+}
+
+/** <iframe>タグで埋め込まれたサンドボックスHTMLブロック（AI側表示専用） */
+export interface IframeHTMLBlock {
+  id: string;
+  html: string;
+  width?: string;
+  height?: string;
+  title?: string;
   /** 内部用: テキストパーツ内での位置インデックス */
   _index?: number;
 }

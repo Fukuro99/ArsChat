@@ -98,12 +98,16 @@ function currentDateTimeTag(): string {
 const INTERACTIVE_UI_INSTRUCTIONS = `
 ## Interactive UI
 
-あなたはチャットメッセージ内にインタラクティブなUIコンポーネントを埋め込むことができます。
-ユーザーとの対話をより効率的にするために、適切な場面でUIコンポーネントを活用してください。
+あなたはインタラクティブなUIコンポーネントを生成できます。用途に応じて3種類の方法を使い分けてください。
+
+---
+
+## 【1】interactive-ui（ユーザー側フォーム・選択肢）
+
+ユーザーに操作させるUIです。**ユーザーのチャット欄（右側）に表示されます。**
+ユーザーが操作すると、その結果がAIにサイレント送信され（チャットには表示されません）、次のAI応答につながります。
 
 ### 使用方法
-
-\`\`\`interactive-ui ブロック内にJSON定義を記述します:
 
 \`\`\`interactive-ui
 {
@@ -137,7 +141,6 @@ progress-bar は \`bind\` でstateの値を動的に参照できる:
 \`\`\`json
 { "primitive": "progress-bar", "bind": "hp", "props": { "max": 100, "color": "success", "showLabel": true } }
 \`\`\`
-AIが patch で hp の値を更新すると自動的に反映される。
 
 ### image プリミティブ
 
@@ -146,7 +149,6 @@ AIが patch で hp の値を更新すると自動的に反映される。
 \`\`\`
 - src: data:image/... または blob: URL（外部URLは表示されません）
 - fit: "cover" / "contain" / "fill" / "none" / "scale-down"（デフォルト: "cover"）
-- bind でstateの画像URLを動的に参照可能
 
 ### actionsのsubmit
 
@@ -196,7 +198,7 @@ AIが patch で hp の値を更新すると自動的に反映される。
 - 単純なyes/noにはUIを使わず通常のテキストで十分
 - 3つ以上の選択肢や複数入力が必要な場面でUIを活用
 - UIブロックの前後に説明テキストを添える
-- ユーザーがUIを操作すると [interactive-ui-response] として送信されるので、それを受けて次の応答をする
+- ユーザーがUIを操作するとサイレントにAIへ送信される（チャット欄には何も表示されない）
 
 ### ライブUIモード（mode: "live"）
 
@@ -237,9 +239,43 @@ AIが patch で hp の値を更新すると自動的に反映される。
 \`\`\`
 AIには selectedCell の値が currentState に含まれた状態で届く。
 
-### サンドボックスHTML（interactive-html）
+---
 
-プリミティブでは表現できない複雑なUIには HTML/CSS/JS を直接記述できます:
+## 【2】\`<iframe>\`タグ（AI側HTML表示）
+
+グラフ・図解・アニメーションなど**表示専用のHTML**をAIのメッセージ欄（左側）に埋め込みます。
+ユーザーが操作してもAIには通知されません（表示のみ）。
+
+### 使用方法
+
+通常のテキストの中に \`<iframe>\` タグを記述します:
+
+\`<iframe width="500px" height="300px" title="タイトル（省略可）">\`
+\`<!DOCTYPE html>\`
+\`<html>...<style>...</style><body>...</body></html>\`
+\`</iframe>\`
+
+### ルール
+- 外部ネットワークは使用不可（CDN等のURLは動作しません）
+- width/height/title 属性で表示サイズを指定（省略時: 幅100%・高さ400px）
+- ユーザー操作をAIに通知する必要がある場合は interactive-html を使うこと
+
+### 例: 棒グラフ
+
+<iframe width="100%" height="250px" title="売上グラフ">
+<!DOCTYPE html><html><body style="margin:0;background:#1e1e2e;display:flex;align-items:flex-end;gap:8px;padding:16px">
+<div style="background:#7c3aed;width:40px;height:80px"></div>
+<div style="background:#7c3aed;width:40px;height:120px"></div>
+<div style="background:#7c3aed;width:40px;height:60px"></div>
+</body></html>
+</iframe>
+
+---
+
+## 【3】interactive-html（ユーザー側サンドボックス・liveモード）
+
+ゲーム・Canvas描画など**ユーザー操作をAIに通知する必要がある複雑なHTML**に使用します。
+**ユーザーのチャット欄（右側）に表示されます。**
 
 \`\`\`interactive-html
 {"id": "gomoku", "mode": "live", "title": "五目並べ", "width": "500px", "height": "540px"}
@@ -306,12 +342,17 @@ AIには selectedCell の値が currentState に含まれた状態で届く。
 - iframeはネットワーク切断環境で動作する（外部CDNは使用不可）
 - 親への通知: \`window.parent.postMessage({ type: 'interactive-ui-action', uiId: 'YOUR_ID', action: 'ACTION', data: {...} }, '*')\`
 - 親からの更新受信: \`window.addEventListener('message', e => { if (e.data.type === 'interactive-ui-update') {...} })\`
-- live モードで patch に "status": "finished" を含めると終了（通常の \`\`\`interactive-ui-update と同じ）
-- ゲーム・アニメーション・グラフなど複雑なビジュアルに使用する
+- live モードで patch に "status": "finished" を含めると終了
 
-**使い分け:**
-- ボタン・フォーム・簡単な選択肢 → \`\`\`interactive-ui（プリミティブ）
-- ゲーム・Canvas描画・複雑なアニメーション → \`\`\`interactive-html（サンドボックス）`;
+---
+
+## 使い分けまとめ
+
+| 用途 | 方法 | 表示位置 |
+|---|---|---|
+| ボタン選択・フォーム入力（操作→AI通知） | \`\`\`interactive-ui | ユーザー側（右） |
+| グラフ・図解・表示専用HTML | \`<iframe>\` タグ | AI側（左） |
+| ゲーム・Canvas・複雑なHTML（操作→AI通知） | \`\`\`interactive-html | ユーザー側（右） |`;
 
 /** アクティブな人格のシステムプロンプトを返す（人格名・日時・Interactive UI指示を付加） */
 export function getEffectiveSystemPrompt(settings: ArisChatSettings, skills?: Skill[]): string {
