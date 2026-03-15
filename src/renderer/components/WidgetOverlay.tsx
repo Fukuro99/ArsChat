@@ -47,6 +47,43 @@ export default function WidgetOverlay() {
       createdAt: msgs[0]?.timestamp || Date.now(),
       updatedAt: Date.now(),
     });
+    // アクティブセッションをメインプロセスに通知
+    window.arisChatAPI.setActiveSession?.(widgetSessionIdRef.current);
+  }, []);
+
+  // 起動時・セッション切り替え時にアクティブセッションを読み込む
+  useEffect(() => {
+    window.arisChatAPI.getActiveSession?.().then((sessionId) => {
+      if (sessionId && sessionId !== widgetSessionIdRef.current) {
+        widgetSessionIdRef.current = sessionId;
+        window.arisChatAPI.getSession(sessionId).then((session) => {
+          if (session) setMessages(session.messages);
+        });
+      }
+    });
+
+    const cleanupChanged = window.arisChatAPI.onActiveSessionChanged?.((sessionId) => {
+      if (sessionId && sessionId !== widgetSessionIdRef.current) {
+        widgetSessionIdRef.current = sessionId;
+        window.arisChatAPI.getSession(sessionId).then((session) => {
+          if (session) setMessages(session.messages);
+        });
+      }
+    });
+
+    // 同じセッションにメッセージが追加されたときも再読み込み
+    const cleanupUpdated = window.arisChatAPI.onSessionUpdated?.((updatedId) => {
+      if (updatedId === widgetSessionIdRef.current) {
+        window.arisChatAPI.getSession(updatedId).then((session) => {
+          if (session) setMessages(session.messages);
+        });
+      }
+    });
+
+    return () => {
+      cleanupChanged?.();
+      cleanupUpdated?.();
+    };
   }, []);
 
   useEffect(() => {

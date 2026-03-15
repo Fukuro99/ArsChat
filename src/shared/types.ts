@@ -495,4 +495,10 @@ export const IPC_CHANNELS = {
   SKILL_OPEN_EDITOR: 'skill:open-editor',
   SKILL_OPEN_FOLDER: 'skill:open-folder',
   SKILL_INVOKE_SCRIPT: 'skill:invoke-script',
+
+  // セッション同期（ウィジェット ↔ メインウィンドウ）
+  SESSION_SET_ACTIVE: 'session:set-active',
+  SESSION_GET_ACTIVE: 'session:get-active',
+  SESSION_ACTIVE_CHANGED: 'session:active-changed',
+  SESSION_UPDATED: 'session:updated',
 } as const;

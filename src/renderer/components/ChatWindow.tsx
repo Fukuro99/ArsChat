@@ -168,6 +168,18 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     }
   }, [sessionId]);
 
+  // 他ウィンドウ（ウィジェット等）でセッションが更新されたら再読み込み
+  useEffect(() => {
+    const cleanup = window.arisChatAPI.onSessionUpdated?.((updatedId) => {
+      if (updatedId === currentSessionIdRef.current && !isStreaming) {
+        window.arisChatAPI.getSession(updatedId).then((session) => {
+          if (session) setMessages(session.messages);
+        });
+      }
+    });
+    return () => cleanup?.();
+  }, [isStreaming]);
+
   // 自動スクロール
   // ストリーミング中は 'auto'（即時）にすることで smooth アニメーションの積み重ねによるジャンクを防ぐ
   useEffect(() => {

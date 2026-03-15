@@ -42,6 +42,10 @@ const IPC_CHANNELS = {
   SKILL_OPEN_EDITOR: 'skill:open-editor',
   SKILL_OPEN_FOLDER: 'skill:open-folder',
   SKILL_INVOKE_SCRIPT: 'skill:invoke-script',
+  SESSION_SET_ACTIVE: 'session:set-active',
+  SESSION_GET_ACTIVE: 'session:get-active',
+  SESSION_ACTIVE_CHANGED: 'session:active-changed',
+  SESSION_UPDATED: 'session:updated',
 } as const;
 const IPC_CAPTURE_IMAGE_READY = 'capture:image-ready';
 
@@ -176,6 +180,24 @@ contextBridge.exposeInMainWorld('arisChatAPI', {
   },
   invokeSkillScript: (personaId: string, skillId: string): Promise<string> => {
     return ipcRenderer.invoke(IPC_CHANNELS.SKILL_INVOKE_SCRIPT, personaId, skillId);
+  },
+
+  // === セッション同期 ===
+  setActiveSession: (sessionId: string | null) => {
+    ipcRenderer.send(IPC_CHANNELS.SESSION_SET_ACTIVE, sessionId);
+  },
+  getActiveSession: (): Promise<string | null> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.SESSION_GET_ACTIVE);
+  },
+  onActiveSessionChanged: (callback: (sessionId: string | null) => void) => {
+    const handler = (_: any, sessionId: string | null) => callback(sessionId);
+    ipcRenderer.on(IPC_CHANNELS.SESSION_ACTIVE_CHANGED, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.SESSION_ACTIVE_CHANGED, handler);
+  },
+  onSessionUpdated: (callback: (sessionId: string) => void) => {
+    const handler = (_: any, sessionId: string) => callback(sessionId);
+    ipcRenderer.on(IPC_CHANNELS.SESSION_UPDATED, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.SESSION_UPDATED, handler);
   },
 
   // === ナビゲーション ===

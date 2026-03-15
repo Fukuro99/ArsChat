@@ -35,6 +35,7 @@ let tray: Tray | null = null;
 let isQuitting = false;
 let miniModeActive = false;
 let normalWindowBounds: Rectangle | null = null;
+let activeSessionId: string | null = null;
 
 const isDev = !app.isPackaged;
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
@@ -405,6 +406,10 @@ function createMainWindow(): BrowserWindow {
   win.on('hide', () => {
     if (widgetWindow && !widgetWindow.isDestroyed() && !widgetWindow.isVisible()) {
       widgetWindow.showInactive();
+      // メインウィンドウで使っていたセッションをウィジェットに通知
+      if (activeSessionId) {
+        widgetWindow.webContents.send(IPC_CHANNELS.SESSION_ACTIVE_CHANGED, activeSessionId);
+      }
     }
   });
 
@@ -456,7 +461,10 @@ function createWidgetWindow(): BrowserWindow {
 
   win.once('ready-to-show', () => {
     win.setAlwaysOnTop(true, 'screen-saver');
-    win.showInactive();
+    // メインウィンドウが非表示のときのみウィジェットを表示
+    if (!mainWindow || !mainWindow.isVisible()) {
+      win.showInactive();
+    }
   });
 
   win.webContents.on('context-menu', () => {
@@ -669,11 +677,34 @@ function setupIPC(): void {
 
   ipcMain.handle(IPC_CHANNELS.SESSION_CREATE, (_e, session: ChatSession) => {
     store.saveSession(session);
+    // 送信元以外のウィンドウへセッション更新を通知（リアルタイム同期）
+    const sender = _e.sender;
+    for (const win of [mainWindow, widgetWindow]) {
+      if (win && !win.isDestroyed() && win.webContents !== sender) {
+        win.webContents.send(IPC_CHANNELS.SESSION_UPDATED, session.id);
+      }
+    }
     return session;
   });
 
   ipcMain.handle(IPC_CHANNELS.SESSION_DELETE, (_e, sessionId: string) => {
     store.deleteSession(sessionId);
+  });
+
+  // --- アクティブセッション同期（ウィジェット ↔ メインウィンドウ） ---
+  ipcMain.on(IPC_CHANNELS.SESSION_SET_ACTIVE, (_e, sessionId: string | null) => {
+    activeSessionId = sessionId;
+    // 変更を両方のウィンドウへブロードキャスト（送信元以外）
+    const sender = _e.sender;
+    for (const win of [mainWindow, widgetWindow]) {
+      if (win && !win.isDestroyed() && win.webContents !== sender) {
+        win.webContents.send(IPC_CHANNELS.SESSION_ACTIVE_CHANGED, activeSessionId);
+      }
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SESSION_GET_ACTIVE, () => {
+    return activeSessionId;
   });
 
   // --- 設定 ---
@@ -819,6 +850,10 @@ function setupIPC(): void {
     mainWindow?.webContents.send('navigate', 'chat');
     // メインウィンドウ表示時はウィジェットを非表示にする
     if (widgetWindow?.isVisible()) widgetWindow.hide();
+    // ウィジェットで使っていたセッションをメインウィンドウに通知
+    if (activeSessionId) {
+      mainWindow?.webContents.send(IPC_CHANNELS.SESSION_ACTIVE_CHANGED, activeSessionId);
+    }
   });
 
   // --- ウィジェット拡大/縮小 ---
@@ -972,7 +1007,10 @@ app.whenReady().then(() => {
       widgetWindow = createWidgetWindow();
     } else {
       showMainWindow({ mini: false });
-      widgetWindow?.showInactive();
+      // メインウィンドウ表示中はウィジェットを非表示にする
+      if (widgetWindow && !widgetWindow.isDestroyed() && widgetWindow.isVisible()) {
+        widgetWindow.hide();
+      }
     }
   });
 });
