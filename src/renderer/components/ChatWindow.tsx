@@ -69,6 +69,8 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
   const liveUIActionsRef = useRef<Map<string, LiveUIAction[]>>(new Map());
   // サンドボックスiframeのDOMエレメント登録（パッチ転送用）
   const sandboxIframeRefs = useRef<Map<string, HTMLIFrameElement | null>>(new Map());
+  // ユーザー側に表示したUIブロックの送信済みID管理
+  const submittedUIBlockIdsRef = useRef<Set<string>>(new Set());
   // ライブUIアクション処理中フラグ
   const [isLiveProcessing, setIsLiveProcessing] = useState(false);
   // ライブUIアクション後のAIテキスト返答（インプレース更新）
@@ -378,15 +380,19 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
 
   /** Interactive UIアクションハンドラ（defaultモード） */
   const handleInteractiveUIAction = useCallback((uiId: string, action: string, data: Record<string, any>) => {
-    // 構造化データをユーザーメッセージとして整形
+    // 送信済みとして記録
+    submittedUIBlockIdsRef.current.add(uiId);
+
+    // 構造化データをユーザーメッセージとして整形（チャットには表示しないが文脈として保持）
     const responseContent = `[interactive-ui-response]\n${JSON.stringify({ ui_id: uiId, action, data })}`;
-    const userMsg: ChatMessage = {
+    const hiddenUserMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
       content: responseContent,
       timestamp: Date.now(),
     };
-    const newMessages = [...messages, userMsg];
+    // messagesに追加（AIへの文脈のため）、ただし描画はフィルタして非表示にする
+    const newMessages = [...messages, hiddenUserMsg];
     setMessages(newMessages);
     setIsStreaming(true);
     setStreamingContent('');
@@ -712,28 +718,96 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
           </div>
         )}
 
-        {messages.map((msg) => (
-          <MessageBubble
-            key={msg.id}
-            message={msg}
-            showThinking={thinkMode}
-            isEditing={editingMessageId === msg.id}
-            avatarSrc={getEffectiveAvatarPath(settings)}
-            onCopy={() => handleCopyMessage(msg.content)}
-            onDelete={() => handleDeleteMessage(msg.id)}
-            onRegenerate={msg.role === 'assistant' ? () => handleRegenerateMessage(msg.id) : undefined}
-            onContinue={msg.role === 'assistant' ? () => handleContinueMessage(msg.id) : undefined}
-            onBranch={() => { void handleBranchMessage(msg.id); }}
-            onEditStart={() => handleEditStart(msg.id)}
-            onEditSave={(newContent) => handleEditSave(msg.id, newContent)}
-            onEditCancel={handleEditCancel}
-            onInteractiveUIAction={msg.role === 'assistant' ? handleInteractiveUIAction : undefined}
-            onLiveUIAction={msg.role === 'assistant' ? handleLiveUIAction : undefined}
-            liveUIStates={msg.role === 'assistant' ? liveUIStates : undefined}
-            hideLiveUIBlocks={isLiveMode}
-            onSandboxIframeReady={handleSandboxIframeReady}
-          />
-        ))}
+        {messages.map((msg) => {
+          // [interactive-ui-response]メッセージはAIへの文脈用のため描画しない
+          if (msg.content.startsWith('[interactive-ui-response]')) return null;
+
+          if (msg.role === 'assistant') {
+            // アシスタントメッセージ本体 + ユーザー側インタラクティブUIブロック
+            const parsed = parseInteractiveUI(msg.content);
+            const userSideBlocks = parsed.blocks.filter((b) => b.mode !== 'live');
+            const userSideSandboxBlocks = parsed.sandboxBlocks.filter((b) => b.mode !== 'live');
+
+            return (
+              <React.Fragment key={msg.id}>
+                {/* アシスタントメッセージ（interactive-uiブロックは非表示） */}
+                <MessageBubble
+                  message={msg}
+                  showThinking={thinkMode}
+                  isEditing={editingMessageId === msg.id}
+                  avatarSrc={getEffectiveAvatarPath(settings)}
+                  onCopy={() => handleCopyMessage(msg.content)}
+                  onDelete={() => handleDeleteMessage(msg.id)}
+                  onRegenerate={() => handleRegenerateMessage(msg.id)}
+                  onContinue={() => handleContinueMessage(msg.id)}
+                  onBranch={() => { void handleBranchMessage(msg.id); }}
+                  onEditStart={() => handleEditStart(msg.id)}
+                  onEditSave={(newContent) => handleEditSave(msg.id, newContent)}
+                  onEditCancel={handleEditCancel}
+                  onLiveUIAction={handleLiveUIAction}
+                  liveUIStates={liveUIStates}
+                  hideLiveUIBlocks={isLiveMode}
+                  hideInteractiveUIBlocks={true}
+                  onSandboxIframeReady={handleSandboxIframeReady}
+                />
+
+                {/* ユーザー側: defaultモードのインタラクティブUIブロック */}
+                {userSideBlocks.map((block) => (
+                  <div key={block.id} className="flex gap-2.5 flex-row-reverse">
+                    <div className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold bg-emerald-500/20 text-emerald-400">
+                      U
+                    </div>
+                    <div className="max-w-[85%]">
+                      <div className="rounded-2xl px-2 py-2 bg-aria-primary/15 text-aria-text rounded-br-md">
+                        <BlockRenderer
+                          key={block.id}
+                          block={block}
+                          onSubmit={(uiId, action, data) => handleInteractiveUIAction(uiId, action, data)}
+                          onAction={(uiId, actionId, data) => handleInteractiveUIAction(uiId, actionId, data || {})}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {/* ユーザー側: defaultモードのサンドボックスHTMLブロック */}
+                {userSideSandboxBlocks.map((sandboxBlock) => (
+                  <div key={sandboxBlock.id} className="flex gap-2.5 flex-row-reverse">
+                    <div className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold bg-emerald-500/20 text-emerald-400">
+                      U
+                    </div>
+                    <div className="max-w-[85%] w-full">
+                      <div className="rounded-2xl overflow-hidden bg-aria-primary/15 rounded-br-md">
+                        <SandboxRenderer
+                          block={sandboxBlock}
+                          onAction={(uiId, action, data) => handleInteractiveUIAction(uiId, action, data)}
+                          onIframeReady={handleSandboxIframeReady}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </React.Fragment>
+            );
+          }
+
+          // ユーザーメッセージ
+          return (
+            <MessageBubble
+              key={msg.id}
+              message={msg}
+              showThinking={thinkMode}
+              isEditing={editingMessageId === msg.id}
+              avatarSrc={getEffectiveAvatarPath(settings)}
+              onCopy={() => handleCopyMessage(msg.content)}
+              onDelete={() => handleDeleteMessage(msg.id)}
+              onBranch={() => { void handleBranchMessage(msg.id); }}
+              onEditStart={() => handleEditStart(msg.id)}
+              onEditSave={(newContent) => handleEditSave(msg.id, newContent)}
+              onEditCancel={handleEditCancel}
+            />
+          );
+        })}
 
         {/* ストリーミング中の表示 */}
         {isStreaming && (

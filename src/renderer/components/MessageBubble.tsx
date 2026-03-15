@@ -49,6 +49,8 @@ interface MessageBubbleProps {
   liveUIStates?: Map<string, Record<string, any>>;
   /** true のとき、ライブUIブロックをチャット内に表示しない（固定ゾーンで表示するため） */
   hideLiveUIBlocks?: boolean;
+  /** true のとき、インタラクティブUIブロック（default/live両方）をAI側バブルに表示しない */
+  hideInteractiveUIBlocks?: boolean;
   /** サンドボックスHTML iframeの登録コールバック */
   onSandboxIframeReady?: (uiId: string, iframe: HTMLIFrameElement | null) => void;
 }
@@ -129,6 +131,7 @@ export default function MessageBubble({
   onLiveUIAction,
   liveUIStates,
   hideLiveUIBlocks = false,
+  hideInteractiveUIBlocks = false,
   onSandboxIframeReady,
 }: MessageBubbleProps) {
   const isUser = message.role === 'user';
@@ -311,9 +314,10 @@ export default function MessageBubble({
                 <div className={isStreaming ? 'streaming-cursor' : ''}>
                   {parsedContent.textParts.map((part, i) => {
                     if (part === null) {
-                      // プリミティブUIブロックを探す
+                      // プリミティブUIブロック（hideInteractiveUIBlocks=trueの場合は非表示）
                       const block = parsedContent.blocks.find((b) => b._index === i);
                       if (block) {
+                        if (hideInteractiveUIBlocks) return null;
                         if (hideLiveUIBlocks && block.mode === 'live') return null;
                         return (
                           <BlockRenderer
@@ -336,9 +340,10 @@ export default function MessageBubble({
                         );
                       }
 
-                      // サンドボックスHTMLブロックを探す
+                      // サンドボックスHTMLブロック（hideInteractiveUIBlocks=trueの場合は非表示）
                       const sandboxBlock = parsedContent.sandboxBlocks.find((b) => b._index === i);
                       if (sandboxBlock) {
+                        if (hideInteractiveUIBlocks) return null;
                         if (hideLiveUIBlocks && sandboxBlock.mode === 'live') return null;
                         const sbState = liveUIStates?.get(sandboxBlock.id);
                         const isFinished = sbState?.status === 'finished';
@@ -356,6 +361,24 @@ export default function MessageBubble({
                             }}
                             onIframeReady={onSandboxIframeReady}
                             isFinished={isFinished}
+                          />
+                        );
+                      }
+
+                      // <iframe>タグブロック（AI側に常時表示）
+                      const iframeBlock = parsedContent.iframeBlocks.find((b) => b._index === i);
+                      if (iframeBlock) {
+                        return (
+                          <SandboxRenderer
+                            key={iframeBlock.id}
+                            block={{
+                              id: iframeBlock.id,
+                              mode: 'default',
+                              title: iframeBlock.title,
+                              width: iframeBlock.width,
+                              height: iframeBlock.height || '400px',
+                              html: iframeBlock.html,
+                            }}
                           />
                         );
                       }
