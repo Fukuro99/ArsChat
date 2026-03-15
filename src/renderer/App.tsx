@@ -21,11 +21,25 @@ export default function App() {
   const [settingsVersion, setSettingsVersion] = useState(0);
 
   useEffect(() => {
+    // 起動時にアクティブセッションを取得
+    window.arisChatAPI.getActiveSession?.().then((sessionId) => {
+      if (sessionId) setCurrentSessionId(sessionId);
+    });
+
     // メインプロセスからのナビゲーション指示
-    const cleanup = window.arisChatAPI.onNavigate((page) => {
+    const cleanupNav = window.arisChatAPI.onNavigate((page) => {
       setCurrentPage(page as Page);
     });
-    return cleanup;
+
+    // ウィジェットからのセッション切り替え通知
+    const cleanupSession = window.arisChatAPI.onActiveSessionChanged?.((sessionId) => {
+      if (sessionId) setCurrentSessionId(sessionId);
+    });
+
+    return () => {
+      cleanupNav();
+      cleanupSession?.();
+    };
   }, []);
 
   return (
@@ -44,10 +58,12 @@ export default function App() {
             currentSessionId={currentSessionId}
             onSelectSession={(id) => {
               setCurrentSessionId(id);
+              window.arisChatAPI.setActiveSession?.(id);
               setSidebarOpen(false);
             }}
             onNewSession={() => {
               setCurrentSessionId(null);
+              window.arisChatAPI.setActiveSession?.(null);
               setSidebarOpen(false);
             }}
             onClose={() => setSidebarOpen(false)}
@@ -59,7 +75,10 @@ export default function App() {
           {currentPage === 'chat' ? (
             <ChatWindow
               sessionId={currentSessionId}
-              onSessionCreated={setCurrentSessionId}
+              onSessionCreated={(id) => {
+                setCurrentSessionId(id);
+                window.arisChatAPI.setActiveSession?.(id);
+              }}
               settingsVersion={settingsVersion}
             />
           ) : (
