@@ -4,6 +4,64 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ArisChat</title>
+  <script>
+    // Browser preview mock (Electron preload not available in browser)
+    if (typeof window !== 'undefined' && !window.arisChatAPI) {
+      window.arisChatAPI = {
+        onNavigate: () => () => {},
+        onCapturedImage: () => () => {},
+        getSettings: () => Promise.resolve({
+          provider: 'anthropic', apiKey: '', model: 'claude-sonnet-4-20250514',
+          systemPrompt: 'あなたはAIアシスタントです。', lmstudioBaseUrl: '',
+          lmstudioModel: '', lmstudioContextLength: 4096,
+          hotkey: 'CommandOrControl+Shift+A', alwaysOnTop: false,
+          launchAtStartup: false, customIconPath: null, customTrayIconPath: null,
+          customAvatarPath: null, accentColor: '#6366f1',
+          activePersonaId: 'p1', enableInteractiveUI: true,
+          personas: [
+            { id: 'p1', name: 'コードレビュアー', systemPrompt: 'コードの品質を評価します', avatarPath: null },
+            { id: 'p2', name: '翻訳者', systemPrompt: '日英・英日翻訳を行います', avatarPath: null },
+          ],
+        }),
+        setSettings: (s) => Promise.resolve(s),
+        getMCPConfig: () => Promise.resolve({ servers: [] }),
+        getMCPStatus: () => Promise.resolve([]),
+        saveMCPConfig: () => Promise.resolve([]),
+        reconnectMCP: () => Promise.resolve([]),
+        listMCPTools: () => Promise.resolve([]),
+        listSkills: () => Promise.resolve([
+          { id: 'code-review', name: 'コードレビュー', description: 'コードの品質とセキュリティを評価します', trigger: '/review', filePath: '/fake/code-review.md' },
+          { id: 'translate', name: '翻訳', description: '日英・英日翻訳を行います', trigger: '/translate', script: { type: 'url', value: 'https://example.com' }, filePath: '/fake/translate.md' },
+        ]),
+        getSkillContent: () => Promise.resolve('# スキル詳細\n\nここに詳細を記述します。'),
+        saveSkill: (pid, sid, f) => Promise.resolve({ id: sid, name: f.name, description: f.description, trigger: f.trigger, filePath: '/fake/' + sid + '.md' }),
+        createSkill: () => Promise.resolve('/fake/new-skill.md'),
+        deleteSkill: () => Promise.resolve(),
+        openSkillInEditor: () => Promise.resolve(),
+        openSkillsFolder: () => Promise.resolve(),
+        invokeSkillScript: () => Promise.resolve('実行完了'),
+        listSessions: () => Promise.resolve([]),
+        getSession: () => Promise.resolve(null),
+        createSession: (s) => Promise.resolve(s),
+        deleteSession: () => Promise.resolve(),
+        sendMessage: () => {},
+        onStreamChunk: () => () => {},
+        onStreamEnd: () => () => {},
+        onStreamError: () => () => {},
+        abortChat: () => {},
+        sendSilentMessage: () => Promise.resolve({ content: '' }),
+        selectIcon: () => Promise.resolve(null),
+        selectPersonaIcon: () => Promise.resolve(null),
+        captureScreen: () => Promise.resolve(''),
+        readClipboardImage: () => Promise.resolve(null),
+        minimizeWindow: () => {}, maximizeWindow: () => {}, closeWindow: () => {},
+        openChatWindow: () => {}, expandWidget: () => {}, collapseWidget: () => {},
+        moveWidget: () => {}, captureRegion: () => Promise.resolve(null),
+        listLMStudioModels: () => Promise.resolve([]),
+        loadLMStudioModel: () => Promise.resolve(),
+      };
+    }
+  </script>
 </head>
 <body class="bg-aria-bg text-aria-text overflow-hidden">
   <div id="root"></div>

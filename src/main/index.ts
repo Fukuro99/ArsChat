@@ -26,6 +26,7 @@ import { createStore } from './store';
 import { createClaudeService } from './claude';
 import { createIconManager } from './icon-manager';
 import { createMCPManager } from './mcp-manager';
+import { createSkillManager } from './skill-manager';
 
 // ===== グローバル変数 =====
 let mainWindow: BrowserWindow | null = null;
@@ -51,6 +52,7 @@ let regionCaptureWindow: BrowserWindow | null = null;
 const store = createStore();
 const iconManager = createIconManager();
 const mcpManager = createMCPManager();
+const skillManager = createSkillManager(store.getDataDir());
 
 async function captureDisplayBase64(targetDisplay?: Display): Promise<string> {
   const display = targetDisplay ?? screen.getPrimaryDisplay();
@@ -601,6 +603,11 @@ function setupIPC(): void {
       return;
     }
 
+    // アクティブペルソナのスキルを読み込む
+    const skills = settings.activePersonaId
+      ? skillManager.listSkills(settings.activePersonaId)
+      : [];
+
     try {
       await claude.streamChat(
         settings,
@@ -611,7 +618,21 @@ function setupIPC(): void {
         (stats: ChatMessageStats) => {
           event.sender.send(IPC_CHANNELS.CHAT_STREAM_END, stats);
         },
-        { thinkMode: payload.thinkMode ?? false },
+        {
+          thinkMode: payload.thinkMode ?? false,
+          skillContext: skills.length > 0 ? {
+            skills,
+            getContent: (skillId: string) =>
+              settings.activePersonaId
+                ? skillManager.getSkillContent(settings.activePersonaId, skillId)
+                : null,
+            invokeScript: async (skillId: string) => {
+              const skill = skills.find((s) => s.id === skillId);
+              if (!skill) return `スキル "${skillId}" が見つかりません`;
+              return skillManager.invokeSkillScript(skill);
+            },
+          } : undefined,
+        },
       );
     } catch (err: any) {
       event.sender.send(IPC_CHANNELS.CHAT_STREAM_ERROR, err.message || 'Unknown error');
@@ -881,6 +902,49 @@ function setupIPC(): void {
     const config = store.getMCPConfig();
     await mcpManager.connect(config.servers);
     return mcpManager.getStatus(config.servers);
+  });
+
+  // --- スキル: 一覧取得 ---
+  ipcMain.handle(IPC_CHANNELS.SKILL_LIST, (_e, personaId: string) => {
+    return skillManager.listSkills(personaId);
+  });
+
+  // --- スキル: 本文取得 ---
+  ipcMain.handle(IPC_CHANNELS.SKILL_GET_CONTENT, (_e, personaId: string, skillId: string) => {
+    return skillManager.getSkillContent(personaId, skillId);
+  });
+
+  // --- スキル: 新規作成（テンプレート生成 + エディタで開く） ---
+  ipcMain.handle(IPC_CHANNELS.SKILL_CREATE, (_e, personaId: string) => {
+    return skillManager.createSkill(personaId);
+  });
+
+  // --- スキル: 保存（インライン編集） ---
+  ipcMain.handle(IPC_CHANNELS.SKILL_SAVE, (_e, personaId: string, skillId: string, fields: { name: string; description: string; trigger?: string; scriptType?: string; scriptValue?: string; body: string }) => {
+    return skillManager.saveSkill(personaId, skillId, fields);
+  });
+
+  // --- スキル: 削除 ---
+  ipcMain.handle(IPC_CHANNELS.SKILL_DELETE, (_e, personaId: string, skillId: string) => {
+    skillManager.deleteSkill(personaId, skillId);
+  });
+
+  // --- スキル: エディタで開く ---
+  ipcMain.handle(IPC_CHANNELS.SKILL_OPEN_EDITOR, (_e, filePath: string) => {
+    skillManager.openSkillInEditor(filePath);
+  });
+
+  // --- スキル: フォルダを開く ---
+  ipcMain.handle(IPC_CHANNELS.SKILL_OPEN_FOLDER, (_e, personaId: string) => {
+    skillManager.openSkillsFolder(personaId);
+  });
+
+  // --- スキル: スクリプト実行 ---
+  ipcMain.handle(IPC_CHANNELS.SKILL_INVOKE_SCRIPT, async (_e, personaId: string, skillId: string) => {
+    const skills = skillManager.listSkills(personaId);
+    const skill = skills.find((s) => s.id === skillId);
+    if (!skill) return `スキル "${skillId}" が見つかりません`;
+    return skillManager.invokeSkillScript(skill);
   });
 }
 

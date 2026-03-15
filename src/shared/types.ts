@@ -314,17 +314,25 @@ AIには selectedCell の値が currentState に含まれた状態で届く。
 - ゲーム・Canvas描画・複雑なアニメーション → \`\`\`interactive-html（サンドボックス）`;
 
 /** アクティブな人格のシステムプロンプトを返す（人格名・日時・Interactive UI指示を付加） */
-export function getEffectiveSystemPrompt(settings: ArisChatSettings): string {
+export function getEffectiveSystemPrompt(settings: ArisChatSettings, skills?: Skill[]): string {
   const dateTime = currentDateTimeTag();
   const uiInstructions = settings.enableInteractiveUI !== false ? INTERACTIVE_UI_INSTRUCTIONS : '';
+
+  // スキル概要の注入
+  let skillsSection = '';
+  if (skills && skills.length > 0) {
+    const rows = skills.map((s) => `| ${s.id} | ${s.name} | ${s.description} |`).join('\n');
+    skillsSection = `\n\n## あなたが持つスキル\n\n以下のスキルを活用できます。ユーザーの要求にスキルが役立つと判断した場合は、\`get_skill_details\` ツールでスキルの詳細を取得してから回答してください。\n\n| ID | 名前 | 概要 |\n|----|------|------|\n${rows}`;
+  }
+
   if (settings.activePersonaId) {
     const persona = settings.personas.find((p) => p.id === settings.activePersonaId);
     if (persona) {
       const namePrefix = `あなたの名前は「${persona.name}」です。\n\n`;
-      return namePrefix + persona.systemPrompt + uiInstructions + `\n\n現在日時: ${dateTime}`;
+      return namePrefix + persona.systemPrompt + uiInstructions + skillsSection + `\n\n現在日時: ${dateTime}`;
     }
   }
-  return settings.systemPrompt + uiInstructions + `\n\n現在日時: ${dateTime}`;
+  return settings.systemPrompt + uiInstructions + skillsSection + `\n\n現在日時: ${dateTime}`;
 }
 
 /** アクティブな人格のアバターパスを返す */
@@ -363,6 +371,24 @@ export const DEFAULT_SETTINGS: ArisChatSettings = {
   windowHeight: 720,
   enableInteractiveUI: true,
 };
+
+// ===== スキル =====
+
+/** スキルに紐付けられたスクリプト設定 */
+export interface SkillScript {
+  type: 'file' | 'command' | 'url';
+  value: string;
+}
+
+/** スキルのメタ情報（本文はファイルから動的に読み込む） */
+export interface Skill {
+  id: string;           // ファイル名（拡張子なし）
+  name: string;         // frontmatter.name
+  description: string;  // frontmatter.description（システムプロンプトに載せる概要）
+  trigger?: string;     // frontmatter.trigger（例: "/review"）
+  script?: SkillScript; // frontmatter.script
+  filePath: string;     // 絶対ファイルパス
+}
 
 // ===== MCP 設定 =====
 
@@ -459,4 +485,14 @@ export const IPC_CHANNELS = {
   MCP_GET_STATUS: 'mcp:get-status',
   MCP_LIST_TOOLS: 'mcp:list-tools',
   MCP_RECONNECT: 'mcp:reconnect',
+
+  // スキル
+  SKILL_LIST: 'skill:list',
+  SKILL_GET_CONTENT: 'skill:get-content',
+  SKILL_SAVE: 'skill:save',
+  SKILL_CREATE: 'skill:create',
+  SKILL_DELETE: 'skill:delete',
+  SKILL_OPEN_EDITOR: 'skill:open-editor',
+  SKILL_OPEN_FOLDER: 'skill:open-folder',
+  SKILL_INVOKE_SCRIPT: 'skill:invoke-script',
 } as const;

@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 // 型のみのインポート（コンパイル後に require を生成しない）
-import type { ArisChatSettings, ChatMessage, ChatMessageStats, ChatSession, LMStudioModelInfo, MCPConfig, MCPServerStatus, MCPToolInfo } from '../shared/types';
+import type { ArisChatSettings, ChatMessage, ChatMessageStats, ChatSession, LMStudioModelInfo, MCPConfig, MCPServerStatus, MCPToolInfo, Skill } from '../shared/types';
 
 // sandbox preload 環境では require('../shared/types') が使えないため直接定義
 const IPC_CHANNELS = {
@@ -34,6 +34,14 @@ const IPC_CHANNELS = {
   MCP_LIST_TOOLS: 'mcp:list-tools',
   MCP_RECONNECT: 'mcp:reconnect',
   CHAT_SEND_SILENT: 'chat:send-silent',
+  SKILL_LIST: 'skill:list',
+  SKILL_GET_CONTENT: 'skill:get-content',
+  SKILL_SAVE: 'skill:save',
+  SKILL_CREATE: 'skill:create',
+  SKILL_DELETE: 'skill:delete',
+  SKILL_OPEN_EDITOR: 'skill:open-editor',
+  SKILL_OPEN_FOLDER: 'skill:open-folder',
+  SKILL_INVOKE_SCRIPT: 'skill:invoke-script',
 } as const;
 const IPC_CAPTURE_IMAGE_READY = 'capture:image-ready';
 
@@ -142,6 +150,32 @@ contextBridge.exposeInMainWorld('arisChatAPI', {
   },
   reconnectMCP: (): Promise<MCPServerStatus[]> => {
     return ipcRenderer.invoke(IPC_CHANNELS.MCP_RECONNECT);
+  },
+
+  // === スキル ===
+  listSkills: (personaId: string): Promise<Skill[]> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.SKILL_LIST, personaId);
+  },
+  getSkillContent: (personaId: string, skillId: string): Promise<string | null> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.SKILL_GET_CONTENT, personaId, skillId);
+  },
+  saveSkill: (personaId: string, skillId: string, fields: { name: string; description: string; trigger?: string; scriptType?: string; scriptValue?: string; body: string }): Promise<Skill | null> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.SKILL_SAVE, personaId, skillId, fields);
+  },
+  createSkill: (personaId: string): Promise<string> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.SKILL_CREATE, personaId);
+  },
+  deleteSkill: (personaId: string, skillId: string): Promise<void> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.SKILL_DELETE, personaId, skillId);
+  },
+  openSkillInEditor: (filePath: string): Promise<void> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.SKILL_OPEN_EDITOR, filePath);
+  },
+  openSkillsFolder: (personaId: string): Promise<void> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.SKILL_OPEN_FOLDER, personaId);
+  },
+  invokeSkillScript: (personaId: string, skillId: string): Promise<string> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.SKILL_INVOKE_SCRIPT, personaId, skillId);
   },
 
   // === ナビゲーション ===

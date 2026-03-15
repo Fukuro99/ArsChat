@@ -1,5 +1,102 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ArisChatSettings, DEFAULT_SETTINGS, LMStudioModelInfo, MCPConfig, MCPServerConfig, MCPServerStatus, Persona } from '../../shared/types';
+import { ArisChatSettings, DEFAULT_SETTINGS, LMStudioModelInfo, MCPConfig, MCPServerConfig, MCPServerStatus, Persona, Skill } from '../../shared/types';
+
+// ===== スキル共通コンポーネント =====
+
+interface SkillFormState { name: string; description: string; trigger: string; scriptType: string; scriptValue: string; body: string; }
+
+function SkillRow({ skill, onEdit, onOpenEditor, onDelete }: { skill: Skill; onEdit: () => void; onOpenEditor: () => void; onDelete: () => void; }) {
+  return (
+    <div className="flex items-start gap-2 p-2">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-medium text-aria-text">{skill.name}</span>
+          {skill.trigger && (
+            <span className="text-xs font-mono text-aria-primary bg-aria-primary/10 px-1 rounded">{skill.trigger}</span>
+          )}
+          {skill.script && (
+            <span className="text-xs text-emerald-400 bg-emerald-500/10 px-1 rounded">{skill.script.type}</span>
+          )}
+        </div>
+        <p className="text-xs text-aria-text-muted truncate mt-0.5">{skill.description}</p>
+      </div>
+      <div className="flex gap-1 shrink-0">
+        <button onClick={onEdit} className="flex items-center gap-0.5 px-1.5 py-1 rounded text-xs text-aria-text-muted hover:text-aria-primary hover:bg-aria-primary/10 transition-colors" title="アプリ内で編集">
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none"><path d="M11 2.5l2.5 2.5L5 13.5H2.5V11L11 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          編集
+        </button>
+        <button onClick={onOpenEditor} className="w-6 h-6 flex items-center justify-center rounded text-aria-text-muted hover:text-aria-text hover:bg-white/10 transition-colors" title="外部エディタで開く">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M10 2H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6M10 2l4 4M10 2v4h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+        <button onClick={onDelete} className="w-6 h-6 flex items-center justify-center rounded text-aria-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors" title="削除">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M6 4.5V3h4v1.5M5.5 4.5l.5 8h4l.5-8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SkillEditFormPanel({ form, onChange, onSave, onCancel, isSaving }: {
+  form: SkillFormState;
+  onChange: (f: SkillFormState) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  isSaving: boolean;
+}) {
+  const set = (k: keyof SkillFormState, v: string) => onChange({ ...form, [k]: v });
+  return (
+    <div className="p-3 space-y-2.5">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <label className="text-xs text-aria-text-muted">名前</label>
+          <input type="text" value={form.name} onChange={(e) => set('name', e.target.value)}
+            className="w-full bg-aria-surface border border-aria-border rounded-lg px-2 py-1.5 text-xs text-aria-text focus:outline-none focus:border-aria-primary" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-aria-text-muted">トリガー（例: /skill）</label>
+          <input type="text" value={form.trigger} onChange={(e) => set('trigger', e.target.value)} placeholder="/skill-name"
+            className="w-full bg-aria-surface border border-aria-border rounded-lg px-2 py-1.5 text-xs text-aria-text placeholder:text-aria-text-muted focus:outline-none focus:border-aria-primary" />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs text-aria-text-muted">概要</label>
+        <input type="text" value={form.description} onChange={(e) => set('description', e.target.value)}
+          className="w-full bg-aria-surface border border-aria-border rounded-lg px-2 py-1.5 text-xs text-aria-text focus:outline-none focus:border-aria-primary" />
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="space-y-1">
+          <label className="text-xs text-aria-text-muted">スクリプト種別</label>
+          <select value={form.scriptType} onChange={(e) => set('scriptType', e.target.value)}
+            className="w-full bg-aria-surface border border-aria-border rounded-lg px-2 py-1.5 text-xs text-aria-text focus:outline-none focus:border-aria-primary">
+            <option value="">なし</option>
+            <option value="command">command</option>
+            <option value="file">file</option>
+            <option value="url">url</option>
+          </select>
+        </div>
+        <div className="col-span-2 space-y-1">
+          <label className="text-xs text-aria-text-muted">スクリプト値</label>
+          <input type="text" value={form.scriptValue} onChange={(e) => set('scriptValue', e.target.value)} placeholder="コマンド / ファイルパス / URL"
+            disabled={!form.scriptType}
+            className="w-full bg-aria-surface border border-aria-border rounded-lg px-2 py-1.5 text-xs text-aria-text placeholder:text-aria-text-muted focus:outline-none focus:border-aria-primary disabled:opacity-50" />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs text-aria-text-muted">詳細内容（AIへの指示、Markdown）</label>
+        <textarea value={form.body} onChange={(e) => set('body', e.target.value)} rows={6}
+          className="w-full bg-aria-surface border border-aria-border rounded-lg px-2 py-1.5 text-xs text-aria-text font-mono resize-y focus:outline-none focus:border-aria-primary" />
+      </div>
+      <div className="flex gap-2 justify-end">
+        <button onClick={onCancel} className="px-3 py-1.5 text-xs border border-aria-border text-aria-text-muted rounded-lg hover:text-aria-text transition-colors">キャンセル</button>
+        <button onClick={onSave} disabled={isSaving || !form.name.trim()}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs bg-aria-primary text-white rounded-lg hover:bg-aria-primary/80 disabled:opacity-50 transition-colors">
+          {isSaving ? <span className="w-3 h-3 border border-white/30 border-t-white rounded-full animate-spin" /> : null}
+          保存
+        </button>
+      </div>
+    </div>
+  );
+}
 
 interface SettingsProps {
   onBack: () => void;
@@ -21,6 +118,17 @@ export default function Settings({ onBack }: SettingsProps) {
   const [editingPersonaId, setEditingPersonaId] = useState<string | null>(null);
   const emptyPersona = (): Omit<Persona, 'id'> => ({ name: '', systemPrompt: '', avatarPath: null });
   const [personaForm, setPersonaForm] = useState<Omit<Persona, 'id'>>(emptyPersona());
+
+  // スキル管理関連
+  const [skillsPersonaId, setSkillsPersonaId] = useState<string | null>(null);
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [isLoadingSkills, setIsLoadingSkills] = useState(false);
+  // インライン編集
+  const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
+  interface SkillEditForm { name: string; description: string; trigger: string; scriptType: string; scriptValue: string; body: string; }
+  const emptySkillForm = (): SkillEditForm => ({ name: '', description: '', trigger: '', scriptType: '', scriptValue: '', body: '' });
+  const [skillForm, setSkillForm] = useState<SkillEditForm>(emptySkillForm());
+  const [isSavingSkill, setIsSavingSkill] = useState(false);
 
   // MCP 関連
   const [mcpConfig, setMcpConfig] = useState<MCPConfig>({ servers: [] });
@@ -273,6 +381,81 @@ export default function Settings({ onBack }: SettingsProps) {
     const path = await window.arisChatAPI.selectPersonaIcon(personaId);
     if (path) {
       setPersonaForm((prev) => ({ ...prev, avatarPath: path }));
+    }
+  };
+
+  // ===== スキルハンドラー =====
+
+  const openSkillsPanel = useCallback(async (personaId: string) => {
+    if (skillsPersonaId === personaId) {
+      setSkillsPersonaId(null);
+      return;
+    }
+    setSkillsPersonaId(personaId);
+    setIsLoadingSkills(true);
+    try {
+      const list = await window.arisChatAPI.listSkills(personaId);
+      setSkills(list);
+    } finally {
+      setIsLoadingSkills(false);
+    }
+  }, [skillsPersonaId]);
+
+  const openEditSkillForm = async (personaId: string, skill: Skill) => {
+    const body = await window.arisChatAPI.getSkillContent(personaId, skill.id) ?? '';
+    setSkillForm({
+      name: skill.name,
+      description: skill.description,
+      trigger: skill.trigger ?? '',
+      scriptType: skill.script?.type ?? '',
+      scriptValue: skill.script?.value ?? '',
+      body,
+    });
+    setEditingSkillId(skill.id);
+  };
+
+  const handleSaveSkill = async (personaId: string) => {
+    if (!editingSkillId) return;
+    setIsSavingSkill(true);
+    try {
+      const updated = await window.arisChatAPI.saveSkill(personaId, editingSkillId, {
+        name: skillForm.name,
+        description: skillForm.description,
+        trigger: skillForm.trigger || undefined,
+        scriptType: skillForm.scriptType || undefined,
+        scriptValue: skillForm.scriptValue || undefined,
+        body: skillForm.body,
+      });
+      if (updated) {
+        setSkills((prev) => prev.map((s) => s.id === editingSkillId ? updated : s));
+      }
+      setEditingSkillId(null);
+    } finally {
+      setIsSavingSkill(false);
+    }
+  };
+
+  const handleCreateSkill = async (personaId: string) => {
+    await window.arisChatAPI.createSkill(personaId);
+    // 少し待ってリロード（エディタで開いた後にファイルが作成される）
+    setTimeout(async () => {
+      const list = await window.arisChatAPI.listSkills(personaId);
+      setSkills(list);
+    }, 500);
+  };
+
+  const handleDeleteSkill = async (personaId: string, skillId: string) => {
+    await window.arisChatAPI.deleteSkill(personaId, skillId);
+    setSkills((prev) => prev.filter((s) => s.id !== skillId));
+  };
+
+  const handleRefreshSkills = async (personaId: string) => {
+    setIsLoadingSkills(true);
+    try {
+      const list = await window.arisChatAPI.listSkills(personaId);
+      setSkills(list);
+    } finally {
+      setIsLoadingSkills(false);
     }
   };
 
@@ -529,53 +712,146 @@ export default function Settings({ onBack }: SettingsProps) {
 
           {/* 人格リスト */}
           {(settings.personas ?? []).map((persona) => (
-            <div
-              key={persona.id}
-              className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
-                settings.activePersonaId === persona.id
-                  ? 'bg-aria-primary/15 border border-aria-primary/40'
-                  : 'bg-aria-surface border border-transparent hover:border-aria-border'
-              }`}
-              onClick={() => handleActivatePersona(persona.id)}
-            >
-              <div className="shrink-0 w-10 h-10 rounded-full overflow-hidden bg-aria-primary/20 flex items-center justify-center">
-                {persona.avatarPath ? (
-                  <img src={`file://${persona.avatarPath}`} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-lg font-bold text-aria-primary">
-                    {persona.name.charAt(0).toUpperCase() || 'P'}
-                  </span>
-                )}
+            <div key={persona.id} className="space-y-0">
+              <div
+                className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
+                  skillsPersonaId === persona.id
+                    ? 'rounded-b-none border-b-0'
+                    : ''
+                } ${
+                  settings.activePersonaId === persona.id
+                    ? 'bg-aria-primary/15 border border-aria-primary/40'
+                    : 'bg-aria-surface border border-transparent hover:border-aria-border'
+                }`}
+                onClick={() => handleActivatePersona(persona.id)}
+              >
+                <div className="shrink-0 w-10 h-10 rounded-full overflow-hidden bg-aria-primary/20 flex items-center justify-center">
+                  {persona.avatarPath ? (
+                    <img src={`file://${persona.avatarPath}`} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-lg font-bold text-aria-primary">
+                      {persona.name.charAt(0).toUpperCase() || 'P'}
+                    </span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-aria-text font-medium">{persona.name}</p>
+                  <p className="text-xs text-aria-text-muted truncate">{persona.systemPrompt}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  {settings.activePersonaId === persona.id && (
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="mr-1 text-aria-primary">
+                      <path d="M3 8l3.5 3.5L13 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                  {/* スキル管理ボタン */}
+                  <button
+                    onClick={() => openSkillsPanel(persona.id)}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
+                      skillsPersonaId === persona.id
+                        ? 'text-aria-primary bg-aria-primary/20'
+                        : 'text-aria-text-muted hover:text-aria-primary hover:bg-aria-primary/10'
+                    }`}
+                    title="スキルを管理"
+                  >
+                    <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+                      <path d="M8 1l1.9 3.8L14 5.8l-3 2.9.7 4.1L8 10.8l-3.7 1.9.7-4.1L2 5.8l4.1-.9L8 1z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    スキル
+                  </button>
+                  <button
+                    onClick={() => openEditPersonaForm(persona)}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg text-aria-text-muted hover:text-aria-text hover:bg-white/10 transition-colors"
+                    title="編集"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                      <path d="M11 2.5l2.5 2.5L5 13.5H2.5V11L11 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => handleDeletePersona(persona.id)}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg text-aria-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                    title="削除"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                      <path d="M3 4.5h10M6 4.5V3h4v1.5M5.5 4.5l.5 8h4l.5-8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-aria-text font-medium">{persona.name}</p>
-                <p className="text-xs text-aria-text-muted truncate">{persona.systemPrompt}</p>
-              </div>
-              <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                {settings.activePersonaId === persona.id && (
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="mr-1 text-aria-primary">
-                    <path d="M3 8l3.5 3.5L13 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                )}
-                <button
-                  onClick={() => openEditPersonaForm(persona)}
-                  className="w-7 h-7 flex items-center justify-center rounded-lg text-aria-text-muted hover:text-aria-text hover:bg-white/10 transition-colors"
-                  title="編集"
-                >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                    <path d="M11 2.5l2.5 2.5L5 13.5H2.5V11L11 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-                <button
-                  onClick={() => handleDeletePersona(persona.id)}
-                  className="w-7 h-7 flex items-center justify-center rounded-lg text-aria-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                  title="削除"
-                >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                    <path d="M3 4.5h10M6 4.5V3h4v1.5M5.5 4.5l.5 8h4l.5-8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-              </div>
+
+              {/* スキルパネル（展開時） */}
+              {skillsPersonaId === persona.id && (
+                <div className="bg-aria-surface border border-t-0 border-aria-border rounded-b-xl p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-aria-text-muted uppercase tracking-wider">スキル</span>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => handleRefreshSkills(persona.id)}
+                        className="w-6 h-6 flex items-center justify-center rounded text-aria-text-muted hover:text-aria-text transition-colors"
+                        title="更新"
+                      >
+                        <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+                          <path d="M14 8A6 6 0 1 1 8 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                          <path d="M14 2v4h-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => window.arisChatAPI.openSkillsFolder(persona.id)}
+                        className="w-6 h-6 flex items-center justify-center rounded text-aria-text-muted hover:text-aria-text transition-colors"
+                        title="フォルダを開く"
+                      >
+                        <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+                          <path d="M2 4.5C2 3.7 2.7 3 3.5 3H7l1.5 2H12.5C13.3 5 14 5.7 14 6.5v6c0 .8-.7 1.5-1.5 1.5h-9C2.7 14 2 13.3 2 12.5v-8z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => handleCreateSkill(persona.id)}
+                        className="flex items-center gap-1 px-2 py-1 text-xs bg-aria-primary/20 text-aria-primary rounded hover:bg-aria-primary/30 transition-colors"
+                      >
+                        <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
+                          <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                        </svg>
+                        新規作成
+                      </button>
+                    </div>
+                  </div>
+
+                  {isLoadingSkills ? (
+                    <div className="flex items-center gap-2 py-2 text-xs text-aria-text-muted">
+                      <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                      読み込み中...
+                    </div>
+                  ) : skills.length === 0 ? (
+                    <p className="text-xs text-aria-text-muted py-2">
+                      スキルがありません。「新規作成」でテンプレートを生成してください。
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {skills.map((skill) => (
+                        <div key={skill.id} className="bg-aria-bg rounded-lg overflow-hidden">
+                          {editingSkillId === skill.id ? (
+                            <SkillEditFormPanel
+                              form={skillForm}
+                              onChange={setSkillForm}
+                              onSave={() => handleSaveSkill(persona.id)}
+                              onCancel={() => setEditingSkillId(null)}
+                              isSaving={isSavingSkill}
+                            />
+                          ) : (
+                            <SkillRow
+                              skill={skill}
+                              onEdit={() => openEditSkillForm(persona.id, skill)}
+                              onOpenEditor={() => window.arisChatAPI.openSkillInEditor(skill.filePath)}
+                              onDelete={() => handleDeleteSkill(persona.id, skill.id)}
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
 
@@ -674,6 +950,109 @@ export default function Settings({ onBack }: SettingsProps) {
             </div>
           )}
         </section>
+
+        {/* === スキル管理 === */}
+        {(settings.personas ?? []).length > 0 && (
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-aria-text-muted uppercase tracking-wider">スキル管理</h2>
+              <div className="flex items-center gap-2">
+                <select
+                  value={skillsPersonaId ?? ''}
+                  onChange={(e) => {
+                    const id = e.target.value || null;
+                    if (id) openSkillsPanel(id);
+                    else setSkillsPersonaId(null);
+                  }}
+                  className="text-xs bg-aria-surface border border-aria-border rounded-lg px-2 py-1 text-aria-text focus:outline-none focus:border-aria-primary"
+                >
+                  <option value="">ペルソナを選択</option>
+                  {(settings.personas ?? []).map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {skillsPersonaId ? (
+              <div className="bg-aria-surface border border-aria-border rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-aria-text-muted">
+                    {(settings.personas ?? []).find((p) => p.id === skillsPersonaId)?.name} のスキル
+                  </span>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => handleRefreshSkills(skillsPersonaId)}
+                      className="w-6 h-6 flex items-center justify-center rounded text-aria-text-muted hover:text-aria-text transition-colors"
+                      title="更新"
+                    >
+                      <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+                        <path d="M14 8A6 6 0 1 1 8 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                        <path d="M14 2v4h-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => window.arisChatAPI.openSkillsFolder(skillsPersonaId)}
+                      className="w-6 h-6 flex items-center justify-center rounded text-aria-text-muted hover:text-aria-text transition-colors"
+                      title="フォルダを開く"
+                    >
+                      <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+                        <path d="M2 4.5C2 3.7 2.7 3 3.5 3H7l1.5 2H12.5C13.3 5 14 5.7 14 6.5v6c0 .8-.7 1.5-1.5 1.5h-9C2.7 14 2 13.3 2 12.5v-8z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => handleCreateSkill(skillsPersonaId)}
+                      className="flex items-center gap-1 px-2 py-1 text-xs bg-aria-primary/20 text-aria-primary rounded hover:bg-aria-primary/30 transition-colors"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
+                        <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      </svg>
+                      新規作成
+                    </button>
+                  </div>
+                </div>
+
+                {isLoadingSkills ? (
+                  <div className="flex items-center gap-2 py-2 text-xs text-aria-text-muted">
+                    <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                    読み込み中...
+                  </div>
+                ) : skills.length === 0 ? (
+                  <p className="text-xs text-aria-text-muted py-2">
+                    スキルがありません。「新規作成」でテンプレートを生成してください。
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {skills.map((skill) => (
+                      <div key={skill.id} className="bg-aria-bg rounded-lg overflow-hidden">
+                        {editingSkillId === skill.id ? (
+                          <SkillEditFormPanel
+                            form={skillForm}
+                            onChange={setSkillForm}
+                            onSave={() => handleSaveSkill(skillsPersonaId!)}
+                            onCancel={() => setEditingSkillId(null)}
+                            isSaving={isSavingSkill}
+                          />
+                        ) : (
+                          <SkillRow
+                            skill={skill}
+                            onEdit={() => openEditSkillForm(skillsPersonaId!, skill)}
+                            onOpenEditor={() => window.arisChatAPI.openSkillInEditor(skill.filePath)}
+                            onDelete={() => handleDeleteSkill(skillsPersonaId!, skill.id)}
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-aria-text-muted bg-aria-surface rounded-xl px-3 py-3 text-center">
+                ペルソナを選択してスキルを管理してください
+              </p>
+            )}
+          </section>
+        )}
 
         {/* === アイコン・外観 === */}
         <section className="space-y-4">

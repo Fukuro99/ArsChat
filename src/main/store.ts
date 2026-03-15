@@ -112,5 +112,9 @@ export function createStore() {
     getIconsDir(): string {
       return ICONS_DIR;
     },
+
+    getDataDir(): string {
+      return DATA_DIR;
+    },
   };
 }
