@@ -92,6 +92,11 @@ function getDisplayForWindow(win: BrowserWindow): Display {
 function showMainWindow(options: { mini: boolean } = { mini: false }): void {
   if (!mainWindow) return;
 
+  // メインウィンドウを表示する際はウィジェットを必ず非表示にする（同時表示禁止）
+  if (widgetWindow && !widgetWindow.isDestroyed() && widgetWindow.isVisible()) {
+    widgetWindow.hide();
+  }
+
   if (options.mini) {
     if (!miniModeActive) {
       normalWindowBounds = mainWindow.getBounds();
@@ -326,9 +331,12 @@ async function startRegionCaptureWorkflow(): Promise<string | null> {
       }
     }
 
-    // 5. ウィンドウを復元
-    if (mainWasVisible) mainWindow?.show();
-    if (widgetWasVisible) widgetWindow?.showInactive();
+    // 5. ウィンドウを復元（メインとウィジェットは排他 — どちらか一方のみ復元）
+    if (mainWasVisible) {
+      mainWindow?.show();
+    } else if (widgetWasVisible) {
+      widgetWindow?.showInactive();
+    }
 
     return result;
   } catch (err: any) {
@@ -798,9 +806,12 @@ function setupIPC(): void {
 
       const result = await captureDisplayBase64(targetDisplay);
 
-      // ウィンドウを復元
-      if (mainWasVisible) mainWindow?.show();
-      if (widgetWasVisible) widgetWindow?.showInactive();
+      // ウィンドウを復元（メインとウィジェットは排他 — どちらか一方のみ復元）
+      if (mainWasVisible) {
+        mainWindow?.show();
+      } else if (widgetWasVisible) {
+        widgetWindow?.showInactive();
+      }
 
       return result;
     } catch (err: any) {
