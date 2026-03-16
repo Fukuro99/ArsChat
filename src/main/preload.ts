@@ -47,6 +47,13 @@ const IPC_CHANNELS = {
   SESSION_GET_ACTIVE: 'session:get-active',
   SESSION_ACTIVE_CHANGED: 'session:active-changed',
   SESSION_UPDATED: 'session:updated',
+  // 拡張機能
+  EXT_LIST: 'ext:list',
+  EXT_INSTALL: 'ext:install',
+  EXT_UNINSTALL: 'ext:uninstall',
+  EXT_TOGGLE: 'ext:toggle',
+  EXT_UPDATE: 'ext:update',
+  EXT_READ_RENDERER: 'ext:read-renderer',
 } as const;
 const IPC_CAPTURE_IMAGE_READY = 'capture:image-ready';
 
@@ -202,6 +209,37 @@ contextBridge.exposeInMainWorld('arisChatAPI', {
     const handler = (_: any, sessionId: string) => callback(sessionId);
     ipcRenderer.on(IPC_CHANNELS.SESSION_UPDATED, handler);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.SESSION_UPDATED, handler);
+  },
+
+  // === 拡張機能 ===
+  extensions: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.EXT_LIST),
+    install: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.EXT_INSTALL, url),
+    uninstall: (extId: string) => ipcRenderer.invoke(IPC_CHANNELS.EXT_UNINSTALL, extId),
+    toggle: (extId: string, enabled: boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.EXT_TOGGLE, extId, enabled),
+    update: (extId: string) => ipcRenderer.invoke(IPC_CHANNELS.EXT_UPDATE, extId),
+    readRendererCode: (extId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.EXT_READ_RENDERER, extId),
+    /** インストール進捗リスナー */
+    onInstallProgress: (callback: (progress: { step: string; message: string }) => void) => {
+      const handler = (_: any, progress: any) => callback(progress);
+      ipcRenderer.on('ext:install-progress', handler);
+      return () => ipcRenderer.removeListener('ext:install-progress', handler);
+    },
+    /** 拡張→Renderer イベント受信（Main Entry から送信されたもの） */
+    on: (extId: string, channel: string, callback: (data: any) => void) => {
+      const fullChannel = `ext:${extId}:${channel}`;
+      const handler = (_: any, data: any) => callback(data);
+      ipcRenderer.on(fullChannel, handler);
+      return () => ipcRenderer.removeListener(fullChannel, handler);
+    },
+    /** Renderer → Main Entry invoke */
+    invoke: (extId: string, channel: string, data?: any) =>
+      ipcRenderer.invoke(`ext:${extId}:${channel}`, data),
+    /** Renderer → Main Entry 送信（fire-and-forget） */
+    send: (extId: string, channel: string, data?: any) =>
+      ipcRenderer.send(`ext:${extId}:${channel}`, data),
   },
 
   // === ナビゲーション ===

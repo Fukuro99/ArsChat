@@ -1,14 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import { ChatSession } from '../../shared/types';
+import type { LoadedExtension } from '../extension-loader';
 
 interface SidebarProps {
   currentSessionId: string | null;
+  currentPage: string;
+  extensions: LoadedExtension[];
   onSelectSession: (id: string) => void;
   onNewSession: () => void;
+  onNavigate: (page: string) => void;
   onClose: () => void;
 }
 
-export default function Sidebar({ currentSessionId, onSelectSession, onNewSession, onClose }: SidebarProps) {
+export default function Sidebar({
+  currentSessionId,
+  currentPage,
+  extensions,
+  onSelectSession,
+  onNewSession,
+  onNavigate,
+  onClose,
+}: SidebarProps) {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
 
   useEffect(() => {
@@ -43,14 +55,22 @@ export default function Sidebar({ currentSessionId, onSelectSession, onNewSessio
     return d.toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' });
   };
 
+  const extPages = extensions.flatMap((ext) =>
+    (ext.info.manifest.pages ?? [])
+      .filter((p) => p.sidebar !== false)
+      .map((p) => ({
+        extId: ext.info.id,
+        pageId: p.id,
+        title: p.title,
+        icon: p.icon,
+        pageKey: `ext:${ext.info.id}:${p.id}`,
+      })),
+  );
+
   return (
     <>
-      {/* オーバーレイ */}
       <div className="absolute inset-0 bg-black/40 z-10" onClick={onClose} />
-
-      {/* サイドバー */}
       <div className="absolute left-0 top-0 bottom-0 w-72 bg-aria-bg-light border-r border-aria-border z-20 flex flex-col animate-fade-in">
-        {/* ヘッダー */}
         <div className="p-3 border-b border-aria-border flex items-center justify-between">
           <h2 className="text-sm font-semibold text-aria-text">会話履歴</h2>
           <button
@@ -60,8 +80,6 @@ export default function Sidebar({ currentSessionId, onSelectSession, onNewSessio
             + 新規
           </button>
         </div>
-
-        {/* セッション一覧 */}
         <div className="flex-1 overflow-y-auto">
           {sessions.length === 0 ? (
             <p className="text-center text-sm text-aria-text-muted py-8">履歴なし</p>
@@ -95,6 +113,27 @@ export default function Sidebar({ currentSessionId, onSelectSession, onNewSessio
             ))
           )}
         </div>
+        {extPages.length > 0 && (
+          <div className="border-t border-aria-border">
+            <p className="px-3 py-1.5 text-[10px] font-semibold text-aria-text-muted uppercase tracking-wider">
+              拡張機能
+            </p>
+            {extPages.map((ep) => (
+              <button
+                key={ep.pageKey}
+                onClick={() => onNavigate(ep.pageKey)}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-aria-surface/50 transition-colors ${
+                  currentPage === ep.pageKey
+                    ? 'bg-aria-surface text-aria-primary'
+                    : 'text-aria-text'
+                }`}
+              >
+                <span className="text-base leading-none">{ep.icon}</span>
+                <span className="truncate">{ep.title}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </>
   );

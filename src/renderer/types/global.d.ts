@@ -1,4 +1,4 @@
-import { ArisChatSettings, ChatMessage, ChatMessageStats, ChatSession, LMStudioModelInfo, MCPConfig, MCPServerStatus, MCPToolInfo } from '../../shared/types';
+import { ArisChatSettings, ChatMessage, ChatMessageStats, ChatSession, LMStudioModelInfo, MCPConfig, MCPServerConfig, MCPServerStatus, MCPToolInfo, Skill, ExtensionInfo } from '../../shared/types';
 
 declare global {
   interface Window {
@@ -44,12 +44,46 @@ declare global {
       listLMStudioModels: () => Promise<LMStudioModelInfo[]>;
       loadLMStudioModel: (modelId: string, contextLength: number) => Promise<void>;
 
+      // ウィジェット (追加)
+      moveWidget: (dx: number, dy: number) => void;
+
+      // セッション同期
+      setActiveSession: (sessionId: string | null) => void;
+      getActiveSession: () => Promise<string | null>;
+      onActiveSessionChanged: (callback: (sessionId: string | null) => void) => () => void;
+      onSessionUpdated: (callback: (sessionId: string) => void) => () => void;
+
       // MCP
       getMCPConfig: () => Promise<MCPConfig>;
       saveMCPConfig: (config: MCPConfig) => Promise<MCPServerStatus[]>;
       getMCPStatus: () => Promise<MCPServerStatus[]>;
       listMCPTools: () => Promise<MCPToolInfo[]>;
       reconnectMCP: () => Promise<MCPServerStatus[]>;
+      generateMCPDescription: (serverConfig: MCPServerConfig) => Promise<string>;
+
+      // スキル
+      listSkills: (personaId: string) => Promise<Skill[]>;
+      getSkillContent: (personaId: string, skillId: string) => Promise<string | null>;
+      saveSkill: (personaId: string, skillId: string, fields: { name: string; description: string; trigger?: string; scriptType?: string; scriptValue?: string; body: string }) => Promise<Skill | null>;
+      createSkill: (personaId: string) => Promise<string>;
+      deleteSkill: (personaId: string, skillId: string) => Promise<void>;
+      openSkillInEditor: (filePath: string) => Promise<void>;
+      openSkillsFolder: (personaId: string) => Promise<void>;
+      invokeSkillScript: (personaId: string, skillId: string) => Promise<string>;
+
+      // 拡張機能
+      extensions: {
+        list: () => Promise<ExtensionInfo[]>;
+        install: (url: string) => Promise<{ success: boolean; entry?: any; error?: string }>;
+        uninstall: (extId: string) => Promise<{ success: boolean; error?: string }>;
+        toggle: (extId: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+        update: (extId: string) => Promise<{ success: boolean; error?: string }>;
+        readRendererCode: (extId: string) => Promise<{ success: boolean; code?: string; error?: string }>;
+        onInstallProgress: (callback: (progress: { step: string; message: string }) => void) => () => void;
+        on: (extId: string, channel: string, callback: (data: any) => void) => () => void;
+        invoke: (extId: string, channel: string, data?: any) => Promise<any>;
+        send: (extId: string, channel: string, data?: any) => void;
+      };
 
       // ナビゲーション
       onNavigate: (callback: (page: string) => void) => () => void;

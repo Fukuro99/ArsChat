@@ -98,11 +98,14 @@ function SkillEditFormPanel({ form, onChange, onSave, onCancel, isSaving }: {
   );
 }
 
+import type { LoadedExtension } from '../extension-loader';
+
 interface SettingsProps {
   onBack: () => void;
+  extensions?: LoadedExtension[];
 }
 
-export default function Settings({ onBack }: SettingsProps) {
+export default function Settings({ onBack, extensions = [] }: SettingsProps) {
   const [settings, setSettings] = useState<ArisChatSettings>(DEFAULT_SETTINGS);
   const [saved, setSaved] = useState(false);
 
@@ -130,6 +133,49 @@ export default function Settings({ onBack }: SettingsProps) {
   const [skillForm, setSkillForm] = useState<SkillEditForm>(emptySkillForm());
   const [isSavingSkill, setIsSavingSkill] = useState(false);
 
+  // 拡張機能関連
+  const [extInstallUrl, setExtInstallUrl] = useState('');
+  const [extInstalling, setExtInstalling] = useState(false);
+  const [extInstallMsg, setExtInstallMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [extList, setExtList] = useState<any[]>([]);
+
+  const loadExtList = async () => {
+    const list = await window.arisChatAPI.extensions.list();
+    setExtList(list);
+  };
+
+  const handleExtInstall = async () => {
+    if (!extInstallUrl.trim()) return;
+    setExtInstalling(true);
+    setExtInstallMsg(null);
+    const result = await window.arisChatAPI.extensions.install(extInstallUrl.trim());
+    setExtInstalling(false);
+    if (result.success) {
+      setExtInstallMsg({ type: 'success', text: `"${result.entry.id}" をインストールしました` });
+      setExtInstallUrl('');
+      loadExtList();
+    } else {
+      setExtInstallMsg({ type: 'error', text: result.error ?? 'インストールに失敗しました' });
+    }
+  };
+
+  const handleExtToggle = async (extId: string, enabled: boolean) => {
+    await window.arisChatAPI.extensions.toggle(extId, enabled);
+    loadExtList();
+  };
+
+  const handleExtUninstall = async (extId: string) => {
+    if (!confirm(`拡張機能 "${extId}" をアンインストールしますか？`)) return;
+    await window.arisChatAPI.extensions.uninstall(extId);
+    loadExtList();
+  };
+
+  const handleExtUpdate = async (extId: string) => {
+    await window.arisChatAPI.extensions.update(extId);
+    loadExtList();
+    setExtInstallMsg({ type: 'success', text: `"${extId}" を更新しました` });
+  };
+
   // MCP 関連
   const [mcpConfig, setMcpConfig] = useState<MCPConfig>({ servers: [] });
   const [mcpStatus, setMcpStatus] = useState<MCPServerStatus[]>([]);
@@ -153,6 +199,8 @@ export default function Settings({ onBack }: SettingsProps) {
     // MCP 設定と状態を取得
     window.arisChatAPI.getMCPConfig().then(setMcpConfig);
     window.arisChatAPI.getMCPStatus().then(setMcpStatus);
+    // 拡張機能一覧を取得
+    loadExtList();
   }, []);
 
   const selectedModel = lmsModels.find((m) => m.id === settings.lmstudioModel);
@@ -1546,6 +1594,114 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               ＋ サーバーを追加
             </button>
+          )}
+        </section>
+
+        {/* === 拡張機能 === */}
+        <section className="space-y-4">
+          <h2 className="text-sm font-semibold text-aria-text-muted uppercase tracking-wider">拡張機能</h2>
+
+          {/* インストール */}
+          <div className="space-y-2">
+            <label className="text-sm text-aria-text">GitHubリポジトリからインストール</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={extInstallUrl}
+                onChange={(e) => setExtInstallUrl(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleExtInstall()}
+                placeholder="https://github.com/user/arischat-ext-xxx"
+                className="flex-1 bg-aria-surface border border-aria-border rounded-lg px-3 py-2 text-sm text-aria-text placeholder-aria-text-muted focus:outline-none focus:border-aria-primary"
+                disabled={extInstalling}
+              />
+              <button
+                onClick={handleExtInstall}
+                disabled={extInstalling || !extInstallUrl.trim()}
+                className="px-4 py-2 text-sm bg-aria-primary text-white rounded-lg hover:bg-aria-primary/90 disabled:opacity-50 transition-colors whitespace-nowrap"
+              >
+                {extInstalling ? '処理中...' : 'インストール'}
+              </button>
+            </div>
+            {extInstallMsg && (
+              <p className={`text-xs ${extInstallMsg.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
+                {extInstallMsg.text}
+              </p>
+            )}
+          </div>
+
+          {/* インストール済み一覧 */}
+          {extList.length > 0 ? (
+            <div className="space-y-2">
+              {extList.map((ext: any) => (
+                <div
+                  key={ext.id}
+                  className="bg-aria-surface border border-aria-border rounded-xl p-3 space-y-2"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-lg leading-none">{ext.manifest?.icon ?? '🧩'}</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-aria-text truncate">
+                          {ext.manifest?.displayName ?? ext.id}
+                        </p>
+                        <p className="text-[11px] text-aria-text-muted">
+                          v{ext.version} · {ext.id}
+                        </p>
+                      </div>
+                    </div>
+                    {/* 有効/無効トグル */}
+                    <button
+                      onClick={() => handleExtToggle(ext.id, !ext.enabled)}
+                      className={`shrink-0 relative w-10 h-5 rounded-full transition-colors ${
+                        ext.enabled ? 'bg-aria-primary' : 'bg-aria-border'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                          ext.enabled ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* 権限バッジ */}
+                  {ext.permissions?.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {ext.permissions.map((p: string) => (
+                        <span
+                          key={p}
+                          className={`px-1.5 py-0.5 text-[10px] rounded font-mono ${
+                            p.includes('shell') || p.includes('fs:write') || p.includes('settings:write')
+                              ? 'bg-amber-500/20 text-amber-400'
+                              : 'bg-aria-surface text-aria-text-muted border border-aria-border'
+                          }`}
+                        >
+                          {p}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* アクション */}
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => handleExtUpdate(ext.id)}
+                      className="text-xs px-2.5 py-1 bg-aria-primary/10 text-aria-primary rounded hover:bg-aria-primary/20 transition-colors"
+                    >
+                      更新
+                    </button>
+                    <button
+                      onClick={() => handleExtUninstall(ext.id)}
+                      className="text-xs px-2.5 py-1 bg-red-500/10 text-red-400 rounded hover:bg-red-500/20 transition-colors"
+                    >
+                      削除
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-aria-text-muted py-2">拡張機能はインストールされていません</p>
           )}
         </section>
 
