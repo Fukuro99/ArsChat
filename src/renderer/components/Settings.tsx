@@ -135,12 +135,13 @@ export default function Settings({ onBack }: SettingsProps) {
   const [mcpStatus, setMcpStatus] = useState<MCPServerStatus[]>([]);
   const [isSavingMCP, setIsSavingMCP] = useState(false);
   const [mcpSaveMsg, setMcpSaveMsg] = useState<string | null>(null);
+  const [generatingDescFor, setGeneratingDescFor] = useState<string | null>(null); // 説明生成中のサーバー名
   // 新規追加フォームの表示制御
   const [showAddServer, setShowAddServer] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   // フォームの状態
   const emptyForm = (): MCPServerConfig => ({
-    name: '', type: 'stdio', command: '', args: [], env: {}, url: '', headers: {}, enabled: true,
+    name: '', description: '', type: 'stdio', command: '', args: [], env: {}, url: '', headers: {}, enabled: true,
   });
   const [serverForm, setServerForm] = useState<MCPServerConfig>(emptyForm());
   const [formArgsText, setFormArgsText] = useState('');
@@ -1300,6 +1301,24 @@ export default function Settings({ onBack }: SettingsProps) {
             登録した MCP サーバーのツールを LM Studio (LLM) が利用できます。Claude では使用されません。
           </p>
 
+          {/* 省トークン化トグル */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-aria-text">省トークン化（2段階選択）</p>
+              <p className="text-xs text-aria-text-muted">全ツール定義の代わりにサーバー名のみ渡し、AIがサーバーを選択してからツール一覧を取得する</p>
+            </div>
+            <button
+              onClick={() => updateSetting('mcpTokenSaving', !settings.mcpTokenSaving)}
+              className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
+                settings.mcpTokenSaving ? 'bg-aria-primary' : 'bg-aria-border'
+              }`}
+            >
+              <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-md transition-transform ${
+                settings.mcpTokenSaving ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
+          </div>
+
           {/* サーバー一覧 */}
           {mcpConfig.servers.length === 0 && !showAddServer && (
             <p className="text-xs text-aria-text-muted bg-aria-surface rounded-lg px-3 py-3 text-center">
@@ -1368,6 +1387,47 @@ export default function Settings({ onBack }: SettingsProps) {
                   placeholder="例: filesystem"
                   className="w-full bg-aria-bg border border-aria-border rounded-lg px-3 py-1.5 text-sm text-aria-text placeholder:text-aria-text-muted focus:outline-none focus:border-aria-primary"
                 />
+              </div>
+
+              {/* 説明 */}
+              <div className="space-y-1">
+                <label className="text-xs text-aria-text-muted">説明（省トークン化モードでAIに渡す概要）</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={serverForm.description ?? ''}
+                    onChange={(e) => setServerForm((f) => ({ ...f, description: e.target.value }))}
+                    placeholder="例: ローカルファイルシステムの読み書き"
+                    className="flex-1 bg-aria-bg border border-aria-border rounded-lg px-3 py-1.5 text-sm text-aria-text placeholder:text-aria-text-muted focus:outline-none focus:border-aria-primary"
+                  />
+                  <button
+                    type="button"
+                    title="接続中のサーバーのツール一覧からAIで説明を自動生成"
+                    disabled={generatingDescFor === serverForm.name || !serverForm.name.trim()}
+                    onClick={async () => {
+                      if (!serverForm.name.trim()) return;
+                      setGeneratingDescFor(serverForm.name);
+                      try {
+                        const desc = await window.arisChatAPI.generateMCPDescription(serverForm.name);
+                        if (desc) setServerForm((f) => ({ ...f, description: desc }));
+                      } catch (err: any) {
+                        console.error('MCP description generation error:', err?.message);
+                      } finally {
+                        setGeneratingDescFor(null);
+                      }
+                    }}
+                    className="flex-shrink-0 flex items-center gap-1 px-2 py-1.5 text-xs bg-aria-surface border border-aria-border rounded-lg hover:border-aria-primary text-aria-text-muted hover:text-aria-text transition-colors disabled:opacity-50"
+                  >
+                    {generatingDescFor === serverForm.name ? (
+                      <span className="w-3 h-3 border border-aria-text-muted/30 border-t-aria-text-muted rounded-full animate-spin" />
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                        <path d="M8 1v3M8 12v3M1 8h3M12 8h3M3.05 3.05l2.12 2.12M10.83 10.83l2.12 2.12M3.05 12.95l2.12-2.12M10.83 5.17l2.12-2.12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      </svg>
+                    )}
+                    AI生成
+                  </button>
+                </div>
               </div>
 
               {/* タイプ */}

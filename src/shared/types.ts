@@ -82,6 +82,7 @@ export interface ArisChatSettings {
   windowWidth: number;
   windowHeight: number;
   enableInteractiveUI: boolean; // インタラクティブAI機能
+  mcpTokenSaving: boolean;      // MCPツール省トークン化（サーバー選択→ツール取得の2段階方式）
 }
 
 /** 現在日時を [yyyy:MM:DD;hh:mm] 形式で返す */
@@ -150,6 +151,7 @@ export const DEFAULT_SETTINGS: ArisChatSettings = {
   windowWidth: 480,
   windowHeight: 720,
   enableInteractiveUI: true,
+  mcpTokenSaving: false,
 };
 
 // ===== スキル =====
@@ -174,6 +176,7 @@ export interface Skill {
 
 export interface MCPServerConfig {
   name: string;           // サーバーラベル（一意のキー）
+  description?: string;   // サーバーの説明（省トークンモードでシステムプロンプトに注入）
   type: 'stdio' | 'http' | 'streamable-http';
 
   // stdio 型
@@ -265,6 +268,7 @@ export const IPC_CHANNELS = {
   MCP_GET_STATUS: 'mcp:get-status',
   MCP_LIST_TOOLS: 'mcp:list-tools',
   MCP_RECONNECT: 'mcp:reconnect',
+  MCP_GENERATE_DESC: 'mcp:generate-desc',
 
   // スキル
   SKILL_LIST: 'skill:list',

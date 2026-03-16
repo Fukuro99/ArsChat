@@ -163,6 +163,46 @@ export function createMCPManager() {
     return JSON.stringify(content);
   }
 
+  /**
+   * 省トークンモード用: 接続中サーバーのツール概要を返す
+   * システムプロンプトへの注入用
+   */
+  function getServerSummaries(): Array<{
+    name: string;
+    description?: string;
+    tools: Array<{ name: string; description: string }>;
+  }> {
+    const result = [];
+    for (const [, conn] of connections) {
+      if (conn.status !== 'connected') continue;
+      result.push({
+        name: conn.config.name,
+        description: conn.config.description || undefined,
+        tools: conn.tools.map((t) => ({
+          name: t.originalName,
+          description: t.description.replace(`[${conn.config.name}] `, ''),
+        })),
+      });
+    }
+    return result;
+  }
+
+  /**
+   * 省トークンモード用: 特定サーバーのツールを OpenAI function calling 形式で返す
+   */
+  function getOpenAIToolsForServer(serverName: string): any[] {
+    const conn = connections.get(serverName);
+    if (!conn || conn.status !== 'connected') return [];
+    return conn.tools.map((tool) => ({
+      type: 'function',
+      function: {
+        name: tool.originalName,
+        description: tool.description.replace(`[${serverName}] `, ''),
+        parameters: tool.inputSchema ?? { type: 'object', properties: {} },
+      },
+    }));
+  }
+
   /** 各サーバーの接続状態を返す */
   function getStatus(configs: MCPServerConfig[]): MCPServerStatus[] {
     return configs.map((config) => {
@@ -187,6 +227,8 @@ export function createMCPManager() {
     disconnectAll,
     getOpenAITools,
     getToolInfoList,
+    getServerSummaries,
+    getOpenAIToolsForServer,
     executeTool,
     getStatus,
   };

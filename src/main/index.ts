@@ -941,6 +941,22 @@ function setupIPC(): void {
     return mcpManager.getStatus(config.servers);
   });
 
+  // --- MCP: サーバー説明をAIで自動生成 ---
+  ipcMain.handle(IPC_CHANNELS.MCP_GENERATE_DESC, async (_e, serverName: string) => {
+    const tools = mcpManager.getOpenAIToolsForServer(serverName);
+    if (tools.length === 0) throw new Error(`サーバー "${serverName}" のツールが取得できません`);
+    const settings = store.getSettings();
+    const systemPrompt =
+      '以下のMCPサーバーのツール一覧を見て、このサーバーが何をするものか2〜3行の簡潔な日本語で説明してください。' +
+      '機能の概要のみを記述し、前置きや「このサーバーは」などの冗長な表現は不要です。';
+    const userMessage = JSON.stringify(
+      tools.map((t: any) => ({ name: t.function.name, description: t.function.description })),
+      null,
+      2,
+    );
+    return claude.generateText(settings, systemPrompt, userMessage);
+  });
+
   // --- スキル: 一覧取得 ---
   ipcMain.handle(IPC_CHANNELS.SKILL_LIST, (_e, personaId: string) => {
     return skillManager.listSkills(personaId);

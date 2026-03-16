@@ -33,6 +33,7 @@ const IPC_CHANNELS = {
   MCP_GET_STATUS: 'mcp:get-status',
   MCP_LIST_TOOLS: 'mcp:list-tools',
   MCP_RECONNECT: 'mcp:reconnect',
+  MCP_GENERATE_DESC: 'mcp:generate-desc',
   CHAT_SEND_SILENT: 'chat:send-silent',
   SKILL_LIST: 'skill:list',
   SKILL_GET_CONTENT: 'skill:get-content',
@@ -154,6 +155,9 @@ contextBridge.exposeInMainWorld('arisChatAPI', {
   },
   reconnectMCP: (): Promise<MCPServerStatus[]> => {
     return ipcRenderer.invoke(IPC_CHANNELS.MCP_RECONNECT);
+  },
+  generateMCPDescription: (serverName: string): Promise<string> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.MCP_GENERATE_DESC, serverName);
   },
 
   // === スキル ===
