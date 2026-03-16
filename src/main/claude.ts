@@ -9,6 +9,13 @@ export interface SkillContext {
   invokeScript: (skillId: string) => Promise<string>;
 }
 
+/** <think>...</think> / <thinking>...</thinking> ブロックを除去して本文だけ返す */
+function stripThinkTags(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, '')
+             .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+             .trim();
+}
+
 export function createClaudeService(mcpManager?: MCPManager) {
   let currentAbortController: AbortController | null = null;
   const LMSTUDIO_LOCALHOST_FALLBACK = '127.0.0.1';
@@ -606,7 +613,22 @@ export function createClaudeService(mcpManager?: MCPManager) {
 
     // OpenAI互換メッセージ形式を構築
     const apiMessages: any[] = [];
-    const effectiveSystemPrompt = getEffectiveSystemPrompt(settings, options?.skillContext?.skills);
+    let effectiveSystemPrompt = getEffectiveSystemPrompt(settings, options?.skillContext?.skills);
+
+    // 省トークンモード: 接続中MCPサーバーの概要をシステムプロンプトに注入
+    if (settings.mcpTokenSaving && mcpManager) {
+      const summaries = mcpManager.getServerSummaries();
+      if (summaries.length > 0) {
+        const rows = summaries
+          .map((s) => `| ${s.name} | ${s.description ?? ''} |`)
+          .join('\n');
+        effectiveSystemPrompt +=
+          `\n\n## 利用可能なMCPサーバー\n\n以下のMCPサーバーが接続されています。` +
+          `ユーザーの要求に応じて使用するサーバーを判断し、\`get_mcp_server_tools\` でツール詳細を確認してから \`call_mcp_tool\` で実行してください。\n\n` +
+          `| サーバー名 | 説明 |\n|-----------|------|\n${rows}`;
+      }
+    }
+
     if (effectiveSystemPrompt) {
       apiMessages.push({ role: 'system', content: effectiveSystemPrompt });
     }
@@ -658,7 +680,45 @@ export function createClaudeService(mcpManager?: MCPManager) {
     }
 
     // MCP ツールが有効かつ LM Studio の場合にツール呼び出しループを実行
-    const mcpTools = mcpManager?.getOpenAITools() ?? [];
+    let mcpTools: any[];
+    if (settings.mcpTokenSaving && mcpManager) {
+      // 省トークンモード: 全ツール定義の代わりにメタツール2つを使用
+      const hasMCPServers = mcpManager.getServerSummaries().length > 0;
+      mcpTools = hasMCPServers ? [
+        {
+          type: 'function',
+          function: {
+            name: 'get_mcp_server_tools',
+            description: 'MCPサーバーのツール一覧と詳細（パラメータスキーマを含む）を取得します。ツールを使用する前に必ず呼び出してください。',
+            parameters: {
+              type: 'object',
+              properties: {
+                server_name: { type: 'string', description: 'ツール一覧を取得するMCPサーバー名' },
+              },
+              required: ['server_name'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'call_mcp_tool',
+            description: 'MCPサーバーのツールを実行します。事前に get_mcp_server_tools でパラメータを確認してください。',
+            parameters: {
+              type: 'object',
+              properties: {
+                server_name: { type: 'string', description: 'MCPサーバー名' },
+                tool_name: { type: 'string', description: 'ツール名（get_mcp_server_tools で取得した name）' },
+                arguments: { type: 'object', description: 'ツールの引数（スキーマに従って指定）' },
+              },
+              required: ['server_name', 'tool_name'],
+            },
+          },
+        },
+      ] : [];
+    } else {
+      mcpTools = mcpManager?.getOpenAITools() ?? [];
+    }
     const allTools = [...mcpTools, ...skillTools];
     const hasMCPTools = mcpTools.length > 0;
 
@@ -899,6 +959,27 @@ export function createClaudeService(mcpManager?: MCPManager) {
           toolResult = skillContext.getContent(skillId) ?? `スキル "${skillId}" が見つかりません`;
         } else if (tc.function.name === 'invoke_skill_script' && skillContext && skillId) {
           toolResult = await skillContext.invokeScript(skillId);
+        } else if (tc.function.name === 'get_mcp_server_tools' && mcpManager) {
+          // 省トークンモード: 指定サーバーのツール定義を返す
+          const serverName = args.server_name as string;
+          const tools = mcpManager.getOpenAIToolsForServer(serverName);
+          if (tools.length === 0) {
+            toolResult = `サーバー "${serverName}" は接続されていないか、ツールがありません`;
+          } else {
+            toolResult = JSON.stringify(tools, null, 2);
+          }
+        } else if (tc.function.name === 'call_mcp_tool' && mcpManager) {
+          // 省トークンモード: サーバー名+ツール名で実行
+          const serverName = args.server_name as string;
+          const toolName = args.tool_name as string;
+          const toolArgs = (typeof args.arguments === 'object' && args.arguments !== null)
+            ? args.arguments as Record<string, unknown>
+            : {};
+          try {
+            toolResult = await mcpManager.executeTool(`${serverName}__${toolName}`, toolArgs);
+          } catch (err: any) {
+            toolResult = `エラー: ${err?.message ?? '不明なエラー'}`;
+          }
         } else {
           try {
             toolResult = await mcpManager!.executeTool(tc.function.name, args);
@@ -1091,6 +1172,60 @@ export function createClaudeService(mcpManager?: MCPManager) {
       messages: ChatMessage[],
     ): Promise<{ content: string; stats: ChatMessageStats }> {
       return sendChatSilent(settings, messages);
+    },
+
+    /**
+     * カスタムシステムプロンプトで1ターンのテキスト生成（設定画面などの補助用）
+     * 現在のプロバイダー設定に従い Anthropic または LM Studio を使用する
+     */
+    async generateText(
+      settings: ArisChatSettings,
+      systemPrompt: string,
+      userMessage: string,
+    ): Promise<string> {
+      const provider = settings.provider ?? 'anthropic';
+      if (provider === 'lmstudio') {
+        const baseUrl = normalizeBaseUrl(settings.lmstudioBaseUrl);
+        if (!baseUrl) throw new Error('LM Studio のサーバーURLが空です');
+        const chatEndpoint = resolveChatEndpoint(baseUrl);
+        const attemptedUrls: string[] = [];
+        let model = settings.lmstudioModel.trim() || 'local-model';
+        const response = await fetchWithFallback(
+          chatEndpoint,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model,
+              messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userMessage },
+              ],
+              stream: false,
+            }),
+          },
+          attemptedUrls,
+        );
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`LM Studio エラー ${response.status}: ${errText.slice(0, 200)}`);
+        }
+        const json: any = await response.json();
+        return stripThinkTags(json?.choices?.[0]?.message?.content ?? '');
+      } else {
+        const client = new Anthropic({ apiKey: settings.apiKey });
+        const response = await client.messages.create({
+          model: settings.model,
+          max_tokens: 512,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userMessage }],
+        });
+        const raw = response.content
+          .filter((b) => b.type === 'text')
+          .map((b) => (b as any).text as string)
+          .join('');
+        return stripThinkTags(raw);
+      }
     },
 
     /** LM Studio のダウンロード済みモデル一覧を取得 */

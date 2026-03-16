@@ -163,6 +163,46 @@ export function createMCPManager() {
     return JSON.stringify(content);
   }
 
+  /**
+   * 省トークンモード用: 接続中サーバーのツール概要を返す
+   * システムプロンプトへの注入用
+   */
+  function getServerSummaries(): Array<{
+    name: string;
+    description?: string;
+    tools: Array<{ name: string; description: string }>;
+  }> {
+    const result = [];
+    for (const [, conn] of connections) {
+      if (conn.status !== 'connected') continue;
+      result.push({
+        name: conn.config.name,
+        description: conn.config.description || undefined,
+        tools: conn.tools.map((t) => ({
+          name: t.originalName,
+          description: t.description.replace(`[${conn.config.name}] `, ''),
+        })),
+      });
+    }
+    return result;
+  }
+
+  /**
+   * 省トークンモード用: 特定サーバーのツールを OpenAI function calling 形式で返す
+   */
+  function getOpenAIToolsForServer(serverName: string): any[] {
+    const conn = connections.get(serverName);
+    if (!conn || conn.status !== 'connected') return [];
+    return conn.tools.map((tool) => ({
+      type: 'function',
+      function: {
+        name: tool.originalName,
+        description: tool.description.replace(`[${serverName}] `, ''),
+        parameters: tool.inputSchema ?? { type: 'object', properties: {} },
+      },
+    }));
+  }
+
   /** 各サーバーの接続状態を返す */
   function getStatus(configs: MCPServerConfig[]): MCPServerStatus[] {
     return configs.map((config) => {
@@ -182,11 +222,41 @@ export function createMCPManager() {
     });
   }
 
+  /**
+   * 一時的にサーバーへ接続してツール一覧を取得後すぐ切断する（説明生成などに使用）
+   * 既に接続済みの場合はそのツールをそのまま返す
+   */
+  async function getToolsTemporarily(
+    config: MCPServerConfig,
+  ): Promise<Array<{ name: string; description: string }>> {
+    // 既に接続済みならそのまま返す
+    const existing = connections.get(config.name);
+    if (existing?.status === 'connected' && existing.tools.length > 0) {
+      return existing.tools.map((t) => ({
+        name: t.originalName,
+        description: t.description.replace(`[${config.name}] `, ''),
+      }));
+    }
+    // 未接続 or エラー → 一時接続
+    const conn = await connectServer(config);
+    try {
+      return conn.tools.map((t) => ({
+        name: t.originalName,
+        description: t.description.replace(`[${config.name}] `, ''),
+      }));
+    } finally {
+      try { await conn.client.close(); } catch {}
+    }
+  }
+
   return {
     connect,
     disconnectAll,
     getOpenAITools,
     getToolInfoList,
+    getServerSummaries,
+    getOpenAIToolsForServer,
+    getToolsTemporarily,
     executeTool,
     getStatus,
   };
