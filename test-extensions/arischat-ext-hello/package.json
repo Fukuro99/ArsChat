@@ -6,6 +6,7 @@
     "displayName": "Hello Extension",
     "icon": "👋",
     "permissions": ["ai:send", "ai:stream"],
+    "main": "main.js",
     "renderer": "dist/renderer.js",
     "pages": [
       {
