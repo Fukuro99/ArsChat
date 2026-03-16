@@ -611,10 +611,14 @@ function setupIPC(): void {
       return;
     }
 
-    // アクティブペルソナのスキルを読み込む
-    const skills = settings.activePersonaId
+    // ビルトインスキル（Interactive UI）＋ アクティブペルソナのスキルを結合
+    const builtinSkills = settings.enableInteractiveUI !== false
+      ? skillManager.getBuiltinSkills()
+      : [];
+    const personaSkills = settings.activePersonaId
       ? skillManager.listSkills(settings.activePersonaId)
       : [];
+    const skills = [...builtinSkills, ...personaSkills];
 
     try {
       await claude.streamChat(
@@ -631,9 +635,7 @@ function setupIPC(): void {
           skillContext: skills.length > 0 ? {
             skills,
             getContent: (skillId: string) =>
-              settings.activePersonaId
-                ? skillManager.getSkillContent(settings.activePersonaId, skillId)
-                : null,
+              skillManager.getSkillContent(settings.activePersonaId ?? '', skillId),
             invokeScript: async (skillId: string) => {
               const skill = skills.find((s) => s.id === skillId);
               if (!skill) return `スキル "${skillId}" が見つかりません`;
