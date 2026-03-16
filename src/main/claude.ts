@@ -9,6 +9,13 @@ export interface SkillContext {
   invokeScript: (skillId: string) => Promise<string>;
 }
 
+/** <think>...</think> / <thinking>...</thinking> ブロックを除去して本文だけ返す */
+function stripThinkTags(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, '')
+             .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+             .trim();
+}
+
 export function createClaudeService(mcpManager?: MCPManager) {
   let currentAbortController: AbortController | null = null;
   const LMSTUDIO_LOCALHOST_FALLBACK = '127.0.0.1';
@@ -1204,7 +1211,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
           throw new Error(`LM Studio エラー ${response.status}: ${errText.slice(0, 200)}`);
         }
         const json: any = await response.json();
-        return json?.choices?.[0]?.message?.content ?? '';
+        return stripThinkTags(json?.choices?.[0]?.message?.content ?? '');
       } else {
         const client = new Anthropic({ apiKey: settings.apiKey });
         const response = await client.messages.create({
@@ -1213,10 +1220,11 @@ export function createClaudeService(mcpManager?: MCPManager) {
           system: systemPrompt,
           messages: [{ role: 'user', content: userMessage }],
         });
-        return response.content
+        const raw = response.content
           .filter((b) => b.type === 'text')
           .map((b) => (b as any).text as string)
           .join('');
+        return stripThinkTags(raw);
       }
     },
 
