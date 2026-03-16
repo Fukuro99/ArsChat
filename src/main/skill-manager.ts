@@ -3,6 +3,44 @@ import * as path from 'path';
 import { shell } from 'electron';
 import { exec } from 'child_process';
 import { Skill, SkillScript } from '../shared/types';
+import {
+  INSTRUCTION_INTERACTIVE_UI,
+  INSTRUCTION_IFRAME,
+  INSTRUCTION_INTERACTIVE_HTML,
+} from '../shared/interactiveUiInstructions';
+
+// =========================================================
+// ビルトインスキル（Interactive UI 関連）
+// =========================================================
+
+/** ビルトインスキルの定義（ファイルシステム不要・常に利用可能） */
+const BUILTIN_SKILLS: Skill[] = [
+  {
+    id: 'interactive-ui',
+    name: 'Interactive UI コンポーネント',
+    description: 'ユーザー側にボタン・フォーム・スライダー等のUIを表示し操作結果をAIに送信する（liveモード・ローカルアクション対応）',
+    filePath: '__builtin__',
+  },
+  {
+    id: 'iframe',
+    name: 'iframe HTML表示',
+    description: 'グラフ・図解・アニメーション等の表示専用HTMLをAIメッセージ欄に埋め込む',
+    filePath: '__builtin__',
+  },
+  {
+    id: 'interactive-html',
+    name: 'Interactive HTML サンドボックス',
+    description: 'ゲーム・Canvasなど複雑なHTMLをユーザー側に表示し操作をAIに通知する（liveモード）',
+    filePath: '__builtin__',
+  },
+];
+
+/** ビルトインスキルの本文コンテンツ */
+const BUILTIN_SKILL_CONTENT: Record<string, string> = {
+  'interactive-ui': INSTRUCTION_INTERACTIVE_UI,
+  'iframe': INSTRUCTION_IFRAME,
+  'interactive-html': INSTRUCTION_INTERACTIVE_HTML,
+};
 
 /** frontmatter を解析して { meta, body } を返す */
 function parseFrontmatter(content: string): { meta: Record<string, any>; body: string } {
@@ -128,6 +166,11 @@ export function createSkillManager(dataDir: string) {
   }
 
   return {
+    /** ビルトインスキル一覧を返す */
+    getBuiltinSkills(): Skill[] {
+      return BUILTIN_SKILLS;
+    },
+
     /** ペルソナのスキル一覧を返す */
     listSkills(personaId: string): Skill[] {
       const dir = getSkillsDir(personaId);
@@ -143,8 +186,12 @@ export function createSkillManager(dataDir: string) {
       }
     },
 
-    /** スキルの本文（詳細プロンプト）を返す */
+    /** スキルの本文（詳細プロンプト）を返す。ビルトインスキルも対応 */
     getSkillContent(personaId: string, skillId: string): string | null {
+      // ビルトインスキルを優先チェック
+      if (skillId in BUILTIN_SKILL_CONTENT) {
+        return BUILTIN_SKILL_CONTENT[skillId];
+      }
       const filePath = path.join(getSkillsDir(personaId), `${skillId}.md`);
       if (!fs.existsSync(filePath)) return null;
       return readSkillBody(filePath);
