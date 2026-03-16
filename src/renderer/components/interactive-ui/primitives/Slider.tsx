@@ -23,7 +23,7 @@ export default function Slider({ props, value, onChange }: PrimitiveProps) {
     }
   }, [value, isControlled]);
 
-  const displayValue = isControlled ? localValue : localValue;
+  const displayValue = localValue; // ドラッグ即時反映のため常に localValue を使用
 
   const handleChange = (v: number) => {
     setLocalValue(v); // 即時 UI 更新（スナップバック防止）
