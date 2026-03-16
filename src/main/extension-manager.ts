@@ -107,7 +107,10 @@ export function createExtensionManager(dataDir: string): ExtensionManager {
 
   function listForRenderer(): ExtensionInfo[] {
     return readRegistry().map((entry) => {
-      const extDir = path.join(extensionsDir, entry.id);
+      // source がローカル絶対パスの場合はそのまま使用、そうでなければ extensionsDir/id
+      const extDir = path.isAbsolute(entry.source) && fs.existsSync(entry.source)
+        ? entry.source
+        : path.join(extensionsDir, entry.id);
       const rendererPath = path.join(extDir, entry.manifest.renderer);
       return {
         id: entry.id,
@@ -124,16 +127,28 @@ export function createExtensionManager(dataDir: string): ExtensionManager {
     url: string,
     onProgress: (p: InstallProgress) => void,
   ): Promise<ExtensionRegistryEntry> {
-    const id = repoNameFromUrl(url);
-    const extDir = path.join(extensionsDir, id);
+    // ローカルパス対応 (file:// または絶対パス)
+    const isLocalPath = url.startsWith('file://') || path.isAbsolute(url);
+    const localPath = url.startsWith('file://') ? url.slice(7) : url;
 
-    if (fs.existsSync(extDir)) {
+    const id = repoNameFromUrl(isLocalPath ? localPath : url);
+    const extDir = isLocalPath ? localPath : path.join(extensionsDir, id);
+
+    if (!isLocalPath && fs.existsSync(extDir)) {
       throw new Error(`拡張 "${id}" は既にインストールされています`);
     }
 
-    // 1. git clone
-    onProgress({ step: 'clone', message: 'リポジトリをクローン中...' });
-    await gitClone(url, extDir);
+    if (isLocalPath) {
+      // ローカルパスの場合はそのディレクトリを直接使用（コピーしない）
+      if (!fs.existsSync(extDir)) {
+        throw new Error(`パスが見つかりません: ${extDir}`);
+      }
+      onProgress({ step: 'clone', message: `ローカルパスから読み込み中: ${extDir}` });
+    } else {
+      // 1. git clone
+      onProgress({ step: 'clone', message: 'リポジトリをクローン中...' });
+      await gitClone(url, extDir);
+    }
 
     // 2. npm install + build
     onProgress({ step: 'install', message: '依存パッケージをインストール中...' });
@@ -143,10 +158,20 @@ export function createExtensionManager(dataDir: string): ExtensionManager {
     // 3. manifest 読み込み
     const { version, manifest } = readManifest(extDir);
 
+    // ローカルパスの場合は manifest の name または ディレクトリ名を id にする
+    const resolvedId = isLocalPath
+      ? (path.basename(extDir))
+      : id;
+
+    // ローカルパスの場合は listForRenderer でも extDir を使う
+    if (isLocalPath) {
+      // registry に extDir を保存するため source にフルパスを入れる
+    }
+
     // 4. registry 登録
     const entry: ExtensionRegistryEntry = {
-      id,
-      source: url,
+      id: resolvedId,
+      source: isLocalPath ? extDir : url,
       version,
       installedAt: new Date().toISOString(),
       enabled: true,
@@ -215,7 +240,9 @@ export function createExtensionManager(dataDir: string): ExtensionManager {
     const entry = readRegistry().find((e) => e.id === extId);
     if (!entry) throw new Error(`拡張 "${extId}" が見つかりません`);
 
-    const extDir = path.join(extensionsDir, extId);
+    const extDir = path.isAbsolute(entry.source) && fs.existsSync(entry.source)
+      ? entry.source
+      : path.join(extensionsDir, extId);
     const rendererPath = path.join(extDir, entry.manifest.renderer);
 
     if (!fs.existsSync(rendererPath)) {
@@ -242,7 +269,9 @@ export function createExtensionManager(dataDir: string): ExtensionManager {
   ): Promise<void> {
     if (!entry.manifest.main) return; // Main Entry なし（Renderer Only）
 
-    const extDir = path.join(extensionsDir, entry.id);
+    const extDir = path.isAbsolute(entry.source) && fs.existsSync(entry.source)
+      ? entry.source
+      : path.join(extensionsDir, entry.id);
     const mainPath = path.join(extDir, entry.manifest.main);
 
     if (!fs.existsSync(mainPath)) {
