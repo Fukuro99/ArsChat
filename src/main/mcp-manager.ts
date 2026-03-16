@@ -222,6 +222,33 @@ export function createMCPManager() {
     });
   }
 
+  /**
+   * 一時的にサーバーへ接続してツール一覧を取得後すぐ切断する（説明生成などに使用）
+   * 既に接続済みの場合はそのツールをそのまま返す
+   */
+  async function getToolsTemporarily(
+    config: MCPServerConfig,
+  ): Promise<Array<{ name: string; description: string }>> {
+    // 既に接続済みならそのまま返す
+    const existing = connections.get(config.name);
+    if (existing?.status === 'connected' && existing.tools.length > 0) {
+      return existing.tools.map((t) => ({
+        name: t.originalName,
+        description: t.description.replace(`[${config.name}] `, ''),
+      }));
+    }
+    // 未接続 or エラー → 一時接続
+    const conn = await connectServer(config);
+    try {
+      return conn.tools.map((t) => ({
+        name: t.originalName,
+        description: t.description.replace(`[${config.name}] `, ''),
+      }));
+    } finally {
+      try { await conn.client.close(); } catch {}
+    }
+  }
+
   return {
     connect,
     disconnectAll,
@@ -229,6 +256,7 @@ export function createMCPManager() {
     getToolInfoList,
     getServerSummaries,
     getOpenAIToolsForServer,
+    getToolsTemporarily,
     executeTool,
     getStatus,
   };

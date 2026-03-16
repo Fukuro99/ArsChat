@@ -1408,7 +1408,7 @@ export default function Settings({ onBack }: SettingsProps) {
                       if (!serverForm.name.trim()) return;
                       setGeneratingDescFor(serverForm.name);
                       try {
-                        const desc = await window.arisChatAPI.generateMCPDescription(serverForm.name);
+                        const desc = await window.arisChatAPI.generateMCPDescription(serverForm);
                         if (desc) setServerForm((f) => ({ ...f, description: desc }));
                       } catch (err: any) {
                         console.error('MCP description generation error:', err?.message);

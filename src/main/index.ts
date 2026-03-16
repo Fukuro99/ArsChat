@@ -21,7 +21,7 @@ import { execSync } from 'child_process';
 if (process.platform === 'win32') {
   try { execSync('chcp 65001', { stdio: 'ignore' }); } catch {}
 }
-import { ArisChatSettings, DEFAULT_SETTINGS, IPC_CHANNELS, ChatMessage, ChatMessageStats, ChatSession } from '../shared/types';
+import { ArisChatSettings, DEFAULT_SETTINGS, IPC_CHANNELS, ChatMessage, ChatMessageStats, ChatSession, MCPServerConfig } from '../shared/types';
 import { createStore } from './store';
 import { createClaudeService } from './claude';
 import { createIconManager } from './icon-manager';
@@ -942,18 +942,15 @@ function setupIPC(): void {
   });
 
   // --- MCP: サーバー説明をAIで自動生成 ---
-  ipcMain.handle(IPC_CHANNELS.MCP_GENERATE_DESC, async (_e, serverName: string) => {
-    const tools = mcpManager.getOpenAIToolsForServer(serverName);
-    if (tools.length === 0) throw new Error(`サーバー "${serverName}" のツールが取得できません`);
+  ipcMain.handle(IPC_CHANNELS.MCP_GENERATE_DESC, async (_e, serverConfig: MCPServerConfig) => {
+    // 接続済みならキャッシュ利用、未接続なら一時接続してツール取得→即切断
+    const tools = await mcpManager.getToolsTemporarily(serverConfig);
+    if (tools.length === 0) throw new Error(`サーバー "${serverConfig.name}" のツールが0件のため説明を生成できません`);
     const settings = store.getSettings();
     const systemPrompt =
       '以下のMCPサーバーのツール一覧を見て、このサーバーが何をするものか2〜3行の簡潔な日本語で説明してください。' +
       '機能の概要のみを記述し、前置きや「このサーバーは」などの冗長な表現は不要です。';
-    const userMessage = JSON.stringify(
-      tools.map((t: any) => ({ name: t.function.name, description: t.function.description })),
-      null,
-      2,
-    );
+    const userMessage = JSON.stringify(tools, null, 2);
     return claude.generateText(settings, systemPrompt, userMessage);
   });
 

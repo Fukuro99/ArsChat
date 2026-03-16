@@ -156,8 +156,8 @@ contextBridge.exposeInMainWorld('arisChatAPI', {
   reconnectMCP: (): Promise<MCPServerStatus[]> => {
     return ipcRenderer.invoke(IPC_CHANNELS.MCP_RECONNECT);
   },
-  generateMCPDescription: (serverName: string): Promise<string> => {
-    return ipcRenderer.invoke(IPC_CHANNELS.MCP_GENERATE_DESC, serverName);
+  generateMCPDescription: (serverConfig: import('../shared/types').MCPServerConfig): Promise<string> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.MCP_GENERATE_DESC, serverConfig);
   },
 
   // === スキル ===
