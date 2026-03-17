@@ -1,551 +1,437 @@
 /**
  * arischat-ext-filebrowser / dist/renderer.js
  *
+ * VS Code 風ツリービュー（サイドバーパネル）+ テキストエディタ（メインページ）
+ *
  * extension-loader が先頭に以下を注入:
  *   const React = window.__ARISCHAT_REACT__;
  *   const { useState, useEffect, useRef, useCallback, useMemo, ... } = React;
  */
 
-// ===== スタイル定数 =====
-
-const S = {
-  // カラー
-  text:       'rgba(255,255,255,0.85)',
-  textMuted:  'rgba(255,255,255,0.45)',
-  textDim:    'rgba(255,255,255,0.25)',
-  border:     'rgba(255,255,255,0.08)',
-  hover:      'rgba(255,255,255,0.06)',
-  activeBtn:  'rgba(99,102,241,0.35)',
-  errorBg:    'rgba(239,68,68,0.12)',
-  errorText:  '#f87171',
-  accent:     '#818cf8',
-  // サイズ
-  fontSm:  '11px',
-  fontXs:  '10px',
-  fontBase:'12px',
-};
-
-// ===== ユーティリティ =====
-
-function fmtSize(bytes) {
-  if (bytes == null || bytes < 0) return '';
-  if (bytes < 1024)         return bytes + ' B';
-  if (bytes < 1048576)      return (bytes / 1024).toFixed(1)    + ' KB';
-  if (bytes < 1073741824)   return (bytes / 1048576).toFixed(1) + ' MB';
-  return (bytes / 1073741824).toFixed(1) + ' GB';
-}
-
-const EXT_ICONS = {
-  // Web
-  '.html': '🌐', '.htm': '🌐', '.css': '🎨', '.scss': '🎨', '.sass': '🎨',
-  // JS / TS
-  '.js': '🟨', '.jsx': '🟨', '.ts': '🔷', '.tsx': '🔷', '.mjs': '🟨',
-  // Data
-  '.json': '📋', '.yaml': '📋', '.yml': '📋', '.toml': '📋', '.xml': '📋', '.csv': '📊',
-  // Docs
-  '.md': '📝', '.txt': '📝', '.rst': '📝', '.pdf': '📕',
-  '.doc': '📘', '.docx': '📘', '.xls': '📗', '.xlsx': '📗', '.ppt': '📙', '.pptx': '📙',
-  // Images
-  '.png': '🖼️', '.jpg': '🖼️', '.jpeg': '🖼️', '.gif': '🖼️',
-  '.svg': '🖼️', '.webp': '🖼️', '.ico': '🖼️', '.bmp': '🖼️',
-  // Media
-  '.mp4': '🎬', '.mov': '🎬', '.avi': '🎬', '.mkv': '🎬', '.webm': '🎬',
-  '.mp3': '🎵', '.wav': '🎵', '.flac': '🎵', '.aac': '🎵', '.ogg': '🎵',
-  // Archive
-  '.zip': '🗜️', '.tar': '🗜️', '.gz': '🗜️', '.rar': '🗜️', '.7z': '🗜️',
-  // Code (others)
-  '.py': '🐍', '.go': '🐹', '.rs': '🦀', '.c': '⚙️', '.cpp': '⚙️',
-  '.h': '⚙️', '.java': '☕', '.kt': '🟣', '.swift': '🍎', '.rb': '💎',
-  '.php': '🐘', '.sh': '📜', '.bat': '📜', '.ps1': '📜',
-  // Binary
-  '.exe': '⚙️', '.msi': '⚙️', '.dmg': '💿', '.dll': '⚙️',
-  // Font
-  '.ttf': '🔤', '.otf': '🔤', '.woff': '🔤', '.woff2': '🔤',
-};
-
-function fileIcon(item) {
-  if (item.isDir) return '📁';
-  return EXT_ICONS[item.ext] || '📄';
-}
-
-function isTextFile(ext) {
-  return [
-    '.txt','.md','.rst','.json','.yaml','.yml','.toml','.xml','.csv',
-    '.js','.mjs','.jsx','.ts','.tsx','.html','.htm','.css','.scss','.sass',
-    '.py','.go','.rs','.c','.cpp','.h','.java','.kt','.rb','.php',
-    '.sh','.bat','.ps1','.svg','.gitignore','.env',
-  ].includes(ext);
-}
-
-// パスから親ディレクトリを取得
-function parentDir(p) {
-  const isWin = p.includes('\\');
-  const sep   = isWin ? '\\' : '/';
-  if (p.endsWith(sep)) {
-    // ルート（C:\ や /）
-    return null;
-  }
-  const idx = p.lastIndexOf(sep);
-  if (idx <= 0) return isWin ? null : '/';
-  const parent = p.slice(0, idx);
-  // Windows: "C:" → "C:\"
-  return (isWin && /^[A-Z]:$/.test(parent)) ? parent + '\\' : parent;
-}
-
-// ===== コンポーネント =====
-
 const e = React.createElement;
 
-// ─── ボタン ───
-function IconBtn({ onClick, disabled, title, children, style }) {
-  const [hov, setHov] = useState(false);
-  return e('button', {
-    onClick,
-    disabled,
-    title,
-    onMouseEnter: () => setHov(true),
-    onMouseLeave: () => setHov(false),
-    style: {
-      background:   hov && !disabled ? 'rgba(255,255,255,0.1)' : 'transparent',
-      border:       'none',
-      borderRadius: '4px',
-      padding:      '3px 6px',
-      color:        disabled ? S.textDim : S.textMuted,
-      cursor:       disabled ? 'default' : 'pointer',
-      fontSize:     '13px',
-      lineHeight:   1,
-      transition:   'background 0.1s',
-      ...style,
-    },
-  }, children);
+// ===== スタイル定数 =====
+const S = {
+  bg:          '#1e1e2e',
+  bgDark:      '#16162a',
+  bgBar:       '#1a1a2d',
+  text:        'rgba(255,255,255,0.88)',
+  textMuted:   'rgba(255,255,255,0.50)',
+  textDim:     'rgba(255,255,255,0.28)',
+  border:      'rgba(255,255,255,0.08)',
+  hover:       'rgba(255,255,255,0.07)',
+  selected:    'rgba(99,102,241,0.32)',
+  selText:     '#a5b4fc',
+  accent:      '#6366f1',
+  accentLight: '#818cf8',
+  error:       '#f87171',
+  fontXs:      '10px',
+  fontSm:      '11px',
+  fontBase:    '12px',
+  mono:        '"Consolas", "Cascadia Code", "Fira Code", "SF Mono", monospace',
+};
+
+// ===== ファイルアイコン =====
+const EXT_ICONS = {
+  '.html':'🌐','.htm':'🌐','.css':'🎨','.scss':'🎨','.sass':'🎨','.less':'🎨',
+  '.js':'🟨','.jsx':'🟨','.mjs':'🟨','.cjs':'🟨',
+  '.ts':'🔷','.tsx':'🔷',
+  '.json':'📋','.yaml':'📋','.yml':'📋','.toml':'📋','.xml':'📋','.csv':'📊',
+  '.env':'🔑','.md':'📝','.txt':'📝','.rst':'📝','.pdf':'📕',
+  '.png':'🖼️','.jpg':'🖼️','.jpeg':'🖼️','.gif':'🖼️','.svg':'🖼️','.webp':'🖼️','.ico':'🖼️',
+  '.mp4':'🎬','.mov':'🎬','.avi':'🎬','.mkv':'🎬',
+  '.mp3':'🎵','.wav':'🎵','.flac':'🎵',
+  '.zip':'🗜️','.tar':'🗜️','.gz':'🗜️','.rar':'🗜️','.7z':'🗜️',
+  '.py':'🐍','.go':'🐹','.rs':'🦀','.c':'⚙️','.cpp':'⚙️','.h':'⚙️',
+  '.java':'☕','.kt':'🟣','.swift':'🍎','.rb':'💎','.php':'🐘',
+  '.sh':'📜','.bat':'📜','.ps1':'📜','.lua':'🌙',
+  '.exe':'⚙️','.dll':'⚙️','.so':'⚙️','.dmg':'💿',
+  '.ttf':'🔤','.otf':'🔤','.woff':'🔤','.woff2':'🔤',
+};
+const TEXT_EXTS = new Set([
+  '.txt','.md','.rst','.json','.yaml','.yml','.toml','.xml','.csv','.env',
+  '.js','.mjs','.cjs','.jsx','.ts','.tsx','.html','.htm','.css','.scss','.sass','.less',
+  '.py','.go','.rs','.c','.cpp','.h','.java','.kt','.rb','.php','.sh','.bat','.ps1','.lua',
+  '.svg','.gitignore','.editorconfig','.ini','.cfg','.conf','.log','.lock',
+]);
+
+function fileIcon(ext) { return EXT_ICONS[ext] || '📄'; }
+function isText(ext)   { return TEXT_EXTS.has(ext); }
+function fmtSize(b) {
+  if (b == null) return '';
+  if (b < 1024)     return b + ' B';
+  if (b < 1048576)  return (b / 1024).toFixed(1) + ' KB';
+  return (b / 1048576).toFixed(1) + ' MB';
+}
+function basename(p)   { return p.replace(/[/\\]+$/, '').split(/[/\\]/).pop() || p; }
+
+// ===== ツリーの平坦化 =====
+function flattenTree(dir, depth, treeData, expanded) {
+  const items = treeData[dir];
+  if (!items) return [];
+  const rows = [];
+  for (const item of items) {
+    rows.push({ item, depth });
+    if (item.isDir && expanded.has(item.path)) {
+      rows.push(...flattenTree(item.path, depth + 1, treeData, expanded));
+    }
+  }
+  return rows;
 }
 
-// ─── ブレッドクラム ───
-function Breadcrumb({ filePath, onNavigate }) {
-  const isWin = filePath.includes('\\');
-  const sep   = isWin ? '\\' : '/';
-  const raw   = filePath.split(sep).filter(Boolean);
-
-  // crumbs: [{label, path}]
-  const crumbs = raw.map((part, i) => {
-    const joined = isWin
-      ? raw.slice(0, i + 1).join(sep)
-      : '/' + raw.slice(0, i + 1).join(sep);
-    return {
-      label: part,
-      path:  isWin && i === 0 ? part + '\\' : joined,
-    };
-  });
-  if (!isWin) crumbs.unshift({ label: '/', path: '/' });
+// ===== ツリー行 =====
+function TreeRow({ row, isExpanded, isSelected, onToggle, onOpen, onCopy }) {
+  const { item, depth } = row;
+  const [hov, setHov] = useState(false);
 
   return e('div', {
+    onMouseEnter: () => setHov(true),
+    onMouseLeave: () => setHov(false),
+    onClick: () => item.isDir ? onToggle(item.path) : onOpen(item),
+    title: item.path,
     style: {
       display:      'flex',
       alignItems:   'center',
-      flexWrap:     'wrap',
-      gap:          '0',
-      padding:      '5px 8px',
-      fontSize:     S.fontSm,
-      borderBottom: '1px solid ' + S.border,
-      overflowX:    'auto',
-      whiteSpace:   'nowrap',
-      scrollbarWidth: 'none',
+      height:       '22px',
+      paddingLeft:  (depth * 12 + (item.isDir ? 4 : 20)) + 'px',
+      paddingRight: '6px',
+      cursor:       'pointer',
+      background:   isSelected ? S.selected : hov ? S.hover : 'transparent',
+      userSelect:   'none',
       flexShrink:   0,
     },
   },
-    crumbs.map((c, i) => [
-      e('button', {
-        key:     'c' + i,
-        onClick: () => onNavigate(c.path),
-        style: {
-          background: 'none',
-          border:     'none',
-          padding:    '0 1px',
-          fontSize:   S.fontSm,
-          color:      i === crumbs.length - 1 ? S.text : S.textMuted,
-          fontWeight: i === crumbs.length - 1 ? '600' : '400',
-          cursor:     'pointer',
-          maxWidth:   '80px',
-          overflow:   'hidden',
-          textOverflow: 'ellipsis',
-        },
-        title: c.path,
-      }, c.label),
-      i < crumbs.length - 1 && e('span', {
-        key:   's' + i,
-        style: { color: S.textDim, fontSize: '10px', padding: '0 1px' },
-      }, isWin ? '\\' : '/'),
-    ]),
-  );
-}
-
-// ─── ファイル行 ───
-function FileRow({ item, onNavigate, onInsertPath, onPreview }) {
-  const [hov, setHov] = useState(false);
-  const canPreview = item.isFile && isTextFile(item.ext);
-
-  return e('div', {
-    onMouseEnter: () => setHov(true),
-    onMouseLeave: () => setHov(false),
-    onClick:      () => { if (item.isDir) onNavigate(item.path); },
-    title:        item.path,
-    style: {
-      display:    'flex',
-      alignItems: 'center',
-      gap:        '5px',
-      padding:    '3px 6px',
-      cursor:     item.isDir ? 'pointer' : 'default',
-      background: hov ? S.hover : 'transparent',
-      borderRadius: '4px',
-      userSelect: 'none',
-    },
-  },
+    // フォルダ矢印
+    item.isDir && e('span', {
+      style: {
+        width: '14px', flexShrink: 0, fontSize: '8px', color: S.textMuted,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        transform: isExpanded ? 'rotate(90deg)' : 'none',
+        transition: 'transform 0.12s',
+      },
+    }, '▶'),
     // アイコン
-    e('span', { style: { fontSize: '13px', flexShrink: 0 } }, fileIcon(item)),
+    e('span', {
+      style: { fontSize: '13px', marginRight: '5px', flexShrink: 0, lineHeight: 1 },
+    }, item.isDir ? (isExpanded ? '📂' : '📁') : fileIcon(item.ext)),
     // 名前
     e('span', {
       style: {
-        flex:          1,
-        fontSize:      S.fontBase,
-        color:         item.isDir ? S.text : 'rgba(255,255,255,0.72)',
-        overflow:      'hidden',
-        textOverflow:  'ellipsis',
-        whiteSpace:    'nowrap',
+        flex: 1, fontSize: S.fontBase,
+        color:        isSelected ? S.selText : item.isDir ? S.text : 'rgba(255,255,255,0.75)',
+        fontWeight:   isSelected ? '500' : 'normal',
+        overflow:     'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       },
     }, item.name),
-    // サイズ
-    !item.isDir && item.size != null &&
-      e('span', { style: { fontSize: S.fontXs, color: S.textDim, flexShrink: 0 } }, fmtSize(item.size)),
-    // ホバー時のアクション
-    hov && e('div', { style: { display: 'flex', gap: '2px', flexShrink: 0 } },
-      // プレビュー（テキストファイルのみ）
-      canPreview && e('button', {
-        onClick: (ev) => { ev.stopPropagation(); onPreview(item); },
-        title: 'プレビュー',
-        style: {
-          background:   'rgba(99,102,241,0.25)',
-          border:       'none',
-          borderRadius: '3px',
-          padding:      '1px 4px',
-          fontSize:     '10px',
-          color:        'rgba(255,255,255,0.75)',
-          cursor:       'pointer',
-        },
-      }, '👁'),
-      // パスコピー
-      e('button', {
-        onClick: (ev) => { ev.stopPropagation(); onInsertPath(item.path); },
-        title: 'パスをクリップボードにコピー',
-        style: {
-          background:   'rgba(99,102,241,0.25)',
-          border:       'none',
-          borderRadius: '3px',
-          padding:      '1px 4px',
-          fontSize:     '10px',
-          color:        'rgba(255,255,255,0.75)',
-          cursor:       'pointer',
-        },
-      }, '📋'),
-    ),
-  );
-}
-
-// ─── ファイルプレビューモーダル ───
-function PreviewModal({ item, api, onClose }) {
-  const [content, setContent] = useState(null);
-  const [error,   setError]   = useState(null);
-
-  useEffect(() => {
-    api.ipc.invoke('read-file', { filePath: item.path }).then(res => {
-      if (res.success) setContent(res.content);
-      else             setError(res.error);
-    });
-  }, [item.path]);
-
-  return e('div', {
-    style: {
-      position:   'absolute',
-      inset:      0,
-      background: 'rgba(10,10,20,0.92)',
-      display:    'flex',
-      flexDirection: 'column',
-      zIndex:     100,
-    },
-  },
-    // ヘッダー
-    e('div', {
+    // ホバー時 - サイズ + パスコピー
+    hov && !item.isDir && item.size != null &&
+      e('span', { style: { fontSize: S.fontXs, color: S.textDim, marginRight: '4px', flexShrink: 0 } },
+        fmtSize(item.size)),
+    hov && e('button', {
+      onClick: ev => { ev.stopPropagation(); onCopy(item.path); },
+      title: 'パスをコピー',
       style: {
-        display:    'flex',
-        alignItems: 'center',
-        gap:        '8px',
-        padding:    '8px 10px',
-        borderBottom: '1px solid ' + S.border,
-        flexShrink: 0,
+        background: 'rgba(99,102,241,0.3)', border: 'none', borderRadius: '3px',
+        padding: '0 4px', height: '16px', lineHeight: '16px',
+        fontSize: '10px', color: 'rgba(200,200,255,0.8)', cursor: 'pointer', flexShrink: 0,
       },
-    },
-      e('span', { style: { fontSize: '12px', color: S.accent } }, '👁'),
-      e('span', {
-        style: { flex: 1, fontSize: S.fontSm, color: S.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-        title: item.path,
-      }, item.name),
-      e('button', {
-        onClick: onClose,
-        style: {
-          background: 'none', border: 'none', color: S.textMuted,
-          cursor: 'pointer', fontSize: '16px', lineHeight: 1, padding: '0 2px',
-        },
-      }, '✕'),
-    ),
-    // コンテンツ
-    e('div', {
-      style: { flex: 1, overflow: 'auto', padding: '10px' },
-    },
-      error   && e('p', { style: { color: S.errorText, fontSize: S.fontSm } }, '⚠ ' + error),
-      !content && !error && e('p', { style: { color: S.textMuted, fontSize: S.fontSm } }, '読み込み中...'),
-      content && e('pre', {
-        style: {
-          margin: 0,
-          fontSize: '11px',
-          lineHeight: '1.5',
-          color: 'rgba(255,255,255,0.8)',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-all',
-          fontFamily: 'monospace',
-        },
-      }, content),
-    ),
+    }, '📋'),
   );
 }
 
-// ─── メインパネル ───
+// ===== ファイルブラウザ（サイドバーパネル）=====
 function FileBrowserPanel({ api }) {
-  const [currentPath, setCurrentPath] = useState(null);
-  const [items,       setItems]       = useState([]);
-  const [history,     setHistory]     = useState([]);  // 戻る用スタック
-  const [drives,      setDrives]      = useState([]);
-  const [loading,     setLoading]     = useState(false);
-  const [error,       setError]       = useState(null);
-  const [preview,     setPreview]     = useState(null); // プレビュー中のファイル
-  const [notification, setNotification] = useState(null);
-  const [search,      setSearch]      = useState('');
+  const [rootPath, setRootPath] = useState(null);
+  const [treeData, setTreeData] = useState({});
+  const [expanded, setExpanded] = useState(new Set());
+  const [selected, setSelected] = useState(null);
+  const [toast,    setToast]    = useState(null);
 
-  // 初期化: ホームディレクトリ + ドライブ一覧
   useEffect(() => {
-    api.ipc.invoke('get-home').then(res => navigate(res.path, null));
-    api.ipc.invoke('get-drives').then(setDrives);
+    api.ipc.invoke('get-home').then(res => openRoot(res.path));
   }, []);
 
-  // ===== ナビゲーション =====
-  function navigate(dir, fromPath) {
-    setLoading(true);
-    setError(null);
-    setSearch('');
-    api.ipc.invoke('list-dir', { dirPath: dir }).then(res => {
-      setLoading(false);
-      if (res.success) {
-        // 履歴に前パスを積む
-        if (fromPath != null) setHistory(h => [...h, fromPath]);
-        setCurrentPath(dir);
-        setItems(res.items);
-      } else {
-        setError(res.error);
-      }
+  function openRoot(dir) {
+    setRootPath(dir); setExpanded(new Set()); setTreeData({}); setSelected(null);
+    loadDir(dir);
+  }
+  function loadDir(dir) {
+    return api.ipc.invoke('list-dir', { dirPath: dir }).then(res => {
+      if (res.success) setTreeData(prev => ({ ...prev, [dir]: res.items }));
+      return res;
     });
   }
-
-  // 戻る
-  function goBack() {
-    if (history.length === 0) return;
-    const prev = history[history.length - 1];
-    setHistory(h => h.slice(0, -1));
-    setLoading(true);
-    setSearch('');
-    api.ipc.invoke('list-dir', { dirPath: prev }).then(res => {
-      setLoading(false);
-      if (res.success) { setCurrentPath(prev); setItems(res.items); }
+  function toggleDir(dir) {
+    setExpanded(prev => {
+      const s = new Set(prev);
+      if (s.has(dir)) { s.delete(dir); }
+      else            { s.add(dir); if (!treeData[dir]) loadDir(dir); }
+      return s;
     });
   }
-
-  // 上へ
-  function goUp() {
-    if (!currentPath) return;
-    const parent = parentDir(currentPath);
-    if (parent) navigate(parent, currentPath);
+  function openFile(item) {
+    if (!isText(item.ext)) { showToast('⚠ バイナリファイルは開けません'); return; }
+    setSelected(item.path);
+    api.ipc.invoke('open-file', { filePath: item.path }).then(res => {
+      if (res.success) api.navigation.goTo('editor');
+      else { showToast('⚠ ' + (res.error || '開けません')); setSelected(null); }
+    });
+  }
+  function openFolderDialog() {
+    api.ipc.invoke('open-folder-dialog').then(res => {
+      if (res.success && res.path) openRoot(res.path);
+    });
+  }
+  function refresh() {
+    if (!rootPath) return;
+    setExpanded(new Set()); setTreeData({}); loadDir(rootPath);
+  }
+  function copyPath(p) {
+    navigator.clipboard.writeText(p).then(() => showToast('📋 コピーしました')).catch(() => {});
+  }
+  function showToast(msg) {
+    setToast(msg); setTimeout(() => setToast(null), 2500);
   }
 
-  // パスをクリップボードにコピーして通知
-  function onInsertPath(p) {
-    navigator.clipboard.writeText(p)
-      .then(() => showNotification('📋 パスをコピーしました'))
-      .catch(() => showNotification('⚠ コピー失敗'));
-  }
+  const rootName = rootPath ? basename(rootPath).toUpperCase() : 'EXPLORER';
+  const rows     = rootPath ? flattenTree(rootPath, 0, treeData, expanded) : [];
 
-  function showNotification(msg) {
-    setNotification(msg);
-    setTimeout(() => setNotification(null), 2000);
-  }
-
-  // ===== 表示アイテム（検索フィルター）=====
-  const visibleItems = search.trim()
-    ? items.filter(it => it.name.toLowerCase().includes(search.toLowerCase()))
-    : items;
-
-  const folderCount = visibleItems.filter(i => i.isDir).length;
-  const fileCount   = visibleItems.filter(i => i.isFile).length;
-
-  // ===== レンダリング =====
   return e('div', {
-    style: {
-      display:       'flex',
-      flexDirection: 'column',
-      height:        '100%',
-      position:      'relative',
-      fontSize:      S.fontBase,
-    },
+    style: { display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', fontSize: S.fontBase },
   },
-
-    // ===== トップバー（戻る・上へ・ドライブ）=====
+    // ─── ヘッダー ───
     e('div', {
       style: {
-        display:      'flex',
-        alignItems:   'center',
-        gap:          '2px',
-        padding:      '6px 6px 6px 4px',
-        borderBottom: '1px solid ' + S.border,
-        flexShrink:   0,
+        display: 'flex', alignItems: 'center', gap: '2px',
+        padding: '0 8px', height: '35px',
+        borderBottom: '1px solid ' + S.border, flexShrink: 0,
       },
     },
-      e(IconBtn, { onClick: goBack, disabled: history.length === 0, title: '戻る' }, '←'),
-      e(IconBtn, { onClick: goUp,   title: '上のフォルダへ' }, '↑'),
-      // フォルダを開く（システムダイアログ）
-      e(IconBtn, {
-        onClick: () => {
-          api.ipc.invoke('open-folder-dialog').then(res => {
-            if (res.success && res.path) navigate(res.path, currentPath);
-          });
+      e('span', {
+        style: {
+          flex: 1, fontSize: S.fontXs, fontWeight: '700', letterSpacing: '0.06em',
+          color: S.textMuted, textTransform: 'uppercase',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         },
-        title: 'フォルダを開く...',
+        title: rootPath || '',
+      }, rootName),
+      // フォルダを開く
+      e('button', {
+        onClick: openFolderDialog, title: 'フォルダを開く...',
+        style: { background: 'none', border: 'none', borderRadius: '4px', padding: '4px 5px', fontSize: '14px', color: S.textMuted, cursor: 'pointer' },
       }, '📂'),
-      e(IconBtn, {
-        onClick: () => currentPath && navigate(currentPath, null),
-        title:   '更新',
-        style:   { marginLeft: 'auto' },
+      // 更新
+      e('button', {
+        onClick: refresh, title: '更新',
+        style: { background: 'none', border: 'none', borderRadius: '4px', padding: '4px 5px', fontSize: '13px', color: S.textMuted, cursor: 'pointer' },
       }, '↺'),
-      // ドライブボタン（複数の場合）
-      drives.length > 1 && e('div', { style: { display: 'flex', gap: '2px', marginLeft: '4px' } },
-        drives.map(d =>
-          e('button', {
-            key:     d.path,
-            onClick: () => navigate(d.path, currentPath),
-            title:   d.path,
-            style: {
-              background:   currentPath?.startsWith(d.path.slice(0, -1)) ? S.activeBtn : 'rgba(255,255,255,0.06)',
-              border:       'none',
-              borderRadius: '4px',
-              padding:      '2px 6px',
-              fontSize:     S.fontXs,
-              color:        S.textMuted,
-              cursor:       'pointer',
-            },
-          }, d.name),
-        ),
+    ),
+    // ─── ツリー ───
+    e('div', { style: { flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '4px 0' } },
+      !rootPath &&
+        e('div', { style: { padding: '24px 12px', textAlign: 'center', fontSize: S.fontSm, color: S.textDim } },
+          '📂 フォルダを開いてください'),
+      rootPath && !treeData[rootPath] &&
+        e('div', { style: { padding: '24px 12px', textAlign: 'center', fontSize: S.fontSm, color: S.textDim } },
+          '読み込み中...'),
+      rows.map(row => e(TreeRow, {
+        key:        row.item.path,
+        row,
+        isExpanded: expanded.has(row.item.path),
+        isSelected: selected === row.item.path,
+        onToggle:   toggleDir,
+        onOpen:     openFile,
+        onCopy:     copyPath,
+      })),
+    ),
+    // ─── トースト ───
+    toast && e('div', {
+      style: {
+        position: 'absolute', bottom: '12px', left: '50%', transform: 'translateX(-50%)',
+        background: 'rgba(28,28,48,0.96)', border: '1px solid rgba(99,102,241,0.45)',
+        borderRadius: '6px', padding: '5px 12px',
+        fontSize: S.fontSm, color: S.accentLight, whiteSpace: 'nowrap',
+        pointerEvents: 'none', zIndex: 10,
+      },
+    }, toast),
+  );
+}
+
+// ===== エディタページ（メインコンテンツ）=====
+function FileEditorPage({ api }) {
+  const [fileInfo, setFileInfo] = useState(null);
+  const [text,     setText]     = useState('');
+  const [modified, setModified] = useState(false);
+  const [saving,   setSaving]   = useState(false);
+  const [saveErr,  setSaveErr]  = useState(null);
+
+  // stale closure 対策 refs
+  const textRef = useRef('');
+  const fileRef = useRef(null);
+  const modRef  = useRef(false);
+  useEffect(() => { textRef.current = text;     }, [text]);
+  useEffect(() => { fileRef.current = fileInfo; }, [fileInfo]);
+  useEffect(() => { modRef.current  = modified; }, [modified]);
+
+  // 現在開いているファイルをロード
+  useEffect(() => {
+    api.ipc.invoke('get-current-file').then(res => {
+      if (res.success) {
+        setFileInfo(res); setText(res.content); setModified(false); setSaveErr(null);
+      }
+    });
+  }, []);
+
+  // Ctrl+S / Cmd+S
+  useEffect(() => {
+    const handler = ev => {
+      if ((ev.ctrlKey || ev.metaKey) && ev.key === 's') { ev.preventDefault(); doSave(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  function doSave() {
+    const fi = fileRef.current;
+    if (!fi || !modRef.current) return;
+    setSaving(true); setSaveErr(null);
+    api.ipc.invoke('save-file', { filePath: fi.path, content: textRef.current }).then(res => {
+      setSaving(false);
+      if (res.success) setModified(false);
+      else setSaveErr(res.error || '保存に失敗しました');
+    });
+  }
+
+  const fileName = fileInfo ? basename(fileInfo.path) : '';
+  const extDot   = fileName.lastIndexOf('.');
+  const ext      = extDot > 0 ? fileName.slice(extDot).toLowerCase() : '';
+  const lineCount = text ? text.split('\n').length : 0;
+  const charCount = text ? text.length : 0;
+
+  return e('div', {
+    style: { display: 'flex', flexDirection: 'column', height: '100%', background: S.bg, color: S.text },
+  },
+    // ─── タブバー ───
+    e('div', {
+      style: {
+        display: 'flex', alignItems: 'center',
+        background: S.bgDark, borderBottom: '1px solid ' + S.border,
+        flexShrink: 0, height: '36px', paddingLeft: '4px', gap: '2px',
+      },
+    },
+      // ← ボタン
+      e('button', {
+        onClick: () => api.navigation.goToChat(), title: 'チャットに戻る',
+        style: {
+          background: 'none', border: 'none', borderRadius: '4px', padding: '4px 8px',
+          fontSize: S.fontSm, color: S.textMuted, cursor: 'pointer',
+        },
+      }, '←'),
+      // ファイルタブ
+      fileInfo && e('div', {
+        style: {
+          display: 'flex', alignItems: 'center', gap: '6px',
+          padding: '0 12px 0 10px', height: '100%',
+          background: S.bg, borderTop: '2px solid ' + S.accentLight,
+          borderRight: '1px solid ' + S.border,
+          fontSize: S.fontBase, color: S.text, userSelect: 'none',
+        },
+      },
+        e('span', { style: { fontSize: '13px' } }, fileIcon(ext)),
+        e('span', null, modified ? fileName + ' ●' : fileName),
+        e('button', {
+          onClick: () => api.navigation.goToChat(), title: '閉じる',
+          style: {
+            background: 'none', border: 'none', color: S.textMuted,
+            cursor: 'pointer', fontSize: '12px', padding: '0 2px',
+            borderRadius: '3px', marginLeft: '2px',
+          },
+        }, '✕'),
       ),
     ),
 
-    // ===== ブレッドクラム =====
-    currentPath && e(Breadcrumb, { filePath: currentPath, onNavigate: dir => navigate(dir, currentPath) }),
-
-    // ===== 検索ボックス =====
-    e('div', { style: { padding: '5px 6px', flexShrink: 0 } },
-      e('input', {
-        type:        'text',
-        placeholder: 'フィルター...',
-        value:       search,
-        onChange:    ev => setSearch(ev.target.value),
+    // ─── ツールバー ───
+    e('div', {
+      style: {
+        display: 'flex', alignItems: 'center', gap: '8px',
+        padding: '5px 12px', background: S.bgBar,
+        borderBottom: '1px solid ' + S.border, flexShrink: 0,
+      },
+    },
+      // ファイルパス
+      fileInfo
+        ? e('span', {
+            title: fileInfo.path,
+            style: { flex: 1, fontSize: S.fontXs, color: S.textDim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+          }, fileInfo.path)
+        : e('span', { style: { flex: 1 } }),
+      saveErr && e('span', { style: { fontSize: S.fontSm, color: S.error } }, '⚠ ' + saveErr),
+      // 保存ボタン
+      e('button', {
+        onClick: doSave, disabled: !modified || saving, title: 'Ctrl + S',
         style: {
-          width:        '100%',
-          boxSizing:    'border-box',
-          background:   'rgba(255,255,255,0.06)',
-          border:       '1px solid rgba(255,255,255,0.12)',
-          borderRadius: '5px',
-          padding:      '4px 8px',
+          background:   modified && !saving ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.05)',
+          border:       modified && !saving ? '1px solid rgba(99,102,241,0.6)' : '1px solid rgba(255,255,255,0.1)',
+          borderRadius: '5px', padding: '4px 14px',
           fontSize:     S.fontSm,
-          color:        S.text,
-          outline:      'none',
+          color:        modified && !saving ? '#c7d2fe' : S.textDim,
+          cursor:       modified && !saving ? 'pointer' : 'default',
+          transition:   'all 0.15s', whiteSpace: 'nowrap',
+        },
+      }, saving ? '保存中...' : modified ? '保存  Ctrl+S' : '保存済み'),
+    ),
+
+    // ─── エディタ本体 ───
+    e('div', { style: { flex: 1, position: 'relative', overflow: 'hidden' } },
+      // ファイル未選択
+      !fileInfo && e('div', {
+        style: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' },
+      },
+        e('div', { style: { textAlign: 'center', color: S.textDim } },
+          e('div', { style: { fontSize: '52px', marginBottom: '16px' } }, '📄'),
+          e('div', { style: { fontSize: '14px' } }, 'ファイルが選択されていません'),
+          e('div', { style: { fontSize: S.fontSm, marginTop: '8px' } },
+            '左のファイルブラウザからファイルを選択してください'),
+        ),
+      ),
+      // テキストエリア
+      fileInfo && e('textarea', {
+        value: text,
+        onChange: ev => { setText(ev.target.value); setModified(true); setSaveErr(null); },
+        spellCheck: false,
+        autoComplete: 'off', autoCorrect: 'off', autoCapitalize: 'off',
+        style: {
+          position: 'absolute', inset: 0, width: '100%', height: '100%',
+          background: 'transparent', border: 'none', outline: 'none', resize: 'none',
+          padding: '14px 18px', fontSize: '13px', lineHeight: '1.65',
+          fontFamily: S.mono, color: 'rgba(255,255,255,0.88)',
+          boxSizing: 'border-box', tabSize: 2,
         },
       }),
     ),
 
-    // ===== ファイルリスト =====
+    // ─── ステータスバー ───
     e('div', {
-      style: { flex: 1, overflowY: 'auto', padding: '2px 4px' },
+      style: {
+        display: 'flex', alignItems: 'center', gap: '14px',
+        padding: '0 12px', height: '22px',
+        background: S.accent, fontSize: S.fontXs, color: 'rgba(255,255,255,0.9)',
+        flexShrink: 0,
+      },
     },
-      loading && e('div', {
-        style: { textAlign: 'center', padding: '24px', color: S.textMuted, fontSize: S.fontSm },
-      }, '読み込み中...'),
-
-      error && e('div', {
-        style: { margin: '8px', padding: '8px', background: S.errorBg, borderRadius: '5px', fontSize: S.fontSm, color: S.errorText },
-      }, '⚠ ', error),
-
-      !loading && !error && visibleItems.length === 0 && e('div', {
-        style: { textAlign: 'center', padding: '24px', color: S.textDim, fontSize: S.fontSm },
-      }, search ? '一致なし' : 'フォルダが空です'),
-
-      !loading && visibleItems.map(item =>
-        e(FileRow, {
-          key:          item.path,
-          item,
-          onNavigate:   dir => navigate(dir, currentPath),
-          onInsertPath,
-          onPreview:    it => setPreview(it),
-        }),
-      ),
+      e('span', { style: { flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+        fileName || ''),
+      fileInfo && e('span', null, lineCount + ' 行'),
+      fileInfo && e('span', null, charCount + ' 文字'),
+      ext && e('span', null, ext.slice(1).toUpperCase()),
+      e('span', { style: { fontWeight: modified ? '600' : 'normal' } },
+        modified ? '● 未保存' : '保存済み'),
     ),
-
-    // ===== フッター（件数）=====
-    currentPath && e('div', {
-      style: {
-        padding:     '4px 8px',
-        fontSize:    S.fontXs,
-        color:       S.textDim,
-        borderTop:   '1px solid ' + S.border,
-        flexShrink:  0,
-        whiteSpace:  'nowrap',
-        overflow:    'hidden',
-      },
-    }, `${folderCount} フォルダ・${fileCount} ファイル`),
-
-    // ===== プレビューモーダル =====
-    preview && e(PreviewModal, {
-      item:    preview,
-      api,
-      onClose: () => setPreview(null),
-    }),
-
-    // ===== コピー通知 =====
-    notification && e('div', {
-      style: {
-        position:     'absolute',
-        bottom:       '36px',
-        left:         '50%',
-        transform:    'translateX(-50%)',
-        background:   'rgba(30,30,50,0.95)',
-        border:       '1px solid rgba(99,102,241,0.4)',
-        borderRadius: '6px',
-        padding:      '5px 12px',
-        fontSize:     S.fontSm,
-        color:        S.accent,
-        whiteSpace:   'nowrap',
-        pointerEvents: 'none',
-      },
-    }, notification),
   );
 }
 
 // ===== エクスポート =====
 export default {
-  sidebarPanels: {
-    browser: FileBrowserPanel,
-  },
+  sidebarPanels: { browser: FileBrowserPanel },
+  pages:         { editor:  FileEditorPage  },
 };

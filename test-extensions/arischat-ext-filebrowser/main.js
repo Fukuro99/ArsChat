@@ -9,6 +9,9 @@ const os   = require('os');
 const path = require('path');
 const fs   = require('fs');
 
+// 現在エディタで開いているファイル情報（セッション中保持）
+let currentOpenFile = null;
+
 function activate(ctx) {
 
   // ===== ホームディレクトリ =====
@@ -24,27 +27,16 @@ function activate(ctx) {
           'wmic logicaldisk get name',
           { timeout: 4000 },
           (err, stdout) => {
-            if (err) {
-              resolve([{ path: 'C:\\', name: 'C:' }]);
-              return;
-            }
-            const drives = stdout
-              .trim()
-              .split('\n')
-              .slice(1)
-              .map(l => l.trim())
-              .filter(l => /^[A-Z]:$/.test(l))
+            if (err) { resolve([{ path: 'C:\\', name: 'C:' }]); return; }
+            const drives = stdout.trim().split('\n').slice(1)
+              .map(l => l.trim()).filter(l => /^[A-Z]:$/.test(l))
               .map(d => ({ path: d + '\\', name: d }));
             resolve(drives.length > 0 ? drives : [{ path: 'C:\\', name: 'C:' }]);
           },
         );
       });
     }
-    // macOS / Linux
-    return [
-      { path: '/',            name: '/'  },
-      { path: os.homedir(),   name: '~'  },
-    ];
+    return [{ path: '/', name: '/' }, { path: os.homedir(), name: '~' }];
   });
 
   // ===== フォルダ選択ダイアログ =====
@@ -66,33 +58,67 @@ function activate(ctx) {
       const entries = fs.readdirSync(dirPath, { withFileTypes: true });
       const items = entries.map(entry => {
         const fullPath = path.join(dirPath, entry.name);
-        let size  = null;
-        let mtime = null;
+        let size = null, mtime = null;
         try {
           const st = fs.statSync(fullPath);
           size  = entry.isFile() ? st.size : null;
           mtime = st.mtimeMs;
-        } catch { /* アクセス不可のエントリは無視 */ }
+        } catch { /* アクセス不可は無視 */ }
         return {
-          name:  entry.name,
-          path:  fullPath,
-          isDir: entry.isDirectory(),
+          name:   entry.name,
+          path:   fullPath,
+          isDir:  entry.isDirectory(),
           isFile: entry.isFile(),
-          ext:   entry.isFile() ? path.extname(entry.name).toLowerCase() : '',
+          ext:    entry.isFile() ? path.extname(entry.name).toLowerCase() : '',
           size,
           mtime,
         };
       });
-
-      // フォルダ優先・名前順
       items.sort((a, b) => {
         if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
         return a.name.localeCompare(b.name, 'ja');
       });
-
       return { success: true, items, dirPath };
     } catch (err) {
       return { success: false, error: err.message, items: [], dirPath };
+    }
+  });
+
+  // ===== ファイルを開いてエディタに読み込む =====
+  ctx.ipc.handle('open-file', async ({ filePath, maxBytes = 5242880 /* 5 MB */ }) => {
+    try {
+      const st = fs.statSync(filePath);
+      if (st.size > maxBytes) {
+        return {
+          success: false,
+          error: `ファイルが大きすぎます (${(st.size / 1048576).toFixed(1)} MB)`,
+        };
+      }
+      const content = fs.readFileSync(filePath, 'utf-8');
+      currentOpenFile = { path: filePath, content, size: st.size };
+      return { success: true, path: filePath, content, size: st.size };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // ===== 現在開いているファイルを取得 =====
+  ctx.ipc.handle('get-current-file', async () => {
+    if (!currentOpenFile) return { success: false };
+    return { success: true, ...currentOpenFile };
+  });
+
+  // ===== ファイルを保存 =====
+  ctx.ipc.handle('save-file', async ({ filePath, content }) => {
+    try {
+      fs.writeFileSync(filePath, content, 'utf-8');
+      // キャッシュも更新
+      if (currentOpenFile && currentOpenFile.path === filePath) {
+        currentOpenFile.content = content;
+      }
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
     }
   });
 
@@ -102,20 +128,6 @@ function activate(ctx) {
       const { shell } = require('electron');
       await shell.openPath(targetPath);
       return { success: true };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
-  });
-
-  // ===== テキストファイル読み込み（プレビュー用・上限 64 KB）=====
-  ctx.ipc.handle('read-file', async ({ filePath, maxBytes = 65536 }) => {
-    try {
-      const st = fs.statSync(filePath);
-      if (st.size > maxBytes) {
-        return { success: false, error: `ファイルが大きすぎます (${(st.size / 1024).toFixed(0)} KB)`, size: st.size };
-      }
-      const content = fs.readFileSync(filePath, 'utf-8');
-      return { success: true, content, size: st.size };
     } catch (err) {
       return { success: false, error: err.message };
     }
