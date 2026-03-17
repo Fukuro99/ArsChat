@@ -3,10 +3,18 @@ import React from 'react';
 interface TitleBarProps {
   onMenuClick: () => void;
   onSettingsClick: () => void;
+  onRightPanelClick: () => void;
+  rightPanelOpen: boolean;
   currentPage: string;
 }
 
-export default function TitleBar({ onMenuClick, onSettingsClick, currentPage }: TitleBarProps) {
+export default function TitleBar({
+  onMenuClick,
+  onSettingsClick,
+  onRightPanelClick,
+  rightPanelOpen,
+  currentPage,
+}: TitleBarProps) {
   return (
     <div className="titlebar-drag h-10 bg-aria-bg-light border-b border-aria-border flex items-center justify-between px-3 select-none shrink-0">
       {/* 左側: メニュー + タイトル */}
@@ -14,7 +22,7 @@ export default function TitleBar({ onMenuClick, onSettingsClick, currentPage }: 
         <button
           onClick={onMenuClick}
           className="titlebar-no-drag w-7 h-7 flex items-center justify-center rounded hover:bg-aria-surface transition-colors"
-          title="メニュー"
+          title="サイドバーを開閉"
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-aria-text-muted">
             <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
@@ -30,6 +38,21 @@ export default function TitleBar({ onMenuClick, onSettingsClick, currentPage }: 
 
       {/* 右側: 操作ボタン */}
       <div className="flex items-center gap-1 titlebar-no-drag">
+        {/* 右パネルトグル */}
+        <button
+          onClick={onRightPanelClick}
+          className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
+            rightPanelOpen ? 'bg-aria-primary/20 text-aria-primary' : 'hover:bg-aria-surface text-aria-text-muted'
+          }`}
+          title="右パネルを開閉"
+        >
+          {/* panel-right アイコン */}
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="1" y="1" width="12" height="12" rx="1.5"/>
+            <line x1="9" y1="1" x2="9" y2="13"/>
+          </svg>
+        </button>
+
         <button
           onClick={onSettingsClick}
           className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${

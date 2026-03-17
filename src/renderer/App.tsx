@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import TitleBar from './components/TitleBar';
 import ChatWindow from './components/ChatWindow';
 import Settings from './components/Settings';
+import ActivityBar from './components/ActivityBar';
 import Sidebar from './components/Sidebar';
+import RightPanel from './components/RightPanel';
 import WidgetOverlay from './components/WidgetOverlay';
 import { loadExtensions, type LoadedExtension } from './extension-loader';
 
-type Page = 'chat' | 'settings' | string; // string で ext:{id}:{pageId} を受け入れ
+type Page = 'chat' | 'settings' | string;
 
 export default function App() {
   const params = new URLSearchParams(window.location.search);
@@ -17,23 +19,64 @@ export default function App() {
   }
 
   const [currentPage, setCurrentPage] = useState<Page>('chat');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // アクティビティバーの選択状態（null = コンテンツパネルを閉じる）
+  const [activePanelId, setActivePanelId] = useState<string | null>('history');
+  // アクティビティバー自体の表示（hamburger で toggle）
+  const [activityBarVisible, setActivityBarVisible] = useState(true);
+  const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [settingsVersion, setSettingsVersion] = useState(0);
   const [extensions, setExtensions] = useState<LoadedExtension[]>([]);
+  // サイドパネルの幅（px）
+  const [sidePanelWidth, setSidePanelWidth] = useState(240);
+  const [rightPanelWidth, setRightPanelWidth] = useState(288);
+
+  /** 汎用リサイズハンドラ生成 */
+  const makeResizeHandler = useCallback(
+    (
+      currentWidth: number,
+      setWidth: (w: number) => void,
+      direction: 'right' | 'left' = 'right',
+      min = 160,
+      max = 600,
+    ) =>
+      (e: React.MouseEvent) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const startW = currentWidth;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+
+        const onMove = (ev: MouseEvent) => {
+          const delta = direction === 'right'
+            ? ev.clientX - startX
+            : startX - ev.clientX;
+          setWidth(Math.min(max, Math.max(min, startW + delta)));
+        };
+        const onUp = () => {
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+      },
+    [],
+  );
+
+  const handleResizeStart = makeResizeHandler(sidePanelWidth, setSidePanelWidth, 'right', 160, 480);
+  const handleRightResizeStart = makeResizeHandler(rightPanelWidth, setRightPanelWidth, 'left', 200, 600);
 
   useEffect(() => {
-    // 起動時にアクティブセッションを取得
     window.arisChatAPI.getActiveSession?.().then((sessionId) => {
       if (sessionId) setCurrentSessionId(sessionId);
     });
 
-    // メインプロセスからのナビゲーション指示
     const cleanupNav = window.arisChatAPI.onNavigate((page) => {
       setCurrentPage(page as Page);
     });
 
-    // ウィジェットからのセッション切り替え通知
     const cleanupSession = window.arisChatAPI.onActiveSessionChanged?.((sessionId) => {
       if (sessionId) setCurrentSessionId(sessionId);
     });
@@ -44,12 +87,23 @@ export default function App() {
     };
   }, []);
 
-  // 拡張機能のロード（起動時 & 設定変更後）
   useEffect(() => {
     loadExtensions(setCurrentPage)
       .then(setExtensions)
       .catch((err) => console.error('[App] 拡張のロードに失敗:', err));
   }, [settingsVersion]);
+
+  // アクティビティアイコンをクリック → 同じなら閉じる、別なら切り替える
+  const handleSelectPanel = (id: string) => {
+    setActivePanelId((prev) => (prev === id ? null : id));
+  };
+
+  // サイドバーナビリンク（ブリーフケースアイコンを出すかどうかの判定用）
+  const hasNavExtensions = extensions.some((ext) =>
+    (ext.info.manifest.pages ?? []).some(
+      (p) => p.sidebar !== false && !p.sidebarPanel && !p.rightPanel,
+    ),
+  );
 
   // 現在のページを描画
   function renderPage() {
@@ -78,7 +132,6 @@ export default function App() {
       );
     }
 
-    // 拡張ページ: "ext:{extId}:{pageId}"
     const extMatch = currentPage.match(/^ext:(.+?):(.+)$/);
     if (extMatch) {
       const [, extId, pageId] = extMatch;
@@ -86,7 +139,6 @@ export default function App() {
       const PageComponent = ext?.pages[pageId];
 
       if (PageComponent) {
-        // api は extension-loader 側で bind 済み（null を渡しても上書きされない）
         return <PageComponent api={null as any} />;
       }
 
@@ -106,7 +158,6 @@ export default function App() {
       );
     }
 
-    // フォールバック
     return (
       <ChatWindow
         sessionId={currentSessionId}
@@ -121,41 +172,96 @@ export default function App() {
 
   return (
     <div className="h-screen flex flex-col bg-aria-bg">
-      {/* カスタムタイトルバー */}
       <TitleBar
-        onMenuClick={() => setSidebarOpen(!sidebarOpen)}
-        onSettingsClick={() => setCurrentPage(currentPage === 'settings' ? 'chat' : 'settings')}
+        onMenuClick={() => setActivityBarVisible((v) => !v)}
+        onSettingsClick={() =>
+          setCurrentPage(currentPage === 'settings' ? 'chat' : 'settings')
+        }
+        onRightPanelClick={() => setRightPanelOpen((v) => !v)}
+        rightPanelOpen={rightPanelOpen}
         currentPage={currentPage}
       />
 
-      <div className="flex-1 flex overflow-hidden relative">
-        {/* サイドバー */}
-        {sidebarOpen && (
-          <Sidebar
-            currentSessionId={currentSessionId}
-            currentPage={currentPage}
+      <div className="flex-1 flex overflow-hidden">
+        {/* アクティビティバー（細いアイコン列） */}
+        <div
+          className={`shrink-0 overflow-hidden transition-all duration-200 ${
+            activityBarVisible ? 'w-12' : 'w-0'
+          }`}
+        >
+          <ActivityBar
+            activePanelId={activePanelId}
             extensions={extensions}
-            onSelectSession={(id) => {
-              setCurrentSessionId(id);
-              window.arisChatAPI.setActiveSession?.(id);
-              setSidebarOpen(false);
-            }}
+            hasNavExtensions={hasNavExtensions}
             onNewSession={() => {
               setCurrentSessionId(null);
               window.arisChatAPI.setActiveSession?.(null);
-              setSidebarOpen(false);
+              setCurrentPage('chat');
             }}
-            onNavigate={(page) => {
-              setCurrentPage(page);
-              setSidebarOpen(false);
-            }}
-            onClose={() => setSidebarOpen(false)}
+            onSelectPanel={handleSelectPanel}
           />
-        )}
+        </div>
+
+        {/* サイドコンテンツパネル（選択中のアクティビティのコンテンツ） */}
+        <div
+          className="flex-none overflow-hidden border-r border-aria-border flex"
+          style={
+            activityBarVisible && activePanelId
+              ? { width: sidePanelWidth, transition: 'none' }
+              : { width: 0, transition: 'width 0.2s' }
+          }
+        >
+          {activePanelId && (
+            <>
+              <div className="h-full flex-1 min-w-0 overflow-hidden bg-aria-bg-light">
+                <Sidebar
+                  activePanelId={activePanelId}
+                  currentSessionId={currentSessionId}
+                  currentPage={currentPage}
+                  extensions={extensions}
+                  onSelectSession={(id) => {
+                    setCurrentSessionId(id);
+                    window.arisChatAPI.setActiveSession?.(id);
+                  }}
+                  onNewSession={() => {
+                    setCurrentSessionId(null);
+                    window.arisChatAPI.setActiveSession?.(null);
+                    setCurrentPage('chat');
+                  }}
+                  onNavigate={(page) => setCurrentPage(page)}
+                />
+              </div>
+              {/* リサイズハンドル（右端） */}
+              <div
+                onMouseDown={handleResizeStart}
+                className="w-1 flex-none cursor-col-resize hover:bg-aria-primary/40 active:bg-aria-primary/60 transition-colors"
+              />
+            </>
+          )}
+        </div>
 
         {/* メインコンテンツ */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           {renderPage()}
+        </div>
+
+        {/* 右パネル */}
+        <div
+          className="flex-none overflow-hidden flex"
+          style={
+            rightPanelOpen
+              ? { width: rightPanelWidth, transition: 'none' }
+              : { width: 0, transition: 'width 0.2s' }
+          }
+        >
+          {/* リサイズハンドル（左端） */}
+          <div
+            onMouseDown={handleRightResizeStart}
+            className="w-1 flex-none cursor-col-resize hover:bg-aria-primary/40 active:bg-aria-primary/60 transition-colors border-l border-aria-border"
+          />
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <RightPanel extensions={extensions} />
+          </div>
         </div>
       </div>
     </div>

@@ -36,10 +36,14 @@ export interface ExtensionRendererAPI {
 
 export interface LoadedExtension {
   info: ExtensionInfo;
-  /** pages.{pageId}: React コンポーネント */
+  /** pages.{pageId}: React コンポーネント（フルページ） */
   pages: Record<string, React.ComponentType<{ api: ExtensionRendererAPI }>>;
   /** settings.{panelId}: React コンポーネント */
   settings: Record<string, React.ComponentType<{ api: ExtensionRendererAPI }>>;
+  /** sidebarPanels.{pageId}: 左サイドバー内インラインパネル */
+  sidebarPanels: Record<string, React.ComponentType<{ api: ExtensionRendererAPI }>>;
+  /** rightPanels.{pageId}: 右パネルのタブコンテンツ */
+  rightPanels: Record<string, React.ComponentType<{ api: ExtensionRendererAPI }>>;
 }
 
 // ===== ローダー =====
@@ -103,29 +107,33 @@ ${result.code}
     URL.revokeObjectURL(blobUrl);
   }
 
-  // デフォルトエクスポートから pages / settings を取得
+  // デフォルトエクスポートから pages / settings / sidebarPanels / rightPanels を取得
   const defaultExport = mod.default ?? mod;
   const pages: Record<string, React.ComponentType<any>> = defaultExport?.pages ?? {};
   const settings: Record<string, React.ComponentType<any>> = defaultExport?.settings ?? {};
+  const sidebarPanels: Record<string, React.ComponentType<any>> = defaultExport?.sidebarPanels ?? {};
+  const rightPanels: Record<string, React.ComponentType<any>> = defaultExport?.rightPanels ?? {};
 
   // ExtensionRendererAPI を生成
   const api = createRendererAPI(info, onNavigate);
 
   // API を各コンポーネントに bind した Wrapper を作る
-  const boundPages: Record<string, React.ComponentType<any>> = {};
-  for (const [pageId, Component] of Object.entries(pages)) {
-    boundPages[pageId] = (props: any) => React.createElement(Component, { ...props, api });
-  }
-
-  const boundSettings: Record<string, React.ComponentType<any>> = {};
-  for (const [panelId, Component] of Object.entries(settings)) {
-    boundSettings[panelId] = (props: any) => React.createElement(Component, { ...props, api });
+  function bindAll(
+    map: Record<string, React.ComponentType<any>>,
+  ): Record<string, React.ComponentType<any>> {
+    const bound: Record<string, React.ComponentType<any>> = {};
+    for (const [id, Component] of Object.entries(map)) {
+      bound[id] = (props: any) => React.createElement(Component, { ...props, api });
+    }
+    return bound;
   }
 
   return {
     info,
-    pages: boundPages,
-    settings: boundSettings,
+    pages: bindAll(pages),
+    settings: bindAll(settings),
+    sidebarPanels: bindAll(sidebarPanels),
+    rightPanels: bindAll(rightPanels),
   };
 }
 

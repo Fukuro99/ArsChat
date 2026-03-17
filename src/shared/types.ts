@@ -320,8 +320,10 @@ export type ExtensionPermission =
 export interface ExtensionPageDef {
   id: string;
   title: string;
-  icon: string;    // 絵文字 or Lucide icon名
-  sidebar?: boolean; // サイドバーに表示するか（デフォルト true）
+  icon: string;           // 絵文字 or Lucide icon名
+  sidebar?: boolean;      // 左サイドバーのナビリンクに表示するか（デフォルト true）
+  sidebarPanel?: boolean; // 左サイドバー内にインラインパネルとして描画するか
+  rightPanel?: boolean;   // 右パネルのタブとして描画するか
 }
 
 /** 拡張機能の設定パネル定義 */
