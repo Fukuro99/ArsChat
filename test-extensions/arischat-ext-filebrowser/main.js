@@ -47,6 +47,19 @@ function activate(ctx) {
     ];
   });
 
+  // ===== フォルダ選択ダイアログ =====
+  ctx.ipc.handle('open-folder-dialog', async () => {
+    const { dialog } = require('electron');
+    const result = await dialog.showOpenDialog({
+      title:      'フォルダを開く',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (!result.canceled && result.filePaths.length > 0) {
+      return { success: true, path: result.filePaths[0] };
+    }
+    return { success: false, path: null };
+  });
+
   // ===== ディレクトリ一覧 =====
   ctx.ipc.handle('list-dir', async ({ dirPath }) => {
     try {

@@ -417,6 +417,15 @@ function FileBrowserPanel({ api }) {
     },
       e(IconBtn, { onClick: goBack, disabled: history.length === 0, title: '戻る' }, '←'),
       e(IconBtn, { onClick: goUp,   title: '上のフォルダへ' }, '↑'),
+      // フォルダを開く（システムダイアログ）
+      e(IconBtn, {
+        onClick: () => {
+          api.ipc.invoke('open-folder-dialog').then(res => {
+            if (res.success && res.path) navigate(res.path, currentPath);
+          });
+        },
+        title: 'フォルダを開く...',
+      }, '📂'),
       e(IconBtn, {
         onClick: () => currentPath && navigate(currentPath, null),
         title:   '更新',
