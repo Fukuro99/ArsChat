@@ -1,0 +1,22 @@
+{
+  "name": "arischat-ext-sysmon",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "echo renderer.js is pre-built, skipping"
+  },
+  "arischat": {
+    "displayName": "システムモニター",
+    "icon": "💻",
+    "permissions": [],
+    "main": "main.js",
+    "renderer": "dist/renderer.js",
+    "pages": [
+      {
+        "id": "sysmon",
+        "title": "システムリソース",
+        "icon": "💻",
+        "rightPanel": true
+      }
+    ]
+  }
+}
