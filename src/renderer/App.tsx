@@ -6,15 +6,19 @@ import ActivityBar from './components/ActivityBar';
 import Sidebar from './components/Sidebar';
 import RightPanel from './components/RightPanel';
 import WidgetOverlay from './components/WidgetOverlay';
-import { loadExtensions, type LoadedExtension } from './extension-loader';
+import { loadExtensions, type LoadedExtension, type OpenTabOptions } from './extension-loader';
 
 // ===== タブ型 =====
 interface AppTab {
-  id: string;       // ページ文字列をそのまま ID として使う
-  page: string;     // 'chat' | 'settings' | 'ext:{id}:{pageId}'
+  id: string;               // ユニーク ID（通常は page 文字列、動的タブは 'ext:{id}:{tabId}'）
+  page: string;             // 'chat' | 'settings' | 'ext:{id}:{pageId or tabId}'
   label: string;
   icon?: string;
   closable: boolean;
+  /** openTab で作られた動的タブ：実際に使うコンポーネントの pageId */
+  pageComponentId?: string;
+  /** openTab で作られた動的タブ：コンポーネントに渡す tabId prop */
+  tabId?: string;
 }
 
 export default function App() {
@@ -85,6 +89,37 @@ export default function App() {
   // 拡張コンポーネントから呼ばれるので安定した参照を渡す
   useEffect(() => { navigateRef.current = navigate; });
   const stableNavigate = useCallback((page: string) => navigateRef.current(page), []);
+
+  // ===== openExtTab（拡張からの動的タブ生成） =====
+  const openExtTabRef = useRef<(options: OpenTabOptions) => void>(() => {});
+
+  function openExtTab(options: OpenTabOptions) {
+    const fullId = `ext:${options.extId}:${options.id}`;
+    setTabs((prev) => {
+      const existing = prev.find((t) => t.id === fullId);
+      if (existing) {
+        setActiveTabId(fullId);
+        return prev;
+      }
+      const newTab: AppTab = {
+        id: fullId,
+        page: fullId,
+        label: options.label,
+        icon: options.icon,
+        closable: true,
+        pageComponentId: options.pageId,
+        tabId: options.id,
+      };
+      setActiveTabId(fullId);
+      return [...prev, newTab];
+    });
+  }
+
+  useEffect(() => { openExtTabRef.current = openExtTab; });
+  const stableOpenExtTab = useCallback(
+    (options: OpenTabOptions) => openExtTabRef.current(options),
+    [],
+  );
 
   // ===== closeTab =====
   function closeTab(id: string) {
@@ -157,7 +192,7 @@ export default function App() {
 
   // ===== 拡張ロード =====
   useEffect(() => {
-    loadExtensions(stableNavigate)
+    loadExtensions(stableNavigate, stableOpenExtTab)
       .then(setExtensions)
       .catch((err) => console.error('[App] 拡張のロードに失敗:', err));
   }, [settingsVersion]);
@@ -230,8 +265,12 @@ export default function App() {
     if (m) {
       const [, extId, pageId] = m;
       const ext = extensions.find((e) => e.info.id === extId);
-      const PageComponent = ext?.pages[pageId];
-      if (PageComponent) return <PageComponent api={null as any} />;
+      // openTab で作られた動的タブは pageComponentId を優先して使う
+      const componentId = tab.pageComponentId ?? pageId;
+      const PageComponent = ext?.pages[componentId];
+      if (PageComponent) {
+        return <PageComponent api={null as any} tabId={tab.tabId ?? pageId} />;
+      }
 
       return (
         <div className="flex-1 flex items-center justify-center text-aria-text-muted">

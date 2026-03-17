@@ -1,55 +1,12 @@
 // arischat-ext-filebrowser / dist/renderer.js
-// Multi-tab file editor with VS Code-style tree view
+// ファイル単位でメインタブバーにタブを開くファイルブラウザ
 
-// ===== Module-scope shared store (tabs state) =====
-const store = {
-  tabs: [],      // { path, name, content, originalContent, modified }
-  activeIdx: -1,
-  _listeners: new Set(),
-  notify() { this._listeners.forEach(fn => fn()); },
-  sub(fn) { this._listeners.add(fn); return () => this._listeners.delete(fn); },
+// ===== ファイルデータストア（tabId → ファイル初期データ） =====
+// openTab 呼び出し時にデータを格納し、FileViewerPage が初期化時に読む
+const pendingFiles = new Map();
+// tabId → { path, name, content, originalContent }
 
-  openFile(path, name, content) {
-    // Already open? just activate it
-    const existing = this.tabs.findIndex(t => t.path === path);
-    if (existing >= 0) {
-      this.activeIdx = existing;
-      this.notify();
-      return;
-    }
-    this.tabs.push({ path, name, content, originalContent: content, modified: false });
-    this.activeIdx = this.tabs.length - 1;
-    this.notify();
-  },
-
-  closeTab(idx) {
-    this.tabs.splice(idx, 1);
-    if (this.tabs.length === 0) {
-      this.activeIdx = -1;
-    } else if (this.activeIdx >= this.tabs.length) {
-      this.activeIdx = this.tabs.length - 1;
-    } else if (this.activeIdx > idx) {
-      this.activeIdx -= 1;
-    }
-    this.notify();
-  },
-
-  setContent(idx, content) {
-    if (!this.tabs[idx]) return;
-    this.tabs[idx].content = content;
-    this.tabs[idx].modified = content !== this.tabs[idx].originalContent;
-    this.notify();
-  },
-
-  markSaved(idx) {
-    if (!this.tabs[idx]) return;
-    this.tabs[idx].originalContent = this.tabs[idx].content;
-    this.tabs[idx].modified = false;
-    this.notify();
-  },
-};
-
-// ===== Styles =====
+// ===== スタイル定数 =====
 const S = {
   panel: { display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', fontFamily:'sans-serif', fontSize:13 },
   toolbar: { display:'flex', alignItems:'center', gap:4, padding:'6px 8px', borderBottom:'1px solid var(--aria-border,#2a2a2a)', flexShrink:0 },
@@ -68,7 +25,7 @@ function treeRowStyle(depth, selected, hover) {
   };
 }
 
-// ===== File type helpers =====
+// ===== ファイル種別ヘルパー =====
 const EXT_ICONS = {
   js:'📄', ts:'📄', tsx:'⚛️', jsx:'⚛️', json:'📋', md:'📝',
   html:'🌐', css:'🎨', scss:'🎨', py:'🐍', rs:'🦀', go:'🐹',
@@ -100,7 +57,7 @@ function fmtSize(bytes) {
   return `${(bytes/1048576).toFixed(1)} MB`;
 }
 
-// ===== TreeRow component =====
+// ===== TreeRow コンポーネント =====
 function TreeRow({ row, selectedPath, onExpand, onFileClick, onCopyPath }) {
   const [hover, setHover] = useState(false);
   const { item, depth } = row;
@@ -133,11 +90,11 @@ function TreeRow({ row, selectedPath, onExpand, onFileClick, onCopyPath }) {
   );
 }
 
-// ===== FileBrowserPanel (sidebarPanel) =====
+// ===== FileBrowserPanel（sidebarPanel）=====
 function FileBrowserPanel({ api }) {
   const [rootPath, setRootPath] = useState('');
-  const [treeData, setTreeData] = useState(new Map());   // path -> items[]
-  const [expanded, setExpanded] = useState(new Set());   // which dirs are open
+  const [treeData, setTreeData] = useState(new Map());   // dirPath → items[]
+  const [expanded, setExpanded] = useState(new Set());
   const [selectedPath, setSelectedPath] = useState('');
   const [loading, setLoading] = useState(false);
   const [drives, setDrives] = useState([]);
@@ -175,7 +132,6 @@ function FileBrowserPanel({ api }) {
     if (isOpen) {
       setExpanded(prev => { const n = new Set(prev); n.delete(item.path); return n; });
     } else {
-      // Load children if not yet cached
       if (!treeData.has(item.path)) {
         const result = await api.ipc.invoke('list-dir', { dirPath: item.path });
         if (result.success) {
@@ -195,8 +151,19 @@ function FileBrowserPanel({ api }) {
     setStatusMsg('読み込み中...');
     const result = await api.ipc.invoke('open-file', { filePath: item.path });
     if (result.success) {
-      store.openFile(result.path, item.name, result.content);
-      api.navigation.goTo('editor');
+      // ファイル単位でタブを開く
+      const tabId = 'file:' + result.path;
+      pendingFiles.set(tabId, {
+        path: result.path,
+        name: item.name,
+        content: result.content,
+      });
+      api.navigation.openTab({
+        id: tabId,
+        label: item.name,
+        icon: fileIcon(item.name, false),
+        pageId: 'viewer',
+      });
       setStatusMsg(`開きました: ${item.name}`);
     } else {
       setStatusMsg('エラー: ' + result.error);
@@ -215,110 +182,92 @@ function FileBrowserPanel({ api }) {
     setStatusMsg('コピーしました: ' + p);
   }
 
-  // Flatten tree recursively
-  function flattenTree2(items, depth) {
+  // ツリーフラット化（再帰）
+  function flattenTree(items, depth) {
     const rows = [];
     for (const item of items) {
       const withFlag = { ...item, _expanded: expanded.has(item.path) };
       rows.push({ item: withFlag, depth });
       if (item.isDir && expanded.has(item.path)) {
         const children = treeData.get(item.path) ?? [];
-        rows.push(...flattenTree2(children, depth + 1));
+        rows.push(...flattenTree(children, depth + 1));
       }
     }
     return rows;
   }
 
   const rootItems = treeData.get(rootPath) ?? [];
-  const flatRows = flattenTree2(rootItems, 0);
+  const flatRows = flattenTree(rootItems, 0);
 
-  return (
-    React.createElement('div', { style: S.panel },
-      // Toolbar
-      React.createElement('div', { style: S.toolbar },
-        React.createElement('button', { style: S.btn, onClick: handleOpenFolder, title: 'フォルダを開く' }, '📂 開く'),
-        drives.length > 0
-          ? React.createElement('button', {
-              style: S.btn,
-              onClick: () => setShowDrives(v => !v),
-              title: 'ドライブを選択',
-            }, '💾')
-          : null,
-      ),
+  return React.createElement('div', { style: S.panel },
+    // ツールバー
+    React.createElement('div', { style: S.toolbar },
+      React.createElement('button', { style: S.btn, onClick: handleOpenFolder, title: 'フォルダを開く' }, '📂 開く'),
+      drives.length > 0
+        ? React.createElement('button', { style: S.btn, onClick: () => setShowDrives(v => !v), title: 'ドライブを選択' }, '💾')
+        : null,
+    ),
 
-      // Drive selector
-      showDrives
-        ? React.createElement('div', {
-            style: { borderBottom:'1px solid var(--aria-border,#2a2a2a)', padding:'4px 8px', display:'flex', flexWrap:'wrap', gap:4 }
-          },
-            drives.map(d =>
-              React.createElement('button', {
-                key: d.path,
-                style: { ...S.btn, fontSize:11 },
-                onClick: () => { loadDir(d.path); setShowDrives(false); },
-              }, d.name)
-            )
+    // ドライブセレクター
+    showDrives
+      ? React.createElement('div', { style: { borderBottom:'1px solid var(--aria-border,#2a2a2a)', padding:'4px 8px', display:'flex', flexWrap:'wrap', gap:4 } },
+          drives.map(d =>
+            React.createElement('button', {
+              key: d.path, style: { ...S.btn, fontSize:11 },
+              onClick: () => { loadDir(d.path); setShowDrives(false); },
+            }, d.name)
           )
-        : null,
+        )
+      : null,
 
-      // Current path display
-      rootPath
-        ? React.createElement('div', {
-            style: { padding:'2px 8px 4px', fontSize:11, color:'#666', borderBottom:'1px solid var(--aria-border,#2a2a2a)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }
-          }, rootPath)
-        : null,
+    // 現在パス表示
+    rootPath
+      ? React.createElement('div', { style: { padding:'2px 8px 4px', fontSize:11, color:'#666', borderBottom:'1px solid var(--aria-border,#2a2a2a)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, rootPath)
+      : null,
 
-      // Tree
-      loading
-        ? React.createElement('div', { style: { padding:16, color:'#666', fontSize:12 } }, '読み込み中...')
-        : React.createElement('div', { style: S.tree },
-            flatRows.length === 0 && rootPath
-              ? React.createElement('div', { style: { padding:16, color:'#666', fontSize:12 } }, 'フォルダが空です')
-              : flatRows.map(row =>
-                  React.createElement(TreeRow, {
-                    key: row.item.path,
-                    row,
-                    selectedPath,
-                    onExpand: handleExpand,
-                    onFileClick: handleFileClick,
-                    onCopyPath: handleCopyPath,
-                  })
-                )
-          ),
+    // ツリー
+    loading
+      ? React.createElement('div', { style: { padding:16, color:'#666', fontSize:12 } }, '読み込み中...')
+      : React.createElement('div', { style: S.tree },
+          flatRows.length === 0 && rootPath
+            ? React.createElement('div', { style: { padding:16, color:'#666', fontSize:12 } }, 'フォルダが空です')
+            : flatRows.map(row =>
+                React.createElement(TreeRow, {
+                  key: row.item.path, row, selectedPath,
+                  onExpand: handleExpand,
+                  onFileClick: handleFileClick,
+                  onCopyPath: handleCopyPath,
+                })
+              )
+        ),
 
-      // Status bar
-      React.createElement('div', { style: S.statusBar },
-        React.createElement('span', {
-          style: { overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }
-        }, statusMsg),
-      ),
-    )
+    // ステータスバー
+    React.createElement('div', { style: S.statusBar },
+      React.createElement('span', { style: { overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, statusMsg),
+    ),
   );
 }
 
-// ===== FileEditorPage (pages.editor) =====
-function FileEditorPage({ api }) {
-  const [, forceUpdate] = useState(0);
+// ===== FileViewerPage（pages.viewer）=====
+// tabId prop（例: 'file:/path/to/foo.ts'）でどのファイルを表示するか決まる
+function FileViewerPage({ api, tabId }) {
+  // マウント時に pendingFiles から初期データを取得
+  // display:none で保持されるため useState の値はタブ切り替えでも保持される
+  const initial = pendingFiles.get(tabId) ?? { path: '', name: '', content: '' };
+  const [content, setContent] = useState(initial.content);
+  const [originalContent] = useState(initial.content);
+  const [filePath] = useState(initial.path);
+  const [fileName] = useState(initial.name);
 
-  // Subscribe to store changes
-  useEffect(() => {
-    const unsub = store.sub(() => forceUpdate(n => n + 1));
-    return unsub;
-  }, []);
+  const modified = content !== originalContent;
 
-  // Ctrl+S saves current tab
+  // Ctrl+S で保存
   const saveRef = useRef(null);
   useEffect(() => {
     saveRef.current = async () => {
-      const idx = store.activeIdx;
-      const tab = store.tabs[idx];
-      if (!tab || !tab.modified) return;
-      const result = await api.ipc.invoke('save-file', { filePath: tab.path, content: tab.content });
-      if (result.success) {
-        store.markSaved(idx);
-      } else {
-        alert('保存に失敗しました: ' + result.error);
-      }
+      if (!modified || !filePath) return;
+      const result = await api.ipc.invoke('save-file', { filePath, content });
+      if (!result.success) alert('保存に失敗しました: ' + result.error);
     };
   });
 
@@ -333,139 +282,50 @@ function FileEditorPage({ api }) {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  const tabs = store.tabs;
-  const activeIdx = store.activeIdx;
-  const activeTab = tabs[activeIdx] ?? null;
-
-  function handleTabClick(idx) {
-    store.activeIdx = idx;
-    store.notify();
-  }
-
-  function handleTabClose(e, idx) {
-    e.stopPropagation();
-    if (store.tabs[idx]?.modified) {
-      if (!confirm(`「${store.tabs[idx].name}」に未保存の変更があります。閉じますか？`)) return;
-    }
-    store.closeTab(idx);
-  }
-
-  function handleContentChange(e) {
-    store.setContent(activeIdx, e.target.value);
-  }
-
-  async function handleSave() {
-    saveRef.current?.();
-  }
-
-  async function handleOpenExternal() {
-    if (!activeTab) return;
-    await api.ipc.invoke('open-external', { targetPath: activeTab.path });
-  }
-
-  // No tabs open
-  if (tabs.length === 0) {
+  if (!filePath) {
     return React.createElement('div', {
-      style: { display:'flex', flexDirection:'column', height:'100%', alignItems:'center', justifyContent:'center', color:'#666', fontSize:13 }
-    },
-      React.createElement('div', { style: { fontSize:40, marginBottom:12 } }, '📂'),
-      React.createElement('div', null, 'ファイルブラウザからファイルを開いてください'),
-      React.createElement('div', { style: { fontSize:11, marginTop:6, color:'#444' } }, '左サイドバーのファイルをクリック'),
-    );
+      style: { display:'flex', alignItems:'center', justifyContent:'center', height:'100%', color:'#666', fontSize:13 }
+    }, 'ファイルが見つかりません');
   }
 
   return React.createElement('div', {
     style: { display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', fontSize:13 }
   },
-
-    // Tab bar
+    // ツールバー
     React.createElement('div', {
-      style: {
-        display:'flex', flexShrink:0, overflowX:'auto',
-        borderBottom:'1px solid var(--aria-border,#2a2a2a)',
-        background:'var(--aria-bg,#1e1e1e)',
-      }
+      style: { display:'flex', alignItems:'center', gap:6, padding:'4px 8px', borderBottom:'1px solid var(--aria-border,#2a2a2a)', flexShrink:0, background:'var(--aria-bg-light,#252525)' }
     },
-      tabs.map((tab, idx) =>
-        React.createElement('div', {
-          key: tab.path,
-          style: {
-            display:'flex', alignItems:'center', gap:4,
-            padding:'5px 10px', cursor:'pointer', whiteSpace:'nowrap', userSelect:'none',
-            fontSize:12, flexShrink:0,
-            borderRight:'1px solid var(--aria-border,#2a2a2a)',
-            background: idx === activeIdx ? 'var(--aria-bg-light,#252525)' : 'transparent',
-            color: idx === activeIdx ? 'var(--aria-text,#ccc)' : '#666',
-            borderTop: idx === activeIdx ? '2px solid var(--aria-primary,#7c6af7)' : '2px solid transparent',
-          },
-          onClick: () => handleTabClick(idx),
-        },
-          React.createElement('span', null, tab.name + (tab.modified ? ' ●' : '')),
-          React.createElement('span', {
-            style: {
-              fontSize:10, padding:'0 3px', borderRadius:3, lineHeight:'14px', marginLeft:4,
-              color:'#888',
-            },
-            onClick: (e) => handleTabClose(e, idx),
-            title: '閉じる (未保存の場合は確認)',
-          }, '✕'),
-        )
-      )
-    ),
-
-    // Toolbar
-    React.createElement('div', {
-      style: {
-        display:'flex', alignItems:'center', gap:6, padding:'4px 8px',
-        borderBottom:'1px solid var(--aria-border,#2a2a2a)',
-        flexShrink:0, background:'var(--aria-bg-light,#252525)',
-      }
-    },
-      activeTab
-        ? React.createElement('span', {
-            style: { fontSize:11, color:'#666', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }
-          }, activeTab.path)
-        : null,
+      React.createElement('span', { style: { fontSize:11, color:'#666', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, filePath),
       React.createElement('button', {
-        style: { ...S.btnPrimary, opacity: activeTab?.modified ? 1 : 0.4, cursor: activeTab?.modified ? 'pointer' : 'default' },
-        onClick: handleSave,
+        style: { ...S.btnPrimary, opacity: modified ? 1 : 0.4, cursor: modified ? 'pointer' : 'default' },
+        onClick: () => saveRef.current?.(),
+        disabled: !modified,
         title: 'Ctrl+S',
-        disabled: !activeTab?.modified,
       }, '💾 保存'),
       React.createElement('button', {
         style: S.btn,
-        onClick: handleOpenExternal,
-        disabled: !activeTab,
+        onClick: () => api.ipc.invoke('open-external', { targetPath: filePath }),
         title: 'システムの既定アプリで開く',
       }, '↗ 外部で開く'),
     ),
 
-    // Editor textarea
-    activeTab
-      ? React.createElement('textarea', {
-          key: activeTab.path,
-          style: {
-            flex:1, resize:'none', border:'none', outline:'none',
-            background:'var(--aria-bg,#1e1e1e)', color:'var(--aria-text,#ccc)',
-            padding:16, fontFamily:'monospace', fontSize:13, lineHeight:'1.6',
-            overflowY:'auto',
-          },
-          value: activeTab.content,
-          onChange: handleContentChange,
-          spellCheck: false,
-        })
-      : null,
+    // エディタ
+    React.createElement('textarea', {
+      style: {
+        flex:1, resize:'none', border:'none', outline:'none',
+        background:'var(--aria-bg,#1e1e1e)', color:'var(--aria-text,#ccc)',
+        padding:16, fontFamily:'monospace', fontSize:13, lineHeight:'1.6',
+        overflowY:'auto',
+      },
+      value: content,
+      onChange: (e) => setContent(e.target.value),
+      spellCheck: false,
+    }),
 
-    // Status bar
+    // ステータスバー
     React.createElement('div', { style: S.statusBar },
-      React.createElement('span', null,
-        activeTab
-          ? `${activeTab.name}${activeTab.modified ? ' — 未保存の変更あり' : ' — 保存済み'}`
-          : ''
-      ),
-      React.createElement('span', null,
-        activeTab ? `${activeTab.content.split('\n').length} 行` : ''
-      ),
+      React.createElement('span', null, fileName + (modified ? ' — 未保存の変更あり' : ' — 保存済み')),
+      React.createElement('span', null, content.split('\n').length + ' 行'),
     ),
   );
 }
@@ -475,6 +335,6 @@ export default {
     browser: FileBrowserPanel,
   },
   pages: {
-    editor: FileEditorPage,
+    viewer: FileViewerPage,
   },
 };

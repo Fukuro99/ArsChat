@@ -29,6 +29,18 @@ export interface ExtensionRendererAPI {
   navigation: {
     goTo(pageId: string): void;
     goToChat(): void;
+    /**
+     * ファイル等、動的にタブを開く。
+     * id はこの拡張内でユニークな文字列（例: 'file:/path/to/foo.ts'）。
+     * pageId は renderer.js の pages.{pageId} に対応するコンポーネント。
+     * コンポーネントは props.tabId でこの id を受け取れる。
+     */
+    openTab(options: {
+      id: string;
+      label: string;
+      icon?: string;
+      pageId: string;
+    }): void;
   };
 }
 
@@ -48,12 +60,23 @@ export interface LoadedExtension {
 
 // ===== ローダー =====
 
+/** openTab コールバックのオプション型 */
+export interface OpenTabOptions {
+  extId: string;
+  id: string;
+  label: string;
+  icon?: string;
+  pageId: string;
+}
+
 /**
  * 有効な全拡張をロードして返す。
- * @param onNavigate - App.tsx の setCurrentPage に相当する関数
+ * @param onNavigate - App.tsx の navigate 関数
+ * @param onOpenTab  - App.tsx の openExtTab 関数（動的タブ生成）
  */
 export async function loadExtensions(
   onNavigate: (page: string) => void,
+  onOpenTab: (options: OpenTabOptions) => void,
 ): Promise<LoadedExtension[]> {
   const extInfoList: ExtensionInfo[] = await window.arisChatAPI.extensions.list();
   const results: LoadedExtension[] = [];
@@ -62,7 +85,7 @@ export async function loadExtensions(
     if (!info.enabled) continue;
 
     try {
-      const loaded = await loadOneExtension(info, onNavigate);
+      const loaded = await loadOneExtension(info, onNavigate, onOpenTab);
       results.push(loaded);
     } catch (err: any) {
       console.error(`[ExtensionLoader] 拡張 "${info.id}" のロードに失敗:`, err?.message);
@@ -75,6 +98,7 @@ export async function loadExtensions(
 async function loadOneExtension(
   info: ExtensionInfo,
   onNavigate: (page: string) => void,
+  onOpenTab: (options: OpenTabOptions) => void,
 ): Promise<LoadedExtension> {
   // Main Process から Renderer Entry のコードを取得
   const result = await window.arisChatAPI.extensions.readRendererCode(info.id);
@@ -115,7 +139,7 @@ ${result.code}
   const rightPanels: Record<string, React.ComponentType<any>> = defaultExport?.rightPanels ?? {};
 
   // ExtensionRendererAPI を生成
-  const api = createRendererAPI(info, onNavigate);
+  const api = createRendererAPI(info, onNavigate, onOpenTab);
 
   // API を各コンポーネントに bind した Wrapper を作る
   function bindAll(
@@ -140,6 +164,7 @@ ${result.code}
 function createRendererAPI(
   info: ExtensionInfo,
   onNavigate: (page: string) => void,
+  onOpenTab: (options: OpenTabOptions) => void,
 ): ExtensionRendererAPI {
   return {
     ipc: {
@@ -157,6 +182,7 @@ function createRendererAPI(
     navigation: {
       goTo: (pageId: string) => onNavigate(`ext:${info.id}:${pageId}`),
       goToChat: () => onNavigate('chat'),
+      openTab: (options) => onOpenTab({ extId: info.id, ...options }),
     },
   };
 }
