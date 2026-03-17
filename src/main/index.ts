@@ -1076,6 +1076,20 @@ function setupIPC(): void {
     }
   });
 
+  // --- 拡張強制リロード ---
+  ipcMain.handle(IPC_CHANNELS.EXT_RELOAD, async () => {
+    try {
+      await extensionManager.unloadAll();
+      const claude = createClaudeService(mcpManager);
+      await extensionManager.loadAll((e) =>
+        createExtensionContext(e, extensionManager.getExtensionsDir(), store, claude, mainWindow),
+      );
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
   // --- 拡張専用 IPC invoke（Renderer → Main Entry） ---
   // チャンネル名: ext:{extId}:{channel}
   // 拡張の activate() が ipcMain.handle で登録するため、ここでは追加不要。

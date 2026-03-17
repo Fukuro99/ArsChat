@@ -7,6 +7,8 @@ interface ActivityBarProps {
   hasNavExtensions: boolean;
   onNewSession: () => void;
   onSelectPanel: (id: string) => void;
+  onReloadExtensions: () => void;
+  isReloading?: boolean;
 }
 
 /** アイコンボタン */
@@ -42,6 +44,8 @@ export default function ActivityBar({
   hasNavExtensions,
   onNewSession,
   onSelectPanel,
+  onReloadExtensions,
+  isReloading = false,
 }: ActivityBarProps) {
   // sidebarPanel を持つ拡張の活動項目
   const sidebarPanelItems = extensions.flatMap((ext) =>
@@ -105,6 +109,28 @@ export default function ActivityBar({
           <span className="text-base leading-none">{item.icon}</span>
         </IconButton>
       ))}
+
+      {/* 下部：拡張リロードボタン */}
+      <div className="flex-1" />
+      <IconButton
+        title={isReloading ? '拡張機能をリロード中…' : '拡張機能をリロード'}
+        onClick={onReloadExtensions}
+      >
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={isReloading ? 'animate-spin' : ''}
+        >
+          <polyline points="23 4 23 10 17 10"/>
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+      </IconButton>
     </div>
   );
 }

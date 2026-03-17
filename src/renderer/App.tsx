@@ -27,6 +27,7 @@ export default function App() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [settingsVersion, setSettingsVersion] = useState(0);
   const [extensions, setExtensions] = useState<LoadedExtension[]>([]);
+  const [isReloadingExtensions, setIsReloadingExtensions] = useState(false);
   // サイドパネルの幅（px）
   const [sidePanelWidth, setSidePanelWidth] = useState(240);
   const [rightPanelWidth, setRightPanelWidth] = useState(288);
@@ -92,6 +93,20 @@ export default function App() {
       .then(setExtensions)
       .catch((err) => console.error('[App] 拡張のロードに失敗:', err));
   }, [settingsVersion]);
+
+  // 拡張機能を強制リロード（Main プロセス再起動 + Renderer 再ロード）
+  const handleReloadExtensions = async () => {
+    if (isReloadingExtensions) return;
+    setIsReloadingExtensions(true);
+    try {
+      await window.arisChatAPI.extensions.reload?.();
+      setSettingsVersion((v) => v + 1);
+    } catch (err) {
+      console.error('[App] 拡張リロード失敗:', err);
+    } finally {
+      setIsReloadingExtensions(false);
+    }
+  };
 
   // アクティビティアイコンをクリック → 同じなら閉じる、別なら切り替える
   const handleSelectPanel = (id: string) => {
@@ -199,6 +214,8 @@ export default function App() {
               setCurrentPage('chat');
             }}
             onSelectPanel={handleSelectPanel}
+            onReloadExtensions={handleReloadExtensions}
+            isReloading={isReloadingExtensions}
           />
         </div>
 

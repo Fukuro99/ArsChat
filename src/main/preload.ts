@@ -54,6 +54,7 @@ const IPC_CHANNELS = {
   EXT_TOGGLE: 'ext:toggle',
   EXT_UPDATE: 'ext:update',
   EXT_READ_RENDERER: 'ext:read-renderer',
+  EXT_RELOAD: 'ext:reload',
 } as const;
 const IPC_CAPTURE_IMAGE_READY = 'capture:image-ready';
 
@@ -219,6 +220,7 @@ contextBridge.exposeInMainWorld('arisChatAPI', {
     toggle: (extId: string, enabled: boolean) =>
       ipcRenderer.invoke(IPC_CHANNELS.EXT_TOGGLE, extId, enabled),
     update: (extId: string) => ipcRenderer.invoke(IPC_CHANNELS.EXT_UPDATE, extId),
+    reload: () => ipcRenderer.invoke(IPC_CHANNELS.EXT_RELOAD),
     readRendererCode: (extId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.EXT_READ_RENDERER, extId),
     /** インストール進捗リスナー */
