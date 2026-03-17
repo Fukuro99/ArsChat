@@ -1,437 +1,480 @@
-/**
- * arischat-ext-filebrowser / dist/renderer.js
- *
- * VS Code 風ツリービュー（サイドバーパネル）+ テキストエディタ（メインページ）
- *
- * extension-loader が先頭に以下を注入:
- *   const React = window.__ARISCHAT_REACT__;
- *   const { useState, useEffect, useRef, useCallback, useMemo, ... } = React;
- */
+// arischat-ext-filebrowser / dist/renderer.js
+// Multi-tab file editor with VS Code-style tree view
 
-const e = React.createElement;
+// ===== Module-scope shared store (tabs state) =====
+const store = {
+  tabs: [],      // { path, name, content, originalContent, modified }
+  activeIdx: -1,
+  _listeners: new Set(),
+  notify() { this._listeners.forEach(fn => fn()); },
+  sub(fn) { this._listeners.add(fn); return () => this._listeners.delete(fn); },
 
-// ===== スタイル定数 =====
-const S = {
-  bg:          '#1e1e2e',
-  bgDark:      '#16162a',
-  bgBar:       '#1a1a2d',
-  text:        'rgba(255,255,255,0.88)',
-  textMuted:   'rgba(255,255,255,0.50)',
-  textDim:     'rgba(255,255,255,0.28)',
-  border:      'rgba(255,255,255,0.08)',
-  hover:       'rgba(255,255,255,0.07)',
-  selected:    'rgba(99,102,241,0.32)',
-  selText:     '#a5b4fc',
-  accent:      '#6366f1',
-  accentLight: '#818cf8',
-  error:       '#f87171',
-  fontXs:      '10px',
-  fontSm:      '11px',
-  fontBase:    '12px',
-  mono:        '"Consolas", "Cascadia Code", "Fira Code", "SF Mono", monospace',
+  openFile(path, name, content) {
+    // Already open? just activate it
+    const existing = this.tabs.findIndex(t => t.path === path);
+    if (existing >= 0) {
+      this.activeIdx = existing;
+      this.notify();
+      return;
+    }
+    this.tabs.push({ path, name, content, originalContent: content, modified: false });
+    this.activeIdx = this.tabs.length - 1;
+    this.notify();
+  },
+
+  closeTab(idx) {
+    this.tabs.splice(idx, 1);
+    if (this.tabs.length === 0) {
+      this.activeIdx = -1;
+    } else if (this.activeIdx >= this.tabs.length) {
+      this.activeIdx = this.tabs.length - 1;
+    } else if (this.activeIdx > idx) {
+      this.activeIdx -= 1;
+    }
+    this.notify();
+  },
+
+  setContent(idx, content) {
+    if (!this.tabs[idx]) return;
+    this.tabs[idx].content = content;
+    this.tabs[idx].modified = content !== this.tabs[idx].originalContent;
+    this.notify();
+  },
+
+  markSaved(idx) {
+    if (!this.tabs[idx]) return;
+    this.tabs[idx].originalContent = this.tabs[idx].content;
+    this.tabs[idx].modified = false;
+    this.notify();
+  },
 };
 
-// ===== ファイルアイコン =====
+// ===== Styles =====
+const S = {
+  panel: { display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', fontFamily:'sans-serif', fontSize:13 },
+  toolbar: { display:'flex', alignItems:'center', gap:4, padding:'6px 8px', borderBottom:'1px solid var(--aria-border,#2a2a2a)', flexShrink:0 },
+  btn: { padding:'3px 8px', borderRadius:4, border:'1px solid var(--aria-border,#444)', background:'var(--aria-bg,#1e1e1e)', color:'var(--aria-text,#ccc)', cursor:'pointer', fontSize:12 },
+  btnPrimary: { padding:'3px 10px', borderRadius:4, border:'none', background:'var(--aria-primary,#7c6af7)', color:'#fff', cursor:'pointer', fontSize:12 },
+  tree: { flex:1, overflowY:'auto', overflowX:'hidden' },
+  statusBar: { padding:'2px 8px', fontSize:11, color:'var(--aria-text-muted,#666)', borderTop:'1px solid var(--aria-border,#2a2a2a)', flexShrink:0, display:'flex', justifyContent:'space-between' },
+};
+
+function treeRowStyle(depth, selected, hover) {
+  return {
+    display:'flex', alignItems:'center', padding:`2px 8px 2px ${8 + depth*16}px`,
+    cursor:'pointer', userSelect:'none', fontSize:13, gap:4,
+    background: selected ? 'rgba(124,106,247,0.2)' : hover ? 'rgba(255,255,255,0.05)' : 'transparent',
+    color: selected ? 'var(--aria-primary,#7c6af7)' : 'var(--aria-text,#ccc)',
+  };
+}
+
+// ===== File type helpers =====
 const EXT_ICONS = {
-  '.html':'🌐','.htm':'🌐','.css':'🎨','.scss':'🎨','.sass':'🎨','.less':'🎨',
-  '.js':'🟨','.jsx':'🟨','.mjs':'🟨','.cjs':'🟨',
-  '.ts':'🔷','.tsx':'🔷',
-  '.json':'📋','.yaml':'📋','.yml':'📋','.toml':'📋','.xml':'📋','.csv':'📊',
-  '.env':'🔑','.md':'📝','.txt':'📝','.rst':'📝','.pdf':'📕',
-  '.png':'🖼️','.jpg':'🖼️','.jpeg':'🖼️','.gif':'🖼️','.svg':'🖼️','.webp':'🖼️','.ico':'🖼️',
-  '.mp4':'🎬','.mov':'🎬','.avi':'🎬','.mkv':'🎬',
-  '.mp3':'🎵','.wav':'🎵','.flac':'🎵',
-  '.zip':'🗜️','.tar':'🗜️','.gz':'🗜️','.rar':'🗜️','.7z':'🗜️',
-  '.py':'🐍','.go':'🐹','.rs':'🦀','.c':'⚙️','.cpp':'⚙️','.h':'⚙️',
-  '.java':'☕','.kt':'🟣','.swift':'🍎','.rb':'💎','.php':'🐘',
-  '.sh':'📜','.bat':'📜','.ps1':'📜','.lua':'🌙',
-  '.exe':'⚙️','.dll':'⚙️','.so':'⚙️','.dmg':'💿',
-  '.ttf':'🔤','.otf':'🔤','.woff':'🔤','.woff2':'🔤',
+  js:'📄', ts:'📄', tsx:'⚛️', jsx:'⚛️', json:'📋', md:'📝',
+  html:'🌐', css:'🎨', scss:'🎨', py:'🐍', rs:'🦀', go:'🐹',
+  txt:'📄', log:'📄', sh:'⚙️', bat:'⚙️', yaml:'📋', yml:'📋',
+  toml:'📋', xml:'📋', sql:'🗄️', csv:'📊', png:'🖼️', jpg:'🖼️',
+  jpeg:'🖼️', gif:'🖼️', svg:'🖼️', ico:'🖼️', pdf:'📕',
 };
 const TEXT_EXTS = new Set([
-  '.txt','.md','.rst','.json','.yaml','.yml','.toml','.xml','.csv','.env',
-  '.js','.mjs','.cjs','.jsx','.ts','.tsx','.html','.htm','.css','.scss','.sass','.less',
-  '.py','.go','.rs','.c','.cpp','.h','.java','.kt','.rb','.php','.sh','.bat','.ps1','.lua',
-  '.svg','.gitignore','.editorconfig','.ini','.cfg','.conf','.log','.lock',
+  'js','ts','tsx','jsx','json','md','html','css','scss','py','rs','go',
+  'txt','log','sh','bat','yaml','yml','toml','xml','sql','csv','env',
+  'gitignore','gitattributes','editorconfig','prettierrc','eslintrc',
 ]);
 
-function fileIcon(ext) { return EXT_ICONS[ext] || '📄'; }
-function isText(ext)   { return TEXT_EXTS.has(ext); }
-function fmtSize(b) {
-  if (b == null) return '';
-  if (b < 1024)     return b + ' B';
-  if (b < 1048576)  return (b / 1024).toFixed(1) + ' KB';
-  return (b / 1048576).toFixed(1) + ' MB';
+function fileIcon(name, isDir) {
+  if (isDir) return '📁';
+  const ext = name.split('.').pop()?.toLowerCase() ?? '';
+  return EXT_ICONS[ext] ?? '📄';
 }
-function basename(p)   { return p.replace(/[/\\]+$/, '').split(/[/\\]/).pop() || p; }
 
-// ===== ツリーの平坦化 =====
-function flattenTree(dir, depth, treeData, expanded) {
-  const items = treeData[dir];
-  if (!items) return [];
-  const rows = [];
-  for (const item of items) {
-    rows.push({ item, depth });
-    if (item.isDir && expanded.has(item.path)) {
-      rows.push(...flattenTree(item.path, depth + 1, treeData, expanded));
+function isTextFile(name) {
+  const ext = name.split('.').pop()?.toLowerCase() ?? '';
+  return TEXT_EXTS.has(ext);
+}
+
+function fmtSize(bytes) {
+  if (bytes == null) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes/1024).toFixed(1)} KB`;
+  return `${(bytes/1048576).toFixed(1)} MB`;
+}
+
+// ===== TreeRow component =====
+function TreeRow({ row, selectedPath, onExpand, onFileClick, onCopyPath }) {
+  const [hover, setHover] = useState(false);
+  const { item, depth } = row;
+
+  return (
+    React.createElement('div', {
+      style: treeRowStyle(depth, selectedPath === item.path, hover),
+      onMouseEnter: () => setHover(true),
+      onMouseLeave: () => setHover(false),
+      onClick: () => item.isDir ? onExpand(item) : onFileClick(item),
+      title: item.path,
+    },
+      item.isDir
+        ? React.createElement('span', { style: { fontSize:10, width:12, textAlign:'center', flexShrink:0, color:'#888' } },
+            item._expanded ? '▼' : '▶')
+        : React.createElement('span', { style: { width:12, flexShrink:0 } }),
+      React.createElement('span', { style: { flexShrink:0 } }, fileIcon(item.name, item.isDir)),
+      React.createElement('span', { style: { flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, item.name),
+      item.isFile && item.size != null
+        ? React.createElement('span', { style: { fontSize:10, color:'#666', flexShrink:0 } }, fmtSize(item.size))
+        : null,
+      hover
+        ? React.createElement('span', {
+            style: { fontSize:10, padding:'1px 4px', marginLeft:4, borderRadius:3, background:'rgba(255,255,255,0.1)', flexShrink:0 },
+            onClick: (e) => { e.stopPropagation(); onCopyPath(item.path); },
+            title: 'パスをコピー',
+          }, '📋')
+        : null,
+    )
+  );
+}
+
+// ===== FileBrowserPanel (sidebarPanel) =====
+function FileBrowserPanel({ api }) {
+  const [rootPath, setRootPath] = useState('');
+  const [treeData, setTreeData] = useState(new Map());   // path -> items[]
+  const [expanded, setExpanded] = useState(new Set());   // which dirs are open
+  const [selectedPath, setSelectedPath] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [drives, setDrives] = useState([]);
+  const [showDrives, setShowDrives] = useState(false);
+  const [statusMsg, setStatusMsg] = useState('');
+
+  useEffect(() => {
+    api.ipc.invoke('get-home').then(r => {
+      if (r?.path) loadDir(r.path);
+    });
+    api.ipc.invoke('get-drives').then(r => {
+      if (Array.isArray(r)) setDrives(r);
+    });
+  }, []);
+
+  async function loadDir(dirPath) {
+    setLoading(true);
+    setRootPath(dirPath);
+    setTreeData(new Map());
+    setExpanded(new Set());
+    setSelectedPath('');
+    setStatusMsg('');
+    const result = await api.ipc.invoke('list-dir', { dirPath });
+    if (result.success) {
+      setTreeData(new Map([[dirPath, result.items]]));
+    } else {
+      setStatusMsg('エラー: ' + result.error);
+    }
+    setLoading(false);
+  }
+
+  async function handleExpand(item) {
+    setSelectedPath(item.path);
+    const isOpen = expanded.has(item.path);
+    if (isOpen) {
+      setExpanded(prev => { const n = new Set(prev); n.delete(item.path); return n; });
+    } else {
+      // Load children if not yet cached
+      if (!treeData.has(item.path)) {
+        const result = await api.ipc.invoke('list-dir', { dirPath: item.path });
+        if (result.success) {
+          setTreeData(prev => new Map([...prev, [item.path, result.items]]));
+        }
+      }
+      setExpanded(prev => new Set([...prev, item.path]));
     }
   }
-  return rows;
-}
 
-// ===== ツリー行 =====
-function TreeRow({ row, isExpanded, isSelected, onToggle, onOpen, onCopy }) {
-  const { item, depth } = row;
-  const [hov, setHov] = useState(false);
-
-  return e('div', {
-    onMouseEnter: () => setHov(true),
-    onMouseLeave: () => setHov(false),
-    onClick: () => item.isDir ? onToggle(item.path) : onOpen(item),
-    title: item.path,
-    style: {
-      display:      'flex',
-      alignItems:   'center',
-      height:       '22px',
-      paddingLeft:  (depth * 12 + (item.isDir ? 4 : 20)) + 'px',
-      paddingRight: '6px',
-      cursor:       'pointer',
-      background:   isSelected ? S.selected : hov ? S.hover : 'transparent',
-      userSelect:   'none',
-      flexShrink:   0,
-    },
-  },
-    // フォルダ矢印
-    item.isDir && e('span', {
-      style: {
-        width: '14px', flexShrink: 0, fontSize: '8px', color: S.textMuted,
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        transform: isExpanded ? 'rotate(90deg)' : 'none',
-        transition: 'transform 0.12s',
-      },
-    }, '▶'),
-    // アイコン
-    e('span', {
-      style: { fontSize: '13px', marginRight: '5px', flexShrink: 0, lineHeight: 1 },
-    }, item.isDir ? (isExpanded ? '📂' : '📁') : fileIcon(item.ext)),
-    // 名前
-    e('span', {
-      style: {
-        flex: 1, fontSize: S.fontBase,
-        color:        isSelected ? S.selText : item.isDir ? S.text : 'rgba(255,255,255,0.75)',
-        fontWeight:   isSelected ? '500' : 'normal',
-        overflow:     'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      },
-    }, item.name),
-    // ホバー時 - サイズ + パスコピー
-    hov && !item.isDir && item.size != null &&
-      e('span', { style: { fontSize: S.fontXs, color: S.textDim, marginRight: '4px', flexShrink: 0 } },
-        fmtSize(item.size)),
-    hov && e('button', {
-      onClick: ev => { ev.stopPropagation(); onCopy(item.path); },
-      title: 'パスをコピー',
-      style: {
-        background: 'rgba(99,102,241,0.3)', border: 'none', borderRadius: '3px',
-        padding: '0 4px', height: '16px', lineHeight: '16px',
-        fontSize: '10px', color: 'rgba(200,200,255,0.8)', cursor: 'pointer', flexShrink: 0,
-      },
-    }, '📋'),
-  );
-}
-
-// ===== ファイルブラウザ（サイドバーパネル）=====
-function FileBrowserPanel({ api }) {
-  const [rootPath, setRootPath] = useState(null);
-  const [treeData, setTreeData] = useState({});
-  const [expanded, setExpanded] = useState(new Set());
-  const [selected, setSelected] = useState(null);
-  const [toast,    setToast]    = useState(null);
-
-  useEffect(() => {
-    api.ipc.invoke('get-home').then(res => openRoot(res.path));
-  }, []);
-
-  function openRoot(dir) {
-    setRootPath(dir); setExpanded(new Set()); setTreeData({}); setSelected(null);
-    loadDir(dir);
-  }
-  function loadDir(dir) {
-    return api.ipc.invoke('list-dir', { dirPath: dir }).then(res => {
-      if (res.success) setTreeData(prev => ({ ...prev, [dir]: res.items }));
-      return res;
-    });
-  }
-  function toggleDir(dir) {
-    setExpanded(prev => {
-      const s = new Set(prev);
-      if (s.has(dir)) { s.delete(dir); }
-      else            { s.add(dir); if (!treeData[dir]) loadDir(dir); }
-      return s;
-    });
-  }
-  function openFile(item) {
-    if (!isText(item.ext)) { showToast('⚠ バイナリファイルは開けません'); return; }
-    setSelected(item.path);
-    api.ipc.invoke('open-file', { filePath: item.path }).then(res => {
-      if (res.success) api.navigation.goTo('editor');
-      else { showToast('⚠ ' + (res.error || '開けません')); setSelected(null); }
-    });
-  }
-  function openFolderDialog() {
-    api.ipc.invoke('open-folder-dialog').then(res => {
-      if (res.success && res.path) openRoot(res.path);
-    });
-  }
-  function refresh() {
-    if (!rootPath) return;
-    setExpanded(new Set()); setTreeData({}); loadDir(rootPath);
-  }
-  function copyPath(p) {
-    navigator.clipboard.writeText(p).then(() => showToast('📋 コピーしました')).catch(() => {});
-  }
-  function showToast(msg) {
-    setToast(msg); setTimeout(() => setToast(null), 2500);
+  async function handleFileClick(item) {
+    setSelectedPath(item.path);
+    if (!isTextFile(item.name)) {
+      setStatusMsg(`バイナリファイルは開けません: ${item.name}`);
+      return;
+    }
+    setStatusMsg('読み込み中...');
+    const result = await api.ipc.invoke('open-file', { filePath: item.path });
+    if (result.success) {
+      store.openFile(result.path, item.name, result.content);
+      api.navigation.goTo('editor');
+      setStatusMsg(`開きました: ${item.name}`);
+    } else {
+      setStatusMsg('エラー: ' + result.error);
+    }
   }
 
-  const rootName = rootPath ? basename(rootPath).toUpperCase() : 'EXPLORER';
-  const rows     = rootPath ? flattenTree(rootPath, 0, treeData, expanded) : [];
+  async function handleOpenFolder() {
+    const result = await api.ipc.invoke('open-folder-dialog');
+    if (result.success && result.path) {
+      loadDir(result.path);
+    }
+  }
 
-  return e('div', {
-    style: { display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', fontSize: S.fontBase },
-  },
-    // ─── ヘッダー ───
-    e('div', {
-      style: {
-        display: 'flex', alignItems: 'center', gap: '2px',
-        padding: '0 8px', height: '35px',
-        borderBottom: '1px solid ' + S.border, flexShrink: 0,
-      },
-    },
-      e('span', {
-        style: {
-          flex: 1, fontSize: S.fontXs, fontWeight: '700', letterSpacing: '0.06em',
-          color: S.textMuted, textTransform: 'uppercase',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        },
-        title: rootPath || '',
-      }, rootName),
-      // フォルダを開く
-      e('button', {
-        onClick: openFolderDialog, title: 'フォルダを開く...',
-        style: { background: 'none', border: 'none', borderRadius: '4px', padding: '4px 5px', fontSize: '14px', color: S.textMuted, cursor: 'pointer' },
-      }, '📂'),
-      // 更新
-      e('button', {
-        onClick: refresh, title: '更新',
-        style: { background: 'none', border: 'none', borderRadius: '4px', padding: '4px 5px', fontSize: '13px', color: S.textMuted, cursor: 'pointer' },
-      }, '↺'),
-    ),
-    // ─── ツリー ───
-    e('div', { style: { flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '4px 0' } },
-      !rootPath &&
-        e('div', { style: { padding: '24px 12px', textAlign: 'center', fontSize: S.fontSm, color: S.textDim } },
-          '📂 フォルダを開いてください'),
-      rootPath && !treeData[rootPath] &&
-        e('div', { style: { padding: '24px 12px', textAlign: 'center', fontSize: S.fontSm, color: S.textDim } },
-          '読み込み中...'),
-      rows.map(row => e(TreeRow, {
-        key:        row.item.path,
-        row,
-        isExpanded: expanded.has(row.item.path),
-        isSelected: selected === row.item.path,
-        onToggle:   toggleDir,
-        onOpen:     openFile,
-        onCopy:     copyPath,
-      })),
-    ),
-    // ─── トースト ───
-    toast && e('div', {
-      style: {
-        position: 'absolute', bottom: '12px', left: '50%', transform: 'translateX(-50%)',
-        background: 'rgba(28,28,48,0.96)', border: '1px solid rgba(99,102,241,0.45)',
-        borderRadius: '6px', padding: '5px 12px',
-        fontSize: S.fontSm, color: S.accentLight, whiteSpace: 'nowrap',
-        pointerEvents: 'none', zIndex: 10,
-      },
-    }, toast),
-  );
-}
+  function handleCopyPath(p) {
+    navigator.clipboard?.writeText(p).catch(() => {});
+    setStatusMsg('コピーしました: ' + p);
+  }
 
-// ===== エディタページ（メインコンテンツ）=====
-function FileEditorPage({ api }) {
-  const [fileInfo, setFileInfo] = useState(null);
-  const [text,     setText]     = useState('');
-  const [modified, setModified] = useState(false);
-  const [saving,   setSaving]   = useState(false);
-  const [saveErr,  setSaveErr]  = useState(null);
-
-  // stale closure 対策 refs
-  const textRef = useRef('');
-  const fileRef = useRef(null);
-  const modRef  = useRef(false);
-  useEffect(() => { textRef.current = text;     }, [text]);
-  useEffect(() => { fileRef.current = fileInfo; }, [fileInfo]);
-  useEffect(() => { modRef.current  = modified; }, [modified]);
-
-  // 現在開いているファイルをロード
-  useEffect(() => {
-    api.ipc.invoke('get-current-file').then(res => {
-      if (res.success) {
-        setFileInfo(res); setText(res.content); setModified(false); setSaveErr(null);
+  // Flatten tree recursively
+  function flattenTree2(items, depth) {
+    const rows = [];
+    for (const item of items) {
+      const withFlag = { ...item, _expanded: expanded.has(item.path) };
+      rows.push({ item: withFlag, depth });
+      if (item.isDir && expanded.has(item.path)) {
+        const children = treeData.get(item.path) ?? [];
+        rows.push(...flattenTree2(children, depth + 1));
       }
-    });
+    }
+    return rows;
+  }
+
+  const rootItems = treeData.get(rootPath) ?? [];
+  const flatRows = flattenTree2(rootItems, 0);
+
+  return (
+    React.createElement('div', { style: S.panel },
+      // Toolbar
+      React.createElement('div', { style: S.toolbar },
+        React.createElement('button', { style: S.btn, onClick: handleOpenFolder, title: 'フォルダを開く' }, '📂 開く'),
+        drives.length > 0
+          ? React.createElement('button', {
+              style: S.btn,
+              onClick: () => setShowDrives(v => !v),
+              title: 'ドライブを選択',
+            }, '💾')
+          : null,
+      ),
+
+      // Drive selector
+      showDrives
+        ? React.createElement('div', {
+            style: { borderBottom:'1px solid var(--aria-border,#2a2a2a)', padding:'4px 8px', display:'flex', flexWrap:'wrap', gap:4 }
+          },
+            drives.map(d =>
+              React.createElement('button', {
+                key: d.path,
+                style: { ...S.btn, fontSize:11 },
+                onClick: () => { loadDir(d.path); setShowDrives(false); },
+              }, d.name)
+            )
+          )
+        : null,
+
+      // Current path display
+      rootPath
+        ? React.createElement('div', {
+            style: { padding:'2px 8px 4px', fontSize:11, color:'#666', borderBottom:'1px solid var(--aria-border,#2a2a2a)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }
+          }, rootPath)
+        : null,
+
+      // Tree
+      loading
+        ? React.createElement('div', { style: { padding:16, color:'#666', fontSize:12 } }, '読み込み中...')
+        : React.createElement('div', { style: S.tree },
+            flatRows.length === 0 && rootPath
+              ? React.createElement('div', { style: { padding:16, color:'#666', fontSize:12 } }, 'フォルダが空です')
+              : flatRows.map(row =>
+                  React.createElement(TreeRow, {
+                    key: row.item.path,
+                    row,
+                    selectedPath,
+                    onExpand: handleExpand,
+                    onFileClick: handleFileClick,
+                    onCopyPath: handleCopyPath,
+                  })
+                )
+          ),
+
+      // Status bar
+      React.createElement('div', { style: S.statusBar },
+        React.createElement('span', {
+          style: { overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }
+        }, statusMsg),
+      ),
+    )
+  );
+}
+
+// ===== FileEditorPage (pages.editor) =====
+function FileEditorPage({ api }) {
+  const [, forceUpdate] = useState(0);
+
+  // Subscribe to store changes
+  useEffect(() => {
+    const unsub = store.sub(() => forceUpdate(n => n + 1));
+    return unsub;
   }, []);
 
-  // Ctrl+S / Cmd+S
+  // Ctrl+S saves current tab
+  const saveRef = useRef(null);
   useEffect(() => {
-    const handler = ev => {
-      if ((ev.ctrlKey || ev.metaKey) && ev.key === 's') { ev.preventDefault(); doSave(); }
+    saveRef.current = async () => {
+      const idx = store.activeIdx;
+      const tab = store.tabs[idx];
+      if (!tab || !tab.modified) return;
+      const result = await api.ipc.invoke('save-file', { filePath: tab.path, content: tab.content });
+      if (result.success) {
+        store.markSaved(idx);
+      } else {
+        alert('保存に失敗しました: ' + result.error);
+      }
+    };
+  });
+
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveRef.current?.();
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  function doSave() {
-    const fi = fileRef.current;
-    if (!fi || !modRef.current) return;
-    setSaving(true); setSaveErr(null);
-    api.ipc.invoke('save-file', { filePath: fi.path, content: textRef.current }).then(res => {
-      setSaving(false);
-      if (res.success) setModified(false);
-      else setSaveErr(res.error || '保存に失敗しました');
-    });
+  const tabs = store.tabs;
+  const activeIdx = store.activeIdx;
+  const activeTab = tabs[activeIdx] ?? null;
+
+  function handleTabClick(idx) {
+    store.activeIdx = idx;
+    store.notify();
   }
 
-  const fileName = fileInfo ? basename(fileInfo.path) : '';
-  const extDot   = fileName.lastIndexOf('.');
-  const ext      = extDot > 0 ? fileName.slice(extDot).toLowerCase() : '';
-  const lineCount = text ? text.split('\n').length : 0;
-  const charCount = text ? text.length : 0;
+  function handleTabClose(e, idx) {
+    e.stopPropagation();
+    if (store.tabs[idx]?.modified) {
+      if (!confirm(`「${store.tabs[idx].name}」に未保存の変更があります。閉じますか？`)) return;
+    }
+    store.closeTab(idx);
+  }
 
-  return e('div', {
-    style: { display: 'flex', flexDirection: 'column', height: '100%', background: S.bg, color: S.text },
+  function handleContentChange(e) {
+    store.setContent(activeIdx, e.target.value);
+  }
+
+  async function handleSave() {
+    saveRef.current?.();
+  }
+
+  async function handleOpenExternal() {
+    if (!activeTab) return;
+    await api.ipc.invoke('open-external', { targetPath: activeTab.path });
+  }
+
+  // No tabs open
+  if (tabs.length === 0) {
+    return React.createElement('div', {
+      style: { display:'flex', flexDirection:'column', height:'100%', alignItems:'center', justifyContent:'center', color:'#666', fontSize:13 }
+    },
+      React.createElement('div', { style: { fontSize:40, marginBottom:12 } }, '📂'),
+      React.createElement('div', null, 'ファイルブラウザからファイルを開いてください'),
+      React.createElement('div', { style: { fontSize:11, marginTop:6, color:'#444' } }, '左サイドバーのファイルをクリック'),
+    );
+  }
+
+  return React.createElement('div', {
+    style: { display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', fontSize:13 }
   },
-    // ─── タブバー ───
-    e('div', {
+
+    // Tab bar
+    React.createElement('div', {
       style: {
-        display: 'flex', alignItems: 'center',
-        background: S.bgDark, borderBottom: '1px solid ' + S.border,
-        flexShrink: 0, height: '36px', paddingLeft: '4px', gap: '2px',
-      },
+        display:'flex', flexShrink:0, overflowX:'auto',
+        borderBottom:'1px solid var(--aria-border,#2a2a2a)',
+        background:'var(--aria-bg,#1e1e1e)',
+      }
     },
-      // ← ボタン
-      e('button', {
-        onClick: () => api.navigation.goToChat(), title: 'チャットに戻る',
-        style: {
-          background: 'none', border: 'none', borderRadius: '4px', padding: '4px 8px',
-          fontSize: S.fontSm, color: S.textMuted, cursor: 'pointer',
-        },
-      }, '←'),
-      // ファイルタブ
-      fileInfo && e('div', {
-        style: {
-          display: 'flex', alignItems: 'center', gap: '6px',
-          padding: '0 12px 0 10px', height: '100%',
-          background: S.bg, borderTop: '2px solid ' + S.accentLight,
-          borderRight: '1px solid ' + S.border,
-          fontSize: S.fontBase, color: S.text, userSelect: 'none',
-        },
-      },
-        e('span', { style: { fontSize: '13px' } }, fileIcon(ext)),
-        e('span', null, modified ? fileName + ' ●' : fileName),
-        e('button', {
-          onClick: () => api.navigation.goToChat(), title: '閉じる',
+      tabs.map((tab, idx) =>
+        React.createElement('div', {
+          key: tab.path,
           style: {
-            background: 'none', border: 'none', color: S.textMuted,
-            cursor: 'pointer', fontSize: '12px', padding: '0 2px',
-            borderRadius: '3px', marginLeft: '2px',
+            display:'flex', alignItems:'center', gap:4,
+            padding:'5px 10px', cursor:'pointer', whiteSpace:'nowrap', userSelect:'none',
+            fontSize:12, flexShrink:0,
+            borderRight:'1px solid var(--aria-border,#2a2a2a)',
+            background: idx === activeIdx ? 'var(--aria-bg-light,#252525)' : 'transparent',
+            color: idx === activeIdx ? 'var(--aria-text,#ccc)' : '#666',
+            borderTop: idx === activeIdx ? '2px solid var(--aria-primary,#7c6af7)' : '2px solid transparent',
           },
-        }, '✕'),
-      ),
-    ),
-
-    // ─── ツールバー ───
-    e('div', {
-      style: {
-        display: 'flex', alignItems: 'center', gap: '8px',
-        padding: '5px 12px', background: S.bgBar,
-        borderBottom: '1px solid ' + S.border, flexShrink: 0,
-      },
-    },
-      // ファイルパス
-      fileInfo
-        ? e('span', {
-            title: fileInfo.path,
-            style: { flex: 1, fontSize: S.fontXs, color: S.textDim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-          }, fileInfo.path)
-        : e('span', { style: { flex: 1 } }),
-      saveErr && e('span', { style: { fontSize: S.fontSm, color: S.error } }, '⚠ ' + saveErr),
-      // 保存ボタン
-      e('button', {
-        onClick: doSave, disabled: !modified || saving, title: 'Ctrl + S',
-        style: {
-          background:   modified && !saving ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.05)',
-          border:       modified && !saving ? '1px solid rgba(99,102,241,0.6)' : '1px solid rgba(255,255,255,0.1)',
-          borderRadius: '5px', padding: '4px 14px',
-          fontSize:     S.fontSm,
-          color:        modified && !saving ? '#c7d2fe' : S.textDim,
-          cursor:       modified && !saving ? 'pointer' : 'default',
-          transition:   'all 0.15s', whiteSpace: 'nowrap',
+          onClick: () => handleTabClick(idx),
         },
-      }, saving ? '保存中...' : modified ? '保存  Ctrl+S' : '保存済み'),
+          React.createElement('span', null, tab.name + (tab.modified ? ' ●' : '')),
+          React.createElement('span', {
+            style: {
+              fontSize:10, padding:'0 3px', borderRadius:3, lineHeight:'14px', marginLeft:4,
+              color:'#888',
+            },
+            onClick: (e) => handleTabClose(e, idx),
+            title: '閉じる (未保存の場合は確認)',
+          }, '✕'),
+        )
+      )
     ),
 
-    // ─── エディタ本体 ───
-    e('div', { style: { flex: 1, position: 'relative', overflow: 'hidden' } },
-      // ファイル未選択
-      !fileInfo && e('div', {
-        style: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' },
-      },
-        e('div', { style: { textAlign: 'center', color: S.textDim } },
-          e('div', { style: { fontSize: '52px', marginBottom: '16px' } }, '📄'),
-          e('div', { style: { fontSize: '14px' } }, 'ファイルが選択されていません'),
-          e('div', { style: { fontSize: S.fontSm, marginTop: '8px' } },
-            '左のファイルブラウザからファイルを選択してください'),
-        ),
-      ),
-      // テキストエリア
-      fileInfo && e('textarea', {
-        value: text,
-        onChange: ev => { setText(ev.target.value); setModified(true); setSaveErr(null); },
-        spellCheck: false,
-        autoComplete: 'off', autoCorrect: 'off', autoCapitalize: 'off',
-        style: {
-          position: 'absolute', inset: 0, width: '100%', height: '100%',
-          background: 'transparent', border: 'none', outline: 'none', resize: 'none',
-          padding: '14px 18px', fontSize: '13px', lineHeight: '1.65',
-          fontFamily: S.mono, color: 'rgba(255,255,255,0.88)',
-          boxSizing: 'border-box', tabSize: 2,
-        },
-      }),
-    ),
-
-    // ─── ステータスバー ───
-    e('div', {
+    // Toolbar
+    React.createElement('div', {
       style: {
-        display: 'flex', alignItems: 'center', gap: '14px',
-        padding: '0 12px', height: '22px',
-        background: S.accent, fontSize: S.fontXs, color: 'rgba(255,255,255,0.9)',
-        flexShrink: 0,
-      },
+        display:'flex', alignItems:'center', gap:6, padding:'4px 8px',
+        borderBottom:'1px solid var(--aria-border,#2a2a2a)',
+        flexShrink:0, background:'var(--aria-bg-light,#252525)',
+      }
     },
-      e('span', { style: { flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
-        fileName || ''),
-      fileInfo && e('span', null, lineCount + ' 行'),
-      fileInfo && e('span', null, charCount + ' 文字'),
-      ext && e('span', null, ext.slice(1).toUpperCase()),
-      e('span', { style: { fontWeight: modified ? '600' : 'normal' } },
-        modified ? '● 未保存' : '保存済み'),
+      activeTab
+        ? React.createElement('span', {
+            style: { fontSize:11, color:'#666', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }
+          }, activeTab.path)
+        : null,
+      React.createElement('button', {
+        style: { ...S.btnPrimary, opacity: activeTab?.modified ? 1 : 0.4, cursor: activeTab?.modified ? 'pointer' : 'default' },
+        onClick: handleSave,
+        title: 'Ctrl+S',
+        disabled: !activeTab?.modified,
+      }, '💾 保存'),
+      React.createElement('button', {
+        style: S.btn,
+        onClick: handleOpenExternal,
+        disabled: !activeTab,
+        title: 'システムの既定アプリで開く',
+      }, '↗ 外部で開く'),
+    ),
+
+    // Editor textarea
+    activeTab
+      ? React.createElement('textarea', {
+          key: activeTab.path,
+          style: {
+            flex:1, resize:'none', border:'none', outline:'none',
+            background:'var(--aria-bg,#1e1e1e)', color:'var(--aria-text,#ccc)',
+            padding:16, fontFamily:'monospace', fontSize:13, lineHeight:'1.6',
+            overflowY:'auto',
+          },
+          value: activeTab.content,
+          onChange: handleContentChange,
+          spellCheck: false,
+        })
+      : null,
+
+    // Status bar
+    React.createElement('div', { style: S.statusBar },
+      React.createElement('span', null,
+        activeTab
+          ? `${activeTab.name}${activeTab.modified ? ' — 未保存の変更あり' : ' — 保存済み'}`
+          : ''
+      ),
+      React.createElement('span', null,
+        activeTab ? `${activeTab.content.split('\n').length} 行` : ''
+      ),
     ),
   );
 }
 
-// ===== エクスポート =====
 export default {
-  sidebarPanels: { browser: FileBrowserPanel },
-  pages:         { editor:  FileEditorPage  },
+  sidebarPanels: {
+    browser: FileBrowserPanel,
+  },
+  pages: {
+    editor: FileEditorPage,
+  },
 };
