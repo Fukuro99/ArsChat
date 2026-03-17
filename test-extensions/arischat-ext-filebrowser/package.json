@@ -1,0 +1,24 @@
+{
+  "name": "arischat-ext-filebrowser",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "echo renderer.js is pre-built, skipping"
+  },
+  "arischat": {
+    "id": "arischat-ext-filebrowser",
+    "displayName": "ファイルブラウザ",
+    "description": "ファイルシステムを閲覧・パスをチャットに挿入できる拡張機能",
+    "version": "1.0.0",
+    "main": "main.js",
+    "renderer": "dist/renderer.js",
+    "pages": [
+      {
+        "id": "browser",
+        "title": "ファイルブラウザ",
+        "icon": "📂",
+        "sidebarPanel": true
+      }
+    ],
+    "permissions": []
+  }
+}
