@@ -48,7 +48,7 @@ function activate(ctx) {
   });
 
   // ===== ディレクトリ一覧 =====
-  ctx.ipc.handle('list-dir', async (_event, { dirPath }) => {
+  ctx.ipc.handle('list-dir', async ({ dirPath }) => {
     try {
       const entries = fs.readdirSync(dirPath, { withFileTypes: true });
       const items = entries.map(entry => {
@@ -84,7 +84,7 @@ function activate(ctx) {
   });
 
   // ===== システムのデフォルトアプリで開く =====
-  ctx.ipc.handle('open-external', async (_event, { targetPath }) => {
+  ctx.ipc.handle('open-external', async ({ targetPath }) => {
     try {
       const { shell } = require('electron');
       await shell.openPath(targetPath);
@@ -95,7 +95,7 @@ function activate(ctx) {
   });
 
   // ===== テキストファイル読み込み（プレビュー用・上限 64 KB）=====
-  ctx.ipc.handle('read-file', async (_event, { filePath, maxBytes = 65536 }) => {
+  ctx.ipc.handle('read-file', async ({ filePath, maxBytes = 65536 }) => {
     try {
       const st = fs.statSync(filePath);
       if (st.size > maxBytes) {
