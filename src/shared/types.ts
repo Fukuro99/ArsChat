@@ -100,6 +100,7 @@ export function getEffectiveSystemPrompt(
   settings: ArisChatSettings,
   skills?: Skill[],
   fileBrowserState?: FileBrowserState,
+  openFilePaths?: string[],
 ): string {
   const dateTime = currentDateTimeTag();
 
@@ -114,22 +115,23 @@ export function getEffectiveSystemPrompt(
   let fileBrowserSection = '';
   if (fileBrowserState?.rootPath) {
     fileBrowserSection = `\n\n## 現在の作業ディレクトリ\n\n作業フォルダ: \`${fileBrowserState.rootPath}\``;
-    if (fileBrowserState.expandedPaths && fileBrowserState.expandedPaths.length > 0) {
-      const dirs = fileBrowserState.expandedPaths
-        .map((p) => `- \`${p}\``)
-        .join('\n');
-      fileBrowserSection += `\n\n展開中のファイル:\n${dirs}`;
-    }
+  }
+
+  // 開いているファイルの注入
+  let openFilesSection = '';
+  if (openFilePaths && openFilePaths.length > 0) {
+    const list = openFilePaths.map((p) => `- \`${p}\``).join('\n');
+    openFilesSection = `\n\n## 開いているファイル\n\n${list}`;
   }
 
   if (settings.activePersonaId) {
     const persona = settings.personas.find((p) => p.id === settings.activePersonaId);
     if (persona) {
       const namePrefix = `あなたの名前は「${persona.name}」です。\n\n`;
-      return namePrefix + persona.systemPrompt + skillsSection + fileBrowserSection + `\n\n現在日時: ${dateTime}`;
+      return namePrefix + persona.systemPrompt + skillsSection + fileBrowserSection + openFilesSection + `\n\n現在日時: ${dateTime}`;
     }
   }
-  return settings.systemPrompt + skillsSection + fileBrowserSection + `\n\n現在日時: ${dateTime}`;
+  return settings.systemPrompt + skillsSection + fileBrowserSection + openFilesSection + `\n\n現在日時: ${dateTime}`;
 }
 
 /** アクティブな人格のアバターパスを返す */

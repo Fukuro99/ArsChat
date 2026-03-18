@@ -438,6 +438,12 @@ export default function App() {
   // ===== タブコンテンツ描画 =====
   function renderTabContent(tab: AppTab) {
     if (tab.page === 'chat') {
+      // 全ペインの開いているファイルタブのパスを収集（'fb:' プレフィックスを除去）
+      const openFilePaths = panes
+        .flatMap((p) => p.tabs)
+        .map((t) => t.id)
+        .filter((id) => id.startsWith('fb:'))
+        .map((id) => id.slice('fb:'.length));
       return (
         <ChatWindow
           sessionId={currentSessionId}
@@ -446,6 +452,7 @@ export default function App() {
             window.arisChatAPI.setActiveSession?.(id);
           }}
           settingsVersion={settingsVersion}
+          openFilePaths={openFilePaths}
         />
       );
     }

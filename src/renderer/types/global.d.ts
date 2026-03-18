@@ -14,7 +14,7 @@ declare global {
   interface Window {
     arisChatAPI: {
       // チャット
-      sendMessage: (messages: ChatMessage[], sessionId: string, options?: { thinkMode?: boolean }) => void;
+      sendMessage: (messages: ChatMessage[], sessionId: string, options?: { thinkMode?: boolean; openFilePaths?: string[] }) => void;
       onStreamChunk: (callback: (chunk: string) => void) => () => void;
       onStreamEnd: (callback: (stats: ChatMessageStats) => void) => () => void;
       onStreamError: (callback: (error: string) => void) => () => void;
