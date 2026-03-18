@@ -632,6 +632,8 @@ function setupIPC(): void {
       : [];
     const skills = [...builtinSkills, ...personaSkills];
 
+    const fileBrowserState = store.getFileBrowserState();
+
     try {
       await claude.streamChat(
         settings,
@@ -644,6 +646,7 @@ function setupIPC(): void {
         },
         {
           thinkMode: payload.thinkMode ?? false,
+          fileBrowserState: fileBrowserState.rootPath ? fileBrowserState : undefined,
           skillContext: skills.length > 0 ? {
             skills,
             getContent: (skillId: string) =>
