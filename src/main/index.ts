@@ -1029,6 +1029,8 @@ function setupIPC(): void {
       await extensionManager.loadAll((e) =>
         createExtensionContext(e, extensionManager.getExtensionsDir(), store, claude, mainWindow),
       );
+      // レンダラーへ変更を通知
+      mainWindow?.webContents.send('ext:changed');
       return { success: true, entry };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -1039,6 +1041,8 @@ function setupIPC(): void {
   ipcMain.handle(IPC_CHANNELS.EXT_UNINSTALL, async (_e, extId: string) => {
     try {
       await extensionManager.uninstall(extId);
+      // レンダラーへ変更を通知
+      mainWindow?.webContents.send('ext:changed');
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -1049,6 +1053,13 @@ function setupIPC(): void {
   ipcMain.handle(IPC_CHANNELS.EXT_TOGGLE, async (_e, extId: string, enabled: boolean) => {
     try {
       await extensionManager.toggle(extId, enabled);
+      // 切り替え後にメインプロセスの拡張を再ロードし、レンダラーへ通知
+      await extensionManager.unloadAll();
+      const claude = createClaudeService(mcpManager);
+      await extensionManager.loadAll((e) =>
+        createExtensionContext(e, extensionManager.getExtensionsDir(), store, claude, mainWindow),
+      );
+      mainWindow?.webContents.send('ext:changed');
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -1061,6 +1072,13 @@ function setupIPC(): void {
       await extensionManager.update(extId, (progress) => {
         event.sender.send('ext:install-progress', progress);
       });
+      // 更新後にメインプロセスの拡張を再ロードし、レンダラーへ通知
+      await extensionManager.unloadAll();
+      const claude = createClaudeService(mcpManager);
+      await extensionManager.loadAll((e) =>
+        createExtensionContext(e, extensionManager.getExtensionsDir(), store, claude, mainWindow),
+      );
+      mainWindow?.webContents.send('ext:changed');
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };

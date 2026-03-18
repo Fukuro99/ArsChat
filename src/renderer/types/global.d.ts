@@ -85,6 +85,9 @@ declare global {
         send: (extId: string, channel: string, data?: any) => void;
       };
 
+      // 拡張機能変更通知
+      onExtChanged?: (callback: () => void) => () => void;
+
       // ナビゲーション
       onNavigate: (callback: (page: string) => void) => () => void;
       onCapturedImage: (callback: (imageBase64: string) => void) => () => void;

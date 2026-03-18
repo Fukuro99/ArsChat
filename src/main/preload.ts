@@ -244,6 +244,13 @@ contextBridge.exposeInMainWorld('arisChatAPI', {
       ipcRenderer.send(`ext:${extId}:${channel}`, data),
   },
 
+  // === 拡張機能変更通知 ===
+  onExtChanged: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('ext:changed', handler);
+    return () => ipcRenderer.removeListener('ext:changed', handler);
+  },
+
   // === ナビゲーション ===
   onNavigate: (callback: (page: string) => void) => {
     const handler = (_: any, page: string) => callback(page);

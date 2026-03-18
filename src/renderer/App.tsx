@@ -348,9 +348,15 @@ export default function App() {
       if (sessionId) setCurrentSessionId(sessionId);
     });
 
+    // 拡張機能の変更（インストール・有効化・無効化・更新）を自動検知してリロード
+    const cleanupExtChanged = window.arisChatAPI.onExtChanged?.(() => {
+      setSettingsVersion((v) => v + 1);
+    });
+
     return () => {
       cleanupNav();
       cleanupSession?.();
+      cleanupExtChanged?.();
     };
   }, []);
 
