@@ -555,7 +555,7 @@ export default function App() {
           panes={panes}
           activePaneId={activePaneId}
           dragging={dragging}
-          onTabClose={closeTab}
+          onTabClose={(_paneId, tabId) => closeTab(tabId)}
           onTabActivate={(paneId, tabId) => {
             setActivePaneId(paneId);
             setPanes((prev) =>
