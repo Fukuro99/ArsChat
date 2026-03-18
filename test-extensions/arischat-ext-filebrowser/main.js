@@ -90,6 +90,24 @@ function activate(ctx) {
     try { const { shell } = require('electron'); await shell.openPath(targetPath); return { success: true }; }
     catch (err) { return { success: false, error: err.message }; }
   });
+
+  // ===== vscode-icons SVG データ提供 =====
+  // microsoft/vscode-icons (codicons) の dark テーマアイコンを返す
+  ctx.ipc.handle('get-vscode-icons', async () => {
+    const iconsDir = path.join(__dirname, 'icons');
+    const iconNames = [
+      'file', 'file-code', 'file-media', 'file-pdf',
+      'file-binary', 'file-zip',
+      'folder', 'folder-opened',
+    ];
+    const result = {};
+    for (const name of iconNames) {
+      try {
+        result[name] = fs.readFileSync(path.join(iconsDir, `${name}.svg`), 'utf-8');
+      } catch { /* アイコンが存在しない場合はスキップ */ }
+    }
+    return result;
+  });
 }
 
 module.exports = { activate };

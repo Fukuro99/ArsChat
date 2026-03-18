@@ -5,6 +5,9 @@
 // ===== ファイルデータストア（tabId → ファイル初期データ） =====
 const pendingFiles = new Map();
 
+// ===== vscode-icons SVG キャッシュ（iconName → data URL）=====
+const vsIcons = {};
+
 // ===== スタイル定数 =====
 const S = {
   panel:      { display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', fontFamily:'sans-serif', fontSize:13 },
@@ -79,6 +82,66 @@ function fileIcon(name, isDir) {
   return EXT_ICONS[ext] ?? '📄';
 }
 
+// ===== vscode-icons アイコン名マッピング（拡張子 → codicon 名）=====
+const EXT_ICON_NAMES = {
+  // コード・スクリプト
+  js:'file-code', mjs:'file-code', cjs:'file-code',
+  ts:'file-code', tsx:'file-code', jsx:'file-code',
+  json:'file-code', jsonc:'file-code',
+  md:'file-code', markdown:'file-code',
+  html:'file-code', htm:'file-code',
+  css:'file-code', scss:'file-code', sass:'file-code', less:'file-code',
+  py:'file-code', rb:'file-code', php:'file-code',
+  java:'file-code', cs:'file-code',
+  cpp:'file-code', c:'file-code', h:'file-code', hpp:'file-code',
+  rs:'file-code', go:'file-code', swift:'file-code',
+  kt:'file-code', kts:'file-code', dart:'file-code',
+  r:'file-code', lua:'file-code', ex:'file-code', exs:'file-code',
+  sh:'file-code', bash:'file-code', zsh:'file-code',
+  ps1:'file-code', bat:'file-code', cmd:'file-code',
+  yaml:'file-code', yml:'file-code', toml:'file-code',
+  xml:'file-code', sql:'file-code',
+  graphql:'file-code', gql:'file-code',
+  // メディア
+  png:'file-media', jpg:'file-media', jpeg:'file-media',
+  gif:'file-media', svg:'file-media', ico:'file-media',
+  webp:'file-media', bmp:'file-media',
+  mp4:'file-media', mov:'file-media', avi:'file-media', mkv:'file-media',
+  mp3:'file-media', wav:'file-media', ogg:'file-media', flac:'file-media',
+  // PDF
+  pdf:'file-pdf',
+  // アーカイブ
+  zip:'file-zip', tar:'file-zip', gz:'file-zip',
+  rar:'file-zip', '7z':'file-zip', bz2:'file-zip', xz:'file-zip',
+  // バイナリ
+  exe:'file-binary', dll:'file-binary', so:'file-binary',
+  bin:'file-binary', wasm:'file-binary',
+};
+
+// アイコン名を解決する（isDir + 開閉状態を考慮）
+function resolveIconName(name, isDir, expanded) {
+  if (isDir) return expanded ? 'folder-opened' : 'folder';
+  const ext = name.split('.').pop()?.toLowerCase() ?? '';
+  return EXT_ICON_NAMES[ext] ?? 'file';
+}
+
+// vscode-icons SVG の <img> 要素を返す。未ロード時は絵文字にフォールバック
+function renderFileIconEl(name, isDir, expanded) {
+  const iconName = resolveIconName(name, isDir, expanded);
+  const svgUrl = vsIcons[iconName];
+  if (svgUrl) {
+    return React.createElement('img', {
+      src: svgUrl,
+      width: 16, height: 16,
+      style: { flexShrink:0, display:'block', opacity:0.85 },
+      alt: '',
+    });
+  }
+  // フォールバック: 絵文字
+  const emoji = isDir ? '📁' : (EXT_ICONS[name.split('.').pop()?.toLowerCase() ?? ''] ?? '📄');
+  return React.createElement('span', { style: { flexShrink:0 } }, emoji);
+}
+
 function isTextFile(name) {
   const ext = name.split('.').pop()?.toLowerCase() ?? '';
   return TEXT_EXTS.has(ext);
@@ -116,7 +179,7 @@ function TreeRow({ row, selectedPath, onExpand, onFileClick, onCopyPath }) {
         ? React.createElement('span', { style: { fontSize:10, width:12, textAlign:'center', flexShrink:0, color:'#888' } },
             item._expanded ? '▼' : '▶')
         : React.createElement('span', { style: { width:12, flexShrink:0 } }),
-      React.createElement('span', { style: { flexShrink:0 } }, fileIcon(item.name, item.isDir)),
+      renderFileIconEl(item.name, item.isDir, item._expanded),
       React.createElement('span', { style: { flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, item.name),
       item.isFile && item.size != null
         ? React.createElement('span', { style: { fontSize:10, color:'#666', flexShrink:0 } }, fmtSize(item.size))
@@ -142,8 +205,18 @@ function FileBrowserPanel({ api }) {
   const [drives, setDrives] = useState([]);
   const [showDrives, setShowDrives] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
+  const [, setIconsLoaded] = useState(false); // アイコンロード完了で再レンダリングを発火
 
   useEffect(() => {
+    // vscode-icons SVG をロードしてキャッシュ
+    api.ipc.invoke('get-vscode-icons').then(result => {
+      if (result && typeof result === 'object') {
+        Object.entries(result).forEach(([name, svg]) => {
+          vsIcons[name] = 'data:image/svg+xml,' + encodeURIComponent(svg);
+        });
+        setIconsLoaded(true); // 再レンダリングをトリガー
+      }
+    });
     api.ipc.invoke('get-home').then(r => {
       if (r?.path) loadDir(r.path);
     });
