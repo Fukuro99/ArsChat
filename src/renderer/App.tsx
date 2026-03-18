@@ -6,20 +6,9 @@ import ActivityBar from './components/ActivityBar';
 import Sidebar from './components/Sidebar';
 import RightPanel from './components/RightPanel';
 import WidgetOverlay from './components/WidgetOverlay';
+import PaneGroup from './components/PaneGroup';
 import { loadExtensions, type LoadedExtension, type OpenTabOptions } from './extension-loader';
-
-// ===== タブ型 =====
-interface AppTab {
-  id: string;               // ユニーク ID（通常は page 文字列、動的タブは 'ext:{id}:{tabId}'）
-  page: string;             // 'chat' | 'settings' | 'ext:{id}:{pageId or tabId}'
-  label: string;
-  icon?: string;
-  closable: boolean;
-  /** openTab で作られた動的タブ：実際に使うコンポーネントの pageId */
-  pageComponentId?: string;
-  /** openTab で作られた動的タブ：コンポーネントに渡す tabId prop */
-  tabId?: string;
-}
+import type { AppTab, DragState, Pane } from './types/app';
 
 export default function App() {
   const params = new URLSearchParams(window.location.search);
@@ -30,10 +19,12 @@ export default function App() {
   }
 
   // ===== State =====
-  const [tabs, setTabs] = useState<AppTab[]>([
-    { id: 'chat', page: 'chat', label: 'チャット', icon: '💬', closable: false },
+  const initialTab: AppTab = { id: 'chat', page: 'chat', label: 'チャット', icon: '💬', closable: false };
+  const [panes, setPanes] = useState<Pane[]>([
+    { id: 'pane-1', tabs: [initialTab], activeTabId: 'chat' },
   ]);
-  const [activeTabId, setActiveTabId] = useState<string>('chat');
+  const [activePaneId, setActivePaneId] = useState<string>('pane-1');
+  const [dragging, setDragging] = useState<DragState | null>(null);
 
   // アクティビティバーの選択状態（null = コンテンツパネルを閉じる）
   const [activePanelId, setActivePanelId] = useState<string | null>('history');
@@ -48,8 +39,20 @@ export default function App() {
   const [sidePanelWidth, setSidePanelWidth] = useState(240);
   const [rightPanelWidth, setRightPanelWidth] = useState(288);
 
-  // ===== 現在ページ（後方互換・Sidebar に渡す用） =====
-  const currentPage = tabs.find((t) => t.id === activeTabId)?.page ?? 'chat';
+  // ===== Refs（安定した参照用） =====
+  const extensionsRef = useRef<LoadedExtension[]>(extensions);
+  useEffect(() => { extensionsRef.current = extensions; }, [extensions]);
+
+  const activePaneIdRef = useRef<string>(activePaneId);
+  useEffect(() => { activePaneIdRef.current = activePaneId; }, [activePaneId]);
+
+  const panesRef = useRef<Pane[]>(panes);
+  useEffect(() => { panesRef.current = panes; }, [panes]);
+
+  // ===== 現在ページ（後方互換・Sidebar/TitleBar に渡す用） =====
+  const activePane = panes.find((p) => p.id === activePaneId) ?? panes[0];
+  const activeTab = activePane?.tabs.find((t) => t.id === activePane.activeTabId);
+  const currentPage = activeTab?.page ?? 'chat';
 
   // ===== ページラベル・アイコン取得 =====
   function getTabMeta(page: string, exts: LoadedExtension[]): { label: string; icon?: string } {
@@ -66,27 +69,32 @@ export default function App() {
   }
 
   // ===== navigate（タブを開く or 切り替え） =====
-  // extensions を最新状態で参照するために ref 経由にする
-  const extensionsRef = useRef<LoadedExtension[]>(extensions);
-  useEffect(() => { extensionsRef.current = extensions; }, [extensions]);
-
   const navigateRef = useRef<(page: string) => void>(() => {});
 
   function navigate(page: string) {
-    setTabs((prev) => {
-      const existing = prev.find((t) => t.page === page);
-      if (existing) {
-        setActiveTabId(existing.id);
-        return prev;
+    setPanes((prev) => {
+      // すでにいずれかのペインにあれば切り替え
+      for (const pane of prev) {
+        const existing = pane.tabs.find((t) => t.page === page);
+        if (existing) {
+          setActivePaneId(pane.id);
+          return prev.map((p) =>
+            p.id === pane.id ? { ...p, activeTabId: existing.id } : p,
+          );
+        }
       }
+      // アクティブペインに新規タブを追加
+      const currentPaneId = activePaneIdRef.current;
       const { label, icon } = getTabMeta(page, extensionsRef.current);
       const newTab: AppTab = { id: page, page, label, icon, closable: page !== 'chat' };
-      setActiveTabId(newTab.id);
-      return [...prev, newTab];
+      return prev.map((p) =>
+        p.id === currentPaneId
+          ? { ...p, tabs: [...p.tabs, newTab], activeTabId: newTab.id }
+          : p,
+      );
     });
   }
 
-  // 拡張コンポーネントから呼ばれるので安定した参照を渡す
   useEffect(() => { navigateRef.current = navigate; });
   const stableNavigate = useCallback((page: string) => navigateRef.current(page), []);
 
@@ -95,12 +103,18 @@ export default function App() {
 
   function openExtTab(options: OpenTabOptions) {
     const fullId = `ext:${options.extId}:${options.id}`;
-    setTabs((prev) => {
-      const existing = prev.find((t) => t.id === fullId);
-      if (existing) {
-        setActiveTabId(fullId);
-        return prev;
+    setPanes((prev) => {
+      // すでにいずれかのペインにあれば切り替え
+      for (const pane of prev) {
+        const existing = pane.tabs.find((t) => t.id === fullId);
+        if (existing) {
+          setActivePaneId(pane.id);
+          return prev.map((p) =>
+            p.id === pane.id ? { ...p, activeTabId: fullId } : p,
+          );
+        }
       }
+      const currentPaneId = activePaneIdRef.current;
       const newTab: AppTab = {
         id: fullId,
         page: fullId,
@@ -110,8 +124,11 @@ export default function App() {
         pageComponentId: options.pageId,
         tabId: options.id,
       };
-      setActiveTabId(fullId);
-      return [...prev, newTab];
+      return prev.map((p) =>
+        p.id === currentPaneId
+          ? { ...p, tabs: [...p.tabs, newTab], activeTabId: fullId }
+          : p,
+      );
     });
   }
 
@@ -123,18 +140,165 @@ export default function App() {
 
   // ===== closeTab =====
   function closeTab(id: string) {
-    setTabs((prev) => {
-      const idx = prev.findIndex((t) => t.id === id);
-      if (idx < 0 || !prev[idx].closable) return prev;
-      const next = prev.filter((t) => t.id !== id);
-      if (activeTabId === id) {
-        // 閉じたタブの左隣（なければ右隣）をアクティブに
-        const newActive = next[Math.max(0, idx - 1)]?.id ?? next[0]?.id ?? 'chat';
-        setActiveTabId(newActive);
-      }
-      return next;
+    setPanes((prev) => {
+      const updated = prev.map((pane) => {
+        const idx = pane.tabs.findIndex((t) => t.id === id);
+        if (idx < 0 || !pane.tabs[idx].closable) return pane;
+        const next = pane.tabs.filter((t) => t.id !== id);
+        const newActiveTabId =
+          pane.activeTabId === id
+            ? next[Math.max(0, idx - 1)]?.id ?? next[0]?.id ?? ''
+            : pane.activeTabId;
+        return { ...pane, tabs: next, activeTabId: newActiveTabId };
+      });
+      // 空になったペインは削除（最低1ペインは残す）
+      const nonEmpty = updated.filter((p) => p.tabs.length > 0);
+      return nonEmpty.length > 0 ? nonEmpty : updated;
     });
   }
+
+  // ===== ペイン操作ヘルパー =====
+
+  /** タブを別ペインに移動（同ペイン内並び替え含む） */
+  function moveTab(fromPaneId: string, toPaneId: string, tabId: string, insertIdx: number) {
+    setPanes((prev) => {
+      const fromPane = prev.find((p) => p.id === fromPaneId);
+      const toPane   = prev.find((p) => p.id === toPaneId);
+      if (!fromPane || !toPane) return prev;
+
+      const tab = fromPane.tabs.find((t) => t.id === tabId);
+      if (!tab) return prev;
+
+      // 同ペイン内並び替え
+      if (fromPaneId === toPaneId) {
+        const sourceIdx = fromPane.tabs.findIndex((t) => t.id === tabId);
+        const adjustedIdx = insertIdx > sourceIdx ? insertIdx - 1 : insertIdx;
+        if (adjustedIdx === sourceIdx) return prev;
+        const newTabs = fromPane.tabs.filter((t) => t.id !== tabId);
+        newTabs.splice(adjustedIdx, 0, tab);
+        return prev.map((p) => p.id === fromPaneId ? { ...p, tabs: newTabs } : p);
+      }
+
+      // 異なるペイン間移動
+      const fromTabIdx = fromPane.tabs.indexOf(tab);
+      const newFromTabs = fromPane.tabs.filter((t) => t.id !== tabId);
+      const newFromActiveId =
+        fromPane.activeTabId === tabId
+          ? newFromTabs[Math.max(0, fromTabIdx - 1)]?.id ?? newFromTabs[0]?.id ?? ''
+          : fromPane.activeTabId;
+
+      const newToTabs = [...toPane.tabs];
+      newToTabs.splice(Math.min(insertIdx, newToTabs.length), 0, tab);
+
+      setActivePaneId(toPaneId);
+
+      if (newFromTabs.length === 0) {
+        return prev
+          .filter((p) => p.id !== fromPaneId)
+          .map((p) => p.id === toPaneId ? { ...p, tabs: newToTabs, activeTabId: tabId } : p);
+      }
+
+      return prev.map((p) => {
+        if (p.id === fromPaneId) return { ...p, tabs: newFromTabs, activeTabId: newFromActiveId };
+        if (p.id === toPaneId)   return { ...p, tabs: newToTabs, activeTabId: tabId };
+        return p;
+      });
+    });
+  }
+
+  /** 対象ペインの左右にタブを分割して配置 */
+  function splitPaneAtTarget(
+    sourcePaneId: string,
+    targetPaneId: string,
+    tabId: string,
+    direction: 'left' | 'right',
+  ) {
+    setPanes((prev) => {
+      const sourcePane = prev.find((p) => p.id === sourcePaneId);
+      if (!sourcePane) return prev;
+      const tab = sourcePane.tabs.find((t) => t.id === tabId);
+      if (!tab) return prev;
+
+      const newPane: Pane = { id: `pane-${Date.now()}`, tabs: [tab], activeTabId: tabId };
+
+      // ソースペインからタブを除去
+      let result = prev.map((p) => {
+        if (p.id !== sourcePaneId) return p;
+        const newTabs = p.tabs.filter((t) => t.id !== tabId);
+        const newActiveId =
+          p.activeTabId === tabId
+            ? newTabs[0]?.id ?? ''
+            : p.activeTabId;
+        return { ...p, tabs: newTabs, activeTabId: newActiveId };
+      });
+
+      // 空になったソースペインを削除
+      result = result.filter((p) => p.tabs.length > 0);
+
+      // ターゲットペインの左右に挿入
+      const targetIdx = result.findIndex((p) => p.id === targetPaneId);
+      const insertAt = direction === 'right' ? targetIdx + 1 : targetIdx;
+      result.splice(insertAt < 0 ? result.length : insertAt, 0, newPane);
+
+      setActivePaneId(newPane.id);
+      return result;
+    });
+  }
+
+  // ===== ドラッグイベントハンドラ =====
+
+  const handleDragStart = useCallback(
+    (tabId: string, paneId: string, x: number, y: number) => {
+      setDragging({ tabId, sourcePaneId: paneId, currentX: x, currentY: y });
+    },
+    [],
+  );
+
+  // ドラッグ中のマウス追跡・終了
+  useEffect(() => {
+    if (!dragging) return;
+
+    const onMove = (e: MouseEvent) => {
+      setDragging((prev) =>
+        prev ? { ...prev, currentX: e.clientX, currentY: e.clientY } : null,
+      );
+    };
+    const onUp = () => setDragging(null);
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!dragging]);
+
+  const handleDropOnTabBar = useCallback(
+    (targetPaneId: string, tabId: string, insertIdx: number) => {
+      moveTab(dragging?.sourcePaneId ?? targetPaneId, targetPaneId, tabId, insertIdx);
+      setDragging(null);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dragging],
+  );
+
+  const handleDropOnContent = useCallback(
+    (targetPaneId: string, tabId: string, zone: 'left' | 'center' | 'right') => {
+      if (!dragging) return;
+      const { sourcePaneId } = dragging;
+
+      if (zone === 'center') {
+        const targetPane = panesRef.current.find((p) => p.id === targetPaneId);
+        moveTab(sourcePaneId, targetPaneId, tabId, targetPane?.tabs.length ?? 0);
+      } else {
+        splitPaneAtTarget(sourcePaneId, targetPaneId, tabId, zone);
+      }
+      setDragging(null);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dragging],
+  );
 
   // ===== リサイズハンドラ =====
   const makeResizeHandler = useCallback(
@@ -167,8 +331,8 @@ export default function App() {
     [],
   );
 
-  const handleResizeStart      = makeResizeHandler(sidePanelWidth,   setSidePanelWidth,   'right', 160, 480);
-  const handleRightResizeStart = makeResizeHandler(rightPanelWidth,  setRightPanelWidth,  'left',  200, 600);
+  const handleResizeStart      = makeResizeHandler(sidePanelWidth,  setSidePanelWidth,  'right', 160, 480);
+  const handleRightResizeStart = makeResizeHandler(rightPanelWidth, setRightPanelWidth, 'left',  200, 600);
 
   // ===== 初期化 =====
   useEffect(() => {
@@ -197,14 +361,17 @@ export default function App() {
       .catch((err) => console.error('[App] 拡張のロードに失敗:', err));
   }, [settingsVersion]);
 
-  // 拡張ロード後にタブラベルを最新化（アイコン等が取れていなかった場合）
+  // 拡張ロード後にタブラベルを最新化
   useEffect(() => {
     if (extensions.length === 0) return;
-    setTabs((prev) =>
-      prev.map((t) => {
-        const { label, icon } = getTabMeta(t.page, extensions);
-        return { ...t, label, icon };
-      }),
+    setPanes((prev) =>
+      prev.map((pane) => ({
+        ...pane,
+        tabs: pane.tabs.map((t) => {
+          const { label, icon } = getTabMeta(t.page, extensions);
+          return { ...t, label, icon };
+        }),
+      })),
     );
   }, [extensions]);
 
@@ -255,7 +422,6 @@ export default function App() {
           onBack={() => {
             setSettingsVersion((v) => v + 1);
             closeTab('settings');
-            setActiveTabId('chat');
           }}
         />
       );
@@ -265,7 +431,6 @@ export default function App() {
     if (m) {
       const [, extId, pageId] = m;
       const ext = extensions.find((e) => e.info.id === extId);
-      // openTab で作られた動的タブは pageComponentId を優先して使う
       const componentId = tab.pageComponentId ?? pageId;
       const PageComponent = ext?.pages[componentId];
       if (PageComponent) {
@@ -286,14 +451,15 @@ export default function App() {
   }
 
   // ===== 描画 =====
+  const settingsExists = panes.some((p) => p.tabs.some((t) => t.id === 'settings'));
+
   return (
     <div className="h-screen flex flex-col bg-aria-bg">
       <TitleBar
         onMenuClick={() => setActivityBarVisible((v) => !v)}
         onSettingsClick={() => {
-          if (activeTabId === 'settings') {
+          if (settingsExists) {
             closeTab('settings');
-            setActiveTabId('chat');
           } else {
             navigate('settings');
           }
@@ -317,7 +483,10 @@ export default function App() {
             onNewSession={() => {
               setCurrentSessionId(null);
               window.arisChatAPI.setActiveSession?.(null);
-              setActiveTabId('chat');
+              setActivePaneId(panes[0].id);
+              setPanes((prev) =>
+                prev.map((p, i) => (i === 0 ? { ...p, activeTabId: 'chat' } : p)),
+              );
             }}
             onSelectPanel={handleSelectPanel}
             onReloadExtensions={handleReloadExtensions}
@@ -345,12 +514,29 @@ export default function App() {
                   onSelectSession={(id) => {
                     setCurrentSessionId(id);
                     window.arisChatAPI.setActiveSession?.(id);
-                    setActiveTabId('chat');
+                    // チャットタブがあるペインをアクティブに
+                    const chatPane = panes.find((p) => p.tabs.some((t) => t.page === 'chat'));
+                    if (chatPane) {
+                      setActivePaneId(chatPane.id);
+                      setPanes((prev) =>
+                        prev.map((p) =>
+                          p.id === chatPane.id ? { ...p, activeTabId: 'chat' } : p,
+                        ),
+                      );
+                    }
                   }}
                   onNewSession={() => {
                     setCurrentSessionId(null);
                     window.arisChatAPI.setActiveSession?.(null);
-                    setActiveTabId('chat');
+                    const chatPane = panes.find((p) => p.tabs.some((t) => t.page === 'chat'));
+                    if (chatPane) {
+                      setActivePaneId(chatPane.id);
+                      setPanes((prev) =>
+                        prev.map((p) =>
+                          p.id === chatPane.id ? { ...p, activeTabId: 'chat' } : p,
+                        ),
+                      );
+                    }
                   }}
                   onNavigate={(page) => navigate(page)}
                 />
@@ -364,53 +550,24 @@ export default function App() {
           )}
         </div>
 
-        {/* メインコンテンツ（タブシステム） */}
-        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-
-          {/* タブバー */}
-          <div className="flex items-end shrink-0 bg-aria-bg-light border-b border-aria-border overflow-x-auto">
-            {tabs.map((tab) => (
-              <div
-                key={tab.id}
-                className={`
-                  group flex items-center gap-1.5 px-3 py-1.5 text-xs cursor-pointer shrink-0
-                  border-r border-aria-border select-none transition-colors
-                  ${activeTabId === tab.id
-                    ? 'bg-aria-bg text-aria-text border-t-2 border-t-aria-primary'
-                    : 'text-aria-text-muted hover:bg-aria-bg/60 hover:text-aria-text border-t-2 border-t-transparent'
-                  }
-                `}
-                onClick={() => setActiveTabId(tab.id)}
-              >
-                {tab.icon && <span className="leading-none">{tab.icon}</span>}
-                <span className="max-w-[140px] truncate">{tab.label}</span>
-                {tab.closable && (
-                  <button
-                    className="ml-0.5 w-4 h-4 flex items-center justify-center rounded opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-white/10 transition-opacity"
-                    onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
-                    title="タブを閉じる"
-                  >
-                    <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                      <line x1="1" y1="1" x2="7" y2="7"/>
-                      <line x1="7" y1="1" x2="1" y2="7"/>
-                    </svg>
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* タブコンテンツ（display:none で state を保持したまま切り替え） */}
-          {tabs.map((tab) => (
-            <div
-              key={tab.id}
-              className="flex-1 min-w-0 flex flex-col overflow-hidden"
-              style={{ display: activeTabId === tab.id ? 'flex' : 'none' }}
-            >
-              {renderTabContent(tab)}
-            </div>
-          ))}
-        </div>
+        {/* メインコンテンツ（ペイングループ） */}
+        <PaneGroup
+          panes={panes}
+          activePaneId={activePaneId}
+          dragging={dragging}
+          onTabClose={closeTab}
+          onTabActivate={(paneId, tabId) => {
+            setActivePaneId(paneId);
+            setPanes((prev) =>
+              prev.map((p) => (p.id === paneId ? { ...p, activeTabId: tabId } : p)),
+            );
+          }}
+          onPaneActivate={setActivePaneId}
+          onDragStart={handleDragStart}
+          onDropOnTabBar={handleDropOnTabBar}
+          onDropOnContent={handleDropOnContent}
+          renderContent={renderTabContent}
+        />
 
         {/* 右パネル */}
         <div
@@ -430,6 +587,22 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {/* ドラッグゴースト */}
+      {dragging && (() => {
+        const tab = panesRef.current
+          .flatMap((p) => p.tabs)
+          .find((t) => t.id === dragging.tabId);
+        return (
+          <div
+            className="fixed pointer-events-none z-50 bg-aria-bg-light border border-aria-border rounded px-3 py-1 text-xs opacity-90 shadow-lg flex items-center gap-1.5"
+            style={{ left: dragging.currentX + 12, top: dragging.currentY - 14 }}
+          >
+            {tab?.icon && <span>{tab.icon}</span>}
+            <span>{tab?.label ?? dragging.tabId}</span>
+          </div>
+        );
+      })()}
     </div>
   );
 }
