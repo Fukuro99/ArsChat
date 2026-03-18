@@ -118,7 +118,7 @@ export function getEffectiveSystemPrompt(
       const dirs = fileBrowserState.expandedPaths
         .map((p) => `- \`${p}\``)
         .join('\n');
-      fileBrowserSection += `\n\n展開中のフォルダ:\n${dirs}`;
+      fileBrowserSection += `\n\n展開中のファイル:\n${dirs}`;
     }
   }
 
