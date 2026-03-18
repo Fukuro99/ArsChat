@@ -616,6 +616,7 @@ function setupIPC(): void {
     messages: ChatMessage[];
     sessionId: string;
     thinkMode?: boolean;
+    openFilePaths?: string[];
   }) => {
     const settings = store.getSettings();
     if (settings.provider === 'anthropic' && !settings.apiKey) {
@@ -632,6 +633,8 @@ function setupIPC(): void {
       : [];
     const skills = [...builtinSkills, ...personaSkills];
 
+    const fileBrowserState = store.getFileBrowserState();
+
     try {
       await claude.streamChat(
         settings,
@@ -644,6 +647,8 @@ function setupIPC(): void {
         },
         {
           thinkMode: payload.thinkMode ?? false,
+          fileBrowserState: fileBrowserState.rootPath ? fileBrowserState : undefined,
+          openFilePaths: payload.openFilePaths && payload.openFilePaths.length > 0 ? payload.openFilePaths : undefined,
           skillContext: skills.length > 0 ? {
             skills,
             getContent: (skillId: string) =>

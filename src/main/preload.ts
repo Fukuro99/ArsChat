@@ -61,8 +61,8 @@ const IPC_CAPTURE_IMAGE_READY = 'capture:image-ready';
 // レンダラープロセスに公開するAPI
 contextBridge.exposeInMainWorld('arisChatAPI', {
   // === チャット ===
-  sendMessage: (messages: ChatMessage[], sessionId: string, options?: { thinkMode?: boolean }) => {
-    ipcRenderer.send(IPC_CHANNELS.CHAT_SEND, { messages, sessionId, thinkMode: options?.thinkMode ?? false });
+  sendMessage: (messages: ChatMessage[], sessionId: string, options?: { thinkMode?: boolean; openFilePaths?: string[] }) => {
+    ipcRenderer.send(IPC_CHANNELS.CHAT_SEND, { messages, sessionId, thinkMode: options?.thinkMode ?? false, openFilePaths: options?.openFilePaths ?? [] });
   },
   onStreamChunk: (callback: (chunk: string) => void) => {
     const handler = (_: any, chunk: string) => callback(chunk);

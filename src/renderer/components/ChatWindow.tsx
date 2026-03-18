@@ -13,6 +13,7 @@ interface ChatWindowProps {
   sessionId: string | null;
   onSessionCreated: (id: string) => void;
   settingsVersion?: number;
+  openFilePaths?: string[];
 }
 
 function readFileAsBase64(file: Blob): Promise<string> {
@@ -43,7 +44,7 @@ function getClipboardImageFile(clipboardData: DataTransfer | null): File | null 
   return file || null;
 }
 
-export default function ChatWindow({ sessionId, onSessionCreated, settingsVersion = 0 }: ChatWindowProps) {
+export default function ChatWindow({ sessionId, onSessionCreated, settingsVersion = 0, openFilePaths }: ChatWindowProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [pendingImageBase64, setPendingImageBase64] = useState<string | null>(null);
@@ -317,7 +318,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
       const truncated = prev.slice(0, idx); // このメッセージを除いたそれ以前
       setIsStreaming(true);
       setStreamingContent('');
-      window.arisChatAPI.sendMessage(truncated, currentSessionIdRef.current || '', { thinkMode });
+      window.arisChatAPI.sendMessage(truncated, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
       return truncated;
     });
   }, [thinkMode]);
@@ -336,7 +337,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
       const newMsgs = [...prev.slice(0, idx + 1), continueMsg];
       setIsStreaming(true);
       setStreamingContent('');
-      window.arisChatAPI.sendMessage(newMsgs, currentSessionIdRef.current || '', { thinkMode });
+      window.arisChatAPI.sendMessage(newMsgs, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
       return newMsgs;
     });
   }, [thinkMode]);
@@ -396,7 +397,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     setMessages(newMessages);
     setIsStreaming(true);
     setStreamingContent('');
-    window.arisChatAPI.sendMessage(newMessages, currentSessionIdRef.current || '', { thinkMode });
+    window.arisChatAPI.sendMessage(newMessages, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
   }, [messages, thinkMode]);
 
   /** ライブUIのローカルstate更新（local: true アクション用・AI送信なし） */
@@ -595,7 +596,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     setStreamingContent('');
 
     // API送信
-    window.arisChatAPI.sendMessage(newMessages, currentSessionIdRef.current || '', { thinkMode });
+    window.arisChatAPI.sendMessage(newMessages, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
   }, [input, isStreaming, messages, pendingImageBase64, screenWatchMode, thinkMode]);
 
   const handleCaptureScreen = useCallback(async () => {
