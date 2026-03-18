@@ -1,41 +1,186 @@
 // arischat-ext-filebrowser / dist/renderer.js
 // ファイル単位でメインタブバーにタブを開くファイルブラウザ
 // FileViewerPage は window.monaco（メインアプリが公開）を利用してシンタックスハイライトを実現
+// アイコン: vscode-icons/vscode-icons (SVG) を IPC 経由で取得し data URL としてキャッシュ
 
 // ===== ファイルデータストア（tabId → ファイル初期データ） =====
 const pendingFiles = new Map();
 
-// ===== vscode-icons SVG キャッシュ（iconName → data URL）=====
-const vsIcons = {};
+// ===== vscode-icons SVG キャッシュ（モジュールレベル） =====
+// IPC で一度だけ取得し、全コンポーネントで共有する
+let iconDataUrls = {};   // { 'file_type_js': 'data:image/svg+xml;base64,...', ... }
+let iconsLoaded  = false;
 
-// ===== スタイル定数 =====
-const S = {
-  panel:      { display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', fontFamily:'sans-serif', fontSize:13 },
-  toolbar:    { display:'flex', alignItems:'center', gap:4, padding:'6px 8px', borderBottom:'1px solid var(--aria-border,#2a2a2a)', flexShrink:0 },
-  btn:        { padding:'3px 8px', borderRadius:4, border:'1px solid var(--aria-border,#444)', background:'var(--aria-bg,#1e1e1e)', color:'var(--aria-text,#ccc)', cursor:'pointer', fontSize:12 },
-  btnPrimary: { padding:'3px 10px', borderRadius:4, border:'none', background:'var(--aria-primary,#7c6af7)', color:'#fff', cursor:'pointer', fontSize:12 },
-  tree:       { flex:1, overflowY:'auto', overflowX:'hidden' },
-  statusBar:  { padding:'2px 8px', fontSize:11, color:'var(--aria-text-muted,#666)', borderTop:'1px solid var(--aria-border,#2a2a2a)', flexShrink:0, display:'flex', justifyContent:'space-between' },
+// ===== 拡張子 → vscode-icons アイコン名 マッピング =====
+const EXT_ICON_FILES = {
+  // JavaScript エコシステム
+  js:       'file_type_js',
+  mjs:      'file_type_js',
+  cjs:      'file_type_js',
+  ts:       'file_type_typescript',
+  tsx:      'file_type_reactts',
+  jsx:      'file_type_reactjs',
+  // データ
+  json:     'file_type_json',
+  jsonc:    'file_type_json',
+  yaml:     'file_type_yaml',
+  yml:      'file_type_yaml',
+  toml:     'file_type_toml',
+  xml:      'file_type_xml',
+  graphql:  'file_type_graphql',
+  gql:      'file_type_graphql',
+  sql:      'file_type_sql',
+  // マークアップ
+  md:       'file_type_markdown',
+  markdown: 'file_type_markdown',
+  html:     'file_type_html',
+  htm:      'file_type_html',
+  // スタイル
+  css:      'file_type_css',
+  scss:     'file_type_scss',
+  sass:     'file_type_sass',
+  less:     'file_type_less',
+  // Python
+  py:       'file_type_python',
+  // Rust
+  rs:       'file_type_rust',
+  // Go
+  go:       'file_type_go',
+  // Ruby
+  rb:       'file_type_ruby',
+  // PHP
+  php:      'file_type_php',
+  // Java
+  java:     'file_type_java',
+  // C# / .NET
+  cs:       'file_type_csharp',
+  // C / C++
+  cpp:      'file_type_cpp',
+  cc:       'file_type_cpp',
+  cxx:      'file_type_cpp',
+  c:        'file_type_c',
+  h:        'file_type_c',
+  hpp:      'file_type_cpp',
+  hxx:      'file_type_cpp',
+  // Dart / Flutter
+  dart:     'file_type_dartlang',
+  // Kotlin
+  kt:       'file_type_kotlin',
+  kts:      'file_type_kotlin',
+  // Swift
+  swift:    'file_type_swift',
+  // Lua
+  lua:      'file_type_lua',
+  // Elixir
+  ex:       'file_type_elixir',
+  exs:      'file_type_elixir',
+  // WebAssembly
+  wasm:     'file_type_wasm',
+  // テキスト / ログ
+  txt:      'file_type_text',
+  log:      'file_type_log',
+  // シェル
+  sh:       'file_type_shell',
+  bash:     'file_type_shell',
+  zsh:      'file_type_shell',
+  bat:      'file_type_bat',
+  cmd:      'file_type_bat',
+  ps1:      'file_type_powershell',
+  // 画像
+  png:      'file_type_image',
+  jpg:      'file_type_image',
+  jpeg:     'file_type_image',
+  gif:      'file_type_image',
+  svg:      'file_type_image',
+  ico:      'file_type_image',
+  webp:     'file_type_image',
+  // ドキュメント
+  pdf:      'file_type_pdf',
+  // インフラ
+  dockerfile: 'file_type_docker',
+  // Git
+  gitignore:  'file_type_git',
+  gitattributes: 'file_type_git',
 };
 
-function treeRowStyle(depth, selected, hover) {
-  return {
-    display:'flex', alignItems:'center', padding:`2px 8px 2px ${8 + depth*16}px`,
-    cursor:'pointer', userSelect:'none', fontSize:13, gap:4,
-    background: selected ? 'rgba(124,106,247,0.2)' : hover ? 'rgba(255,255,255,0.05)' : 'transparent',
-    color: selected ? 'var(--aria-primary,#7c6af7)' : 'var(--aria-text,#ccc)',
-  };
+// 特殊ファイル名（拡張子なし）マッピング
+const FILENAME_ICON_FILES = {
+  'dockerfile':     'file_type_docker',
+  'docker-compose.yml': 'file_type_docker',
+  '.gitignore':     'file_type_git',
+  '.gitattributes': 'file_type_git',
+  '.env':           'file_type_text',
+  '.env.local':     'file_type_text',
+  '.env.production':'file_type_text',
+  '.nvmrc':         'file_type_text',
+  '.editorconfig':  'file_type_text',
+};
+
+// ===== アイコン名解決 =====
+function resolveIconName(name, isDir, isExpanded) {
+  if (isDir) return isExpanded ? 'default_folder_opened' : 'default_folder';
+  const lower = name.toLowerCase();
+  // 特殊ファイル名チェック
+  if (FILENAME_ICON_FILES[lower]) return FILENAME_ICON_FILES[lower];
+  // .env 系
+  if (lower.startsWith('.env')) return 'file_type_text';
+  // 拡張子
+  const ext = lower.includes('.') ? lower.split('.').pop() : '';
+  return EXT_ICON_FILES[ext] ?? 'default_file';
 }
 
-// ===== ファイル種別ヘルパー =====
-const EXT_ICONS = {
-  js:'📄', ts:'📄', tsx:'⚛️', jsx:'⚛️', json:'📋', md:'📝',
-  html:'🌐', css:'🎨', scss:'🎨', py:'🐍', rs:'🦀', go:'🐹',
-  txt:'📄', log:'📄', sh:'⚙️', bat:'⚙️', yaml:'📋', yml:'📋',
-  toml:'📋', xml:'📋', sql:'🗄️', csv:'📊', png:'🖼️', jpg:'🖼️',
-  jpeg:'🖼️', gif:'🖼️', svg:'🖼️', ico:'🖼️', pdf:'📕',
-};
+// SVG 文字列 → base64 data URL
+function svgToDataUrl(svgStr) {
+  try {
+    return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)));
+  } catch {
+    return '';
+  }
+}
 
+// ===== FileIcon コンポーネント =====
+// iconsLoaded が true になっていれば data URL で SVG を表示、それ以外は絵文字フォールバック
+function FileIcon({ name, isDir, isExpanded }) {
+  const iconName = resolveIconName(name, isDir, isExpanded);
+  const dataUrl  = iconDataUrls[iconName];
+
+  if (dataUrl) {
+    return React.createElement('img', {
+      src:    dataUrl,
+      width:  16,
+      height: 16,
+      style:  { flexShrink: 0, objectFit: 'contain', display: 'block' },
+      alt:    '',
+      onError: (e) => {
+        // フォールバック: default_file
+        if (iconDataUrls['default_file']) {
+          e.currentTarget.src = iconDataUrls['default_file'];
+        }
+      },
+    });
+  }
+
+  // SVG 未ロード時の絵文字フォールバック
+  const FALLBACK_EMOJI = {
+    default_folder:        '📁',
+    default_folder_opened: '📂',
+    file_type_js:          '📄',
+    file_type_typescript:  '📄',
+    file_type_reactts:     '⚛️',
+    file_type_reactjs:     '⚛️',
+    file_type_python:      '🐍',
+    file_type_rust:        '🦀',
+    file_type_go:          '🐹',
+    file_type_markdown:    '📝',
+    file_type_image:       '🖼️',
+    file_type_pdf:         '📕',
+    default_file:          '📄',
+  };
+  const emoji = FALLBACK_EMOJI[iconName] ?? '📄';
+  return React.createElement('span', { style: { flexShrink: 0, fontSize: 14 } }, emoji);
+}
+
+// ===== テキストファイル判定 =====
 const TEXT_EXTS = new Set([
   'js','mjs','cjs','ts','tsx','jsx','json','jsonc','md','html','htm',
   'css','scss','sass','less','py','rs','go','rb','php','java','cs',
@@ -76,70 +221,18 @@ const LANG_COLORS = {
   powershell:'#012456',
 };
 
-function fileIcon(name, isDir) {
+// タブアイコン用絵文字（openTab の icon 引数）
+function fileIconEmoji(name, isDir) {
   if (isDir) return '📁';
   const ext = name.split('.').pop()?.toLowerCase() ?? '';
-  return EXT_ICONS[ext] ?? '📄';
-}
-
-// ===== vscode-icons アイコン名マッピング（拡張子 → codicon 名）=====
-const EXT_ICON_NAMES = {
-  // コード・スクリプト
-  js:'file-code', mjs:'file-code', cjs:'file-code',
-  ts:'file-code', tsx:'file-code', jsx:'file-code',
-  json:'file-code', jsonc:'file-code',
-  md:'file-code', markdown:'file-code',
-  html:'file-code', htm:'file-code',
-  css:'file-code', scss:'file-code', sass:'file-code', less:'file-code',
-  py:'file-code', rb:'file-code', php:'file-code',
-  java:'file-code', cs:'file-code',
-  cpp:'file-code', c:'file-code', h:'file-code', hpp:'file-code',
-  rs:'file-code', go:'file-code', swift:'file-code',
-  kt:'file-code', kts:'file-code', dart:'file-code',
-  r:'file-code', lua:'file-code', ex:'file-code', exs:'file-code',
-  sh:'file-code', bash:'file-code', zsh:'file-code',
-  ps1:'file-code', bat:'file-code', cmd:'file-code',
-  yaml:'file-code', yml:'file-code', toml:'file-code',
-  xml:'file-code', sql:'file-code',
-  graphql:'file-code', gql:'file-code',
-  // メディア
-  png:'file-media', jpg:'file-media', jpeg:'file-media',
-  gif:'file-media', svg:'file-media', ico:'file-media',
-  webp:'file-media', bmp:'file-media',
-  mp4:'file-media', mov:'file-media', avi:'file-media', mkv:'file-media',
-  mp3:'file-media', wav:'file-media', ogg:'file-media', flac:'file-media',
-  // PDF
-  pdf:'file-pdf',
-  // アーカイブ
-  zip:'file-zip', tar:'file-zip', gz:'file-zip',
-  rar:'file-zip', '7z':'file-zip', bz2:'file-zip', xz:'file-zip',
-  // バイナリ
-  exe:'file-binary', dll:'file-binary', so:'file-binary',
-  bin:'file-binary', wasm:'file-binary',
-};
-
-// アイコン名を解決する（isDir + 開閉状態を考慮）
-function resolveIconName(name, isDir, expanded) {
-  if (isDir) return expanded ? 'folder-opened' : 'folder';
-  const ext = name.split('.').pop()?.toLowerCase() ?? '';
-  return EXT_ICON_NAMES[ext] ?? 'file';
-}
-
-// vscode-icons SVG の <img> 要素を返す。未ロード時は絵文字にフォールバック
-function renderFileIconEl(name, isDir, expanded) {
-  const iconName = resolveIconName(name, isDir, expanded);
-  const svgUrl = vsIcons[iconName];
-  if (svgUrl) {
-    return React.createElement('img', {
-      src: svgUrl,
-      width: 16, height: 16,
-      style: { flexShrink:0, display:'block', opacity:0.85 },
-      alt: '',
-    });
-  }
-  // フォールバック: 絵文字
-  const emoji = isDir ? '📁' : (EXT_ICONS[name.split('.').pop()?.toLowerCase() ?? ''] ?? '📄');
-  return React.createElement('span', { style: { flexShrink:0 } }, emoji);
+  const MAP = {
+    ts:'📄', tsx:'⚛️', jsx:'⚛️', json:'📋', md:'📝',
+    html:'🌐', css:'🎨', scss:'🎨', py:'🐍', rs:'🦀', go:'🐹',
+    sh:'⚙️', bat:'⚙️', yaml:'📋', yml:'📋', toml:'📋', xml:'📋',
+    sql:'🗄️', csv:'📊', png:'🖼️', jpg:'🖼️', jpeg:'🖼️',
+    gif:'🖼️', svg:'🖼️', ico:'🖼️', pdf:'📕',
+  };
+  return MAP[ext] ?? '📄';
 }
 
 function isTextFile(name) {
@@ -162,6 +255,25 @@ function getMonacoLanguage(filePath) {
   return EXT_LANG[ext] ?? 'plaintext';
 }
 
+// ===== スタイル定数 =====
+const S = {
+  panel:      { display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', fontFamily:'sans-serif', fontSize:13 },
+  toolbar:    { display:'flex', alignItems:'center', gap:4, padding:'6px 8px', borderBottom:'1px solid var(--aria-border,#2a2a2a)', flexShrink:0 },
+  btn:        { padding:'3px 8px', borderRadius:4, border:'1px solid var(--aria-border,#444)', background:'var(--aria-bg,#1e1e1e)', color:'var(--aria-text,#ccc)', cursor:'pointer', fontSize:12 },
+  btnPrimary: { padding:'3px 10px', borderRadius:4, border:'none', background:'var(--aria-primary,#7c6af7)', color:'#fff', cursor:'pointer', fontSize:12 },
+  tree:       { flex:1, overflowY:'auto', overflowX:'hidden' },
+  statusBar:  { padding:'2px 8px', fontSize:11, color:'var(--aria-text-muted,#666)', borderTop:'1px solid var(--aria-border,#2a2a2a)', flexShrink:0, display:'flex', justifyContent:'space-between' },
+};
+
+function treeRowStyle(depth, selected, hover) {
+  return {
+    display:'flex', alignItems:'center', padding:`2px 8px 2px ${8 + depth*16}px`,
+    cursor:'pointer', userSelect:'none', fontSize:13, gap:4,
+    background: selected ? 'rgba(124,106,247,0.2)' : hover ? 'rgba(255,255,255,0.05)' : 'transparent',
+    color: selected ? 'var(--aria-primary,#7c6af7)' : 'var(--aria-text,#ccc)',
+  };
+}
+
 // ===== TreeRow コンポーネント =====
 function TreeRow({ row, selectedPath, onExpand, onFileClick, onCopyPath }) {
   const [hover, setHover] = useState(false);
@@ -175,15 +287,20 @@ function TreeRow({ row, selectedPath, onExpand, onFileClick, onCopyPath }) {
       onClick: () => item.isDir ? onExpand(item) : onFileClick(item),
       title: item.path,
     },
+      // ディレクトリ展開インジケータ
       item.isDir
         ? React.createElement('span', { style: { fontSize:10, width:12, textAlign:'center', flexShrink:0, color:'#888' } },
             item._expanded ? '▼' : '▶')
         : React.createElement('span', { style: { width:12, flexShrink:0 } }),
-      renderFileIconEl(item.name, item.isDir, item._expanded),
+      // vscode-icons SVG アイコン
+      React.createElement(FileIcon, { name: item.name, isDir: item.isDir, isExpanded: item._expanded }),
+      // ファイル名
       React.createElement('span', { style: { flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, item.name),
+      // ファイルサイズ
       item.isFile && item.size != null
         ? React.createElement('span', { style: { fontSize:10, color:'#666', flexShrink:0 } }, fmtSize(item.size))
         : null,
+      // パスコピーボタン（ホバー時）
       hover
         ? React.createElement('span', {
             style: { fontSize:10, padding:'1px 4px', marginLeft:4, borderRadius:3, background:'rgba(255,255,255,0.1)', flexShrink:0 },
@@ -205,24 +322,30 @@ function FileBrowserPanel({ api }) {
   const [drives, setDrives] = useState([]);
   const [showDrives, setShowDrives] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
-  const [, setIconsLoaded] = useState(false); // アイコンロード完了で再レンダリングを発火
+  // アイコン読み込み完了フラグ（変更時に再レンダリングを起こすため state にする）
+  const [, setIconsReady] = useState(false);
 
   useEffect(() => {
-    // vscode-icons SVG をロードしてキャッシュ
-    api.ipc.invoke('get-vscode-icons').then(result => {
-      if (result && typeof result === 'object') {
-        Object.entries(result).forEach(([name, svg]) => {
-          vsIcons[name] = 'data:image/svg+xml,' + encodeURIComponent(svg);
-        });
-        setIconsLoaded(true); // 再レンダリングをトリガー
-      }
-    });
+    // ホームディレクトリとドライブ一覧を並行取得
     api.ipc.invoke('get-home').then(r => {
       if (r?.path) loadDir(r.path);
     });
     api.ipc.invoke('get-drives').then(r => {
       if (Array.isArray(r)) setDrives(r);
     });
+
+    // vscode-icons SVG アイコンを一括取得してキャッシュ
+    if (!iconsLoaded) {
+      api.ipc.invoke('get-file-icons').then(svgMap => {
+        if (!svgMap) return;
+        for (const [name, svgStr] of Object.entries(svgMap)) {
+          const url = svgToDataUrl(svgStr);
+          if (url) iconDataUrls[name] = url;
+        }
+        iconsLoaded = true;
+        setIconsReady(true); // 再レンダリングをトリガー
+      });
+    }
   }, []);
 
   async function loadDir(dirPath) {
@@ -275,7 +398,7 @@ function FileBrowserPanel({ api }) {
       api.navigation.openTab({
         id: tabId,
         label: item.name,
-        icon: fileIcon(item.name, false),
+        icon: fileIconEmoji(item.name, false), // タブアイコンは絵文字
         pageId: 'viewer',
       });
       setStatusMsg(`開きました: ${item.name}`);
