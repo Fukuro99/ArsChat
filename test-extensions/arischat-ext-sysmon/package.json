@@ -6,6 +6,7 @@
   },
   "arschat": {
     "displayName": "システムモニター",
+    "description": "CPU・メモリ・ディスク使用率をリアルタイムで表示する右パネル拡張機能。",
     "icon": "💻",
     "permissions": [],
     "main": "main.js",

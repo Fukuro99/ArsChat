@@ -374,6 +374,7 @@ export interface ExtensionSettingsDef {
 /** package.json の arschat フィールド */
 export interface ExtensionManifest {
   displayName: string;
+  description?: string;
   icon: string;
   minAppVersion?: string;
   permissions: ExtensionPermission[];
