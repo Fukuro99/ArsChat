@@ -126,7 +126,10 @@ function ExtCard({
           className="w-6 h-6 flex items-center justify-center rounded text-aria-text-muted hover:text-aria-text hover:bg-aria-surface opacity-0 group-hover:opacity-100 transition-all"
           title="オプション"
         >
-          <img src="./codicons/gear.svg" width={13} height={13} alt="gear" style={{ filter: 'invert(1) opacity(0.6)' }} />
+          {/* gear icon — inline SVG（外部ファイル不要） */}
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path d="M9.1 1.5a1.1 1.1 0 0 0-2.2 0l-.1.6a5.5 5.5 0 0 0-1.1.6l-.6-.2a1.1 1.1 0 0 0-1.4.8l-.3 1a1.1 1.1 0 0 0 .5 1.3l.5.3a5.5 5.5 0 0 0 0 1.2l-.5.3a1.1 1.1 0 0 0-.5 1.3l.3 1a1.1 1.1 0 0 0 1.4.8l.6-.2c.3.2.7.4 1.1.6l.1.6a1.1 1.1 0 0 0 2.2 0l.1-.6a5.5 5.5 0 0 0 1.1-.6l.6.2a1.1 1.1 0 0 0 1.4-.8l.3-1a1.1 1.1 0 0 0-.5-1.3l-.5-.3a5.5 5.5 0 0 0 0-1.2l.5-.3a1.1 1.1 0 0 0 .5-1.3l-.3-1a1.1 1.1 0 0 0-1.4-.8l-.6.2a5.5 5.5 0 0 0-1.1-.6l-.1-.6zM8 10a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"/>
+          </svg>
         </button>
         {menuOpen && (
           <GearMenu
