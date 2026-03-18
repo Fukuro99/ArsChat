@@ -108,6 +108,16 @@ declare global {
         saveState: (state: { rootPath: string; expandedPaths: string[] }) => Promise<void>;
       };
 
+      // ターミナル
+      terminal: {
+        create: (id: string, cols: number, rows: number, cwd?: string) => Promise<void>;
+        write: (id: string, data: string) => void;
+        resize: (id: string, cols: number, rows: number) => void;
+        destroy: (id: string) => Promise<void>;
+        onData: (id: string, callback: (data: string) => void) => () => void;
+        onExit: (id: string, callback: () => void) => () => void;
+      };
+
       // 拡張機能変更通知
       onExtChanged?: (callback: () => void) => () => void;
 

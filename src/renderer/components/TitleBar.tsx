@@ -6,6 +6,8 @@ interface TitleBarProps {
   onRightPanelClick: () => void;
   rightPanelOpen: boolean;
   currentPage: string;
+  terminalOpen?: boolean;
+  onTerminalClick?: () => void;
 }
 
 export default function TitleBar({
@@ -14,6 +16,8 @@ export default function TitleBar({
   onRightPanelClick,
   rightPanelOpen,
   currentPage,
+  terminalOpen = false,
+  onTerminalClick,
 }: TitleBarProps) {
   return (
     <div className="titlebar-drag h-10 bg-aria-bg-light border-b border-aria-border flex items-center justify-between px-3 select-none shrink-0">
@@ -38,6 +42,22 @@ export default function TitleBar({
 
       {/* 右側: 操作ボタン */}
       <div className="flex items-center gap-1 titlebar-no-drag">
+        {/* ターミナルトグル */}
+        <button
+          onClick={onTerminalClick}
+          className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
+            terminalOpen ? 'bg-aria-primary/20 text-aria-primary' : 'hover:bg-aria-surface text-aria-text-muted'
+          }`}
+          title="ターミナルを開閉"
+        >
+          {/* terminal アイコン */}
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="1" y="1" width="12" height="12" rx="1.5"/>
+            <path d="M3.5 5L5.5 7L3.5 9"/>
+            <path d="M6.5 9h3"/>
+          </svg>
+        </button>
+
         {/* 右パネルトグル */}
         <button
           onClick={onRightPanelClick}

@@ -231,9 +231,10 @@ function TreeRow({
 // ===== FileBrowserPanel =====
 export interface FileBrowserPanelProps {
   onOpenFileTab: (tabId: string, label: string, icon: string) => void;
+  onPathChange?: (path: string) => void;
 }
 
-export function FileBrowserPanel({ onOpenFileTab }: FileBrowserPanelProps) {
+export function FileBrowserPanel({ onOpenFileTab, onPathChange }: FileBrowserPanelProps) {
   const [rootPath, setRootPath] = useState('');
   const [treeData, setTreeData] = useState<Map<string, FileBrowserItem[]>>(new Map());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -286,6 +287,7 @@ export function FileBrowserPanel({ onOpenFileTab }: FileBrowserPanelProps) {
   async function loadDir(dirPath: string, initialExpanded?: Set<string>) {
     setLoading(true);
     setRootPath(dirPath);
+    onPathChange?.(dirPath);
     setTreeData(new Map());
     const newExpanded = initialExpanded ?? new Set<string>();
     setExpanded(newExpanded);

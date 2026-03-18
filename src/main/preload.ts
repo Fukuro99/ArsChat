@@ -266,6 +266,30 @@ contextBridge.exposeInMainWorld('arsChatAPI', {
       ipcRenderer.invoke('filebrowser:save-state', state),
   },
 
+  // === ターミナル ===
+  terminal: {
+    create: (id: string, cols: number, rows: number, cwd?: string, shell?: string): Promise<void> =>
+      ipcRenderer.invoke('terminal:create', { id, cols, rows, cwd, shell }),
+    write: (id: string, data: string): void =>
+      ipcRenderer.send('terminal:write', { id, data }),
+    resize: (id: string, cols: number, rows: number): void =>
+      ipcRenderer.send('terminal:resize', { id, cols, rows }),
+    destroy: (id: string): Promise<void> =>
+      ipcRenderer.invoke('terminal:destroy', { id }),
+    onData: (id: string, callback: (data: string) => void) => {
+      const channel = `terminal:data:${id}`;
+      const handler = (_: any, data: string) => callback(data);
+      ipcRenderer.on(channel, handler);
+      return () => ipcRenderer.removeListener(channel, handler);
+    },
+    onExit: (id: string, callback: () => void) => {
+      const channel = `terminal:exit:${id}`;
+      const handler = () => callback();
+      ipcRenderer.on(channel, handler);
+      return () => ipcRenderer.removeListener(channel, handler);
+    },
+  },
+
   // === 拡張機能変更通知 ===
   onExtChanged: (callback: () => void) => {
     const handler = () => callback();

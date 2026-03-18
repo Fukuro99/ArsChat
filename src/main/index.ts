@@ -18,6 +18,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { execSync, exec } from 'child_process';
+import * as pty from 'node-pty';
 
 // ローカル画像ファイルを http://localhost から安全に読み込むためのカスタムスキーム
 // ※ app.ready より前に呼び出す必要がある
@@ -37,6 +38,14 @@ import { createMCPManager } from './mcp-manager';
 import { createSkillManager } from './skill-manager';
 import { createExtensionManager } from './extension-manager';
 import { createExtensionContext } from './extension-context';
+
+// ===== PTY セッション管理 =====
+interface PtySession {
+  process: pty.IPty;
+  cols: number;
+  rows: number;
+}
+const ptySessions = new Map<string, PtySession>();
 
 // ===== グローバル変数 =====
 let mainWindow: BrowserWindow | null = null;
@@ -1223,6 +1232,56 @@ function setupIPC(): void {
 
   ipcMain.handle('filebrowser:save-state', (_e, state: { rootPath: string; expandedPaths: string[] }) => {
     store.saveFileBrowserState(state);
+  });
+
+  // ===== ターミナル (node-pty) =====
+  ipcMain.handle('terminal:create', (event, { id, cols, rows, cwd, shell: shellExec }: { id: string; cols: number; rows: number; cwd?: string; shell?: string }) => {
+    if (ptySessions.has(id)) return;
+
+    const shell = shellExec || (process.platform === 'win32' ? 'powershell.exe' : (process.env.SHELL || '/bin/bash'));
+    const workDir = cwd || os.homedir();
+
+    const ptyProcess = pty.spawn(shell, [], {
+      name: 'xterm-256color',
+      cols,
+      rows,
+      cwd: workDir,
+      env: { ...process.env } as Record<string, string>,
+    });
+
+    ptyProcess.onData((data) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      win?.webContents.send(`terminal:data:${id}`, data);
+    });
+
+    ptyProcess.onExit(() => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      win?.webContents.send(`terminal:exit:${id}`);
+      ptySessions.delete(id);
+    });
+
+    ptySessions.set(id, { process: ptyProcess, cols, rows });
+  });
+
+  ipcMain.on('terminal:write', (_e, { id, data }: { id: string; data: string }) => {
+    ptySessions.get(id)?.process.write(data);
+  });
+
+  ipcMain.on('terminal:resize', (_e, { id, cols, rows }: { id: string; cols: number; rows: number }) => {
+    const session = ptySessions.get(id);
+    if (session) {
+      session.process.resize(cols, rows);
+      session.cols = cols;
+      session.rows = rows;
+    }
+  });
+
+  ipcMain.handle('terminal:destroy', (_e, { id }: { id: string }) => {
+    const session = ptySessions.get(id);
+    if (session) {
+      try { session.process.kill(); } catch {}
+      ptySessions.delete(id);
+    }
   });
 }
 

@@ -13,6 +13,7 @@ interface SidePanelProps {
   onNewSession: () => void;
   onNavigate: (page: string) => void;
   onOpenFileTab: FileBrowserPanelProps['onOpenFileTab'];
+  onFileBrowserPathChange?: (path: string) => void;
 }
 
 /** 会話履歴パネル */
@@ -154,6 +155,7 @@ export default function Sidebar({
   onNewSession,
   onNavigate,
   onOpenFileTab,
+  onFileBrowserPathChange,
 }: SidePanelProps) {
   if (activePanelId === 'history') {
     return (
@@ -173,7 +175,7 @@ export default function Sidebar({
           <span className="text-xs font-semibold text-aria-text-muted uppercase tracking-wider">ファイルブラウザ</span>
         </div>
         <div className="flex-1 overflow-hidden">
-          <FileBrowserPanel onOpenFileTab={onOpenFileTab} />
+          <FileBrowserPanel onOpenFileTab={onOpenFileTab} onPathChange={onFileBrowserPathChange} />
         </div>
       </div>
     );

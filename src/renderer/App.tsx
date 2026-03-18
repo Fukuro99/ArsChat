@@ -7,6 +7,7 @@ import Sidebar from './components/Sidebar';
 import RightPanel from './components/RightPanel';
 import WidgetOverlay from './components/WidgetOverlay';
 import PaneGroup from './components/PaneGroup';
+import TerminalPanel from './components/TerminalPanel';
 import { FileViewerPage } from './components/FileBrowser';
 import { loadExtensions, type LoadedExtension, type OpenTabOptions } from './extension-loader';
 import type { AppTab, DragState, Pane } from './types/app';
@@ -39,6 +40,9 @@ export default function App() {
   // サイドパネルの幅（px）
   const [sidePanelWidth, setSidePanelWidth] = useState(240);
   const [rightPanelWidth, setRightPanelWidth] = useState(288);
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [terminalHeight, setTerminalHeight] = useState(260);
+  const [fileBrowserPath, setFileBrowserPath] = useState<string | undefined>(undefined);
 
   // ===== Refs（安定した参照用） =====
   const extensionsRef = useRef<LoadedExtension[]>(extensions);
@@ -335,6 +339,27 @@ export default function App() {
   const handleResizeStart      = makeResizeHandler(sidePanelWidth,  setSidePanelWidth,  'right', 160, 480);
   const handleRightResizeStart = makeResizeHandler(rightPanelWidth, setRightPanelWidth, 'left',  200, 600);
 
+  // ターミナルパネル上端ドラッグでリサイズ
+  const handleTerminalResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = terminalHeight;
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+    const onMove = (ev: MouseEvent) => {
+      const delta = startY - ev.clientY;
+      setTerminalHeight(Math.min(800, Math.max(100, startH + delta)));
+    };
+    const onUp = () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [terminalHeight]);
+
   // ===== 初期化 =====
   useEffect(() => {
     window.arsChatAPI.getActiveSession?.().then((sessionId) => {
@@ -513,126 +538,148 @@ export default function App() {
         onRightPanelClick={() => setRightPanelOpen((v) => !v)}
         rightPanelOpen={rightPanelOpen}
         currentPage={currentPage}
+        terminalOpen={terminalOpen}
+        onTerminalClick={() => setTerminalOpen((v) => !v)}
       />
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* アクティビティバー */}
-        <div
-          className={`shrink-0 overflow-hidden transition-all duration-200 ${
-            activityBarVisible ? 'w-12' : 'w-0'
-          }`}
-        >
-          <ActivityBar
-            activePanelId={activePanelId}
-            extensions={extensions}
-            hasNavExtensions={hasNavExtensions}
-            onNewSession={() => {
-              setCurrentSessionId(null);
-              window.arsChatAPI.setActiveSession?.(null);
-              setActivePaneId(panes[0].id);
-              setPanes((prev) =>
-                prev.map((p, i) => (i === 0 ? { ...p, activeTabId: 'chat' } : p)),
-              );
-            }}
-            onSelectPanel={handleSelectPanel}
-            onReloadExtensions={handleReloadExtensions}
-            isReloading={isReloadingExtensions}
-          />
-        </div>
-
-        {/* サイドコンテンツパネル */}
-        <div
-          className="flex-none overflow-hidden border-r border-aria-border flex"
-          style={
-            activityBarVisible && activePanelId
-              ? { width: sidePanelWidth, transition: 'none' }
-              : { width: 0, transition: 'width 0.2s' }
-          }
-        >
-          {activePanelId && (
-            <>
-              <div className="h-full flex-1 min-w-0 overflow-hidden bg-aria-bg-light">
-                <Sidebar
-                  activePanelId={activePanelId}
-                  currentSessionId={currentSessionId}
-                  currentPage={currentPage}
-                  extensions={extensions}
-                  onOpenFileTab={handleOpenFileTab}
-                  onSelectSession={(id) => {
-                    setCurrentSessionId(id);
-                    window.arsChatAPI.setActiveSession?.(id);
-                    // チャットタブがあるペインをアクティブに
-                    const chatPane = panes.find((p) => p.tabs.some((t) => t.page === 'chat'));
-                    if (chatPane) {
-                      setActivePaneId(chatPane.id);
-                      setPanes((prev) =>
-                        prev.map((p) =>
-                          p.id === chatPane.id ? { ...p, activeTabId: 'chat' } : p,
-                        ),
-                      );
-                    }
-                  }}
-                  onNewSession={() => {
-                    setCurrentSessionId(null);
-                    window.arsChatAPI.setActiveSession?.(null);
-                    const chatPane = panes.find((p) => p.tabs.some((t) => t.page === 'chat'));
-                    if (chatPane) {
-                      setActivePaneId(chatPane.id);
-                      setPanes((prev) =>
-                        prev.map((p) =>
-                          p.id === chatPane.id ? { ...p, activeTabId: 'chat' } : p,
-                        ),
-                      );
-                    }
-                  }}
-                  onNavigate={(page) => navigate(page)}
-                />
-              </div>
-              {/* リサイズハンドル（右端） */}
-              <div
-                onMouseDown={handleResizeStart}
-                className="w-1 flex-none cursor-col-resize hover:bg-aria-primary/40 active:bg-aria-primary/60 transition-colors"
-              />
-            </>
-          )}
-        </div>
-
-        {/* メインコンテンツ（ペイングループ） */}
-        <PaneGroup
-          panes={panes}
-          activePaneId={activePaneId}
-          dragging={dragging}
-          onTabClose={(_paneId, tabId) => closeTab(tabId)}
-          onTabActivate={(paneId, tabId) => {
-            setActivePaneId(paneId);
-            setPanes((prev) =>
-              prev.map((p) => (p.id === paneId ? { ...p, activeTabId: tabId } : p)),
-            );
-          }}
-          onPaneActivate={setActivePaneId}
-          onDragStart={handleDragStart}
-          onDropOnTabBar={handleDropOnTabBar}
-          onDropOnContent={handleDropOnContent}
-          renderContent={renderTabContent}
-        />
-
-        {/* 右パネル */}
-        <div
-          className="flex-none overflow-hidden flex"
-          style={
-            rightPanelOpen
-              ? { width: rightPanelWidth, transition: 'none' }
-              : { width: 0, transition: 'width 0.2s' }
-          }
-        >
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* 上部エリア（水平レイアウト） */}
+        <div className="flex-1 flex overflow-hidden min-h-0">
+          {/* アクティビティバー */}
           <div
-            onMouseDown={handleRightResizeStart}
-            className="w-1 flex-none cursor-col-resize hover:bg-aria-primary/40 active:bg-aria-primary/60 transition-colors border-l border-aria-border"
-          />
-          <div className="flex-1 min-w-0 overflow-hidden">
-            <RightPanel extensions={extensions} />
+            className={`shrink-0 overflow-hidden transition-all duration-200 ${
+              activityBarVisible ? 'w-12' : 'w-0'
+            }`}
+          >
+            <ActivityBar
+              activePanelId={activePanelId}
+              extensions={extensions}
+              hasNavExtensions={hasNavExtensions}
+              onNewSession={() => {
+                setCurrentSessionId(null);
+                window.arsChatAPI.setActiveSession?.(null);
+                setActivePaneId(panes[0].id);
+                setPanes((prev) =>
+                  prev.map((p, i) => (i === 0 ? { ...p, activeTabId: 'chat' } : p)),
+                );
+              }}
+              onSelectPanel={handleSelectPanel}
+              onReloadExtensions={handleReloadExtensions}
+              isReloading={isReloadingExtensions}
+            />
+          </div>
+
+          {/* サイドコンテンツパネル */}
+          <div
+            className="flex-none overflow-hidden border-r border-aria-border flex"
+            style={
+              activityBarVisible && activePanelId
+                ? { width: sidePanelWidth, transition: 'none' }
+                : { width: 0, transition: 'width 0.2s' }
+            }
+          >
+            {activePanelId && (
+              <>
+                <div className="h-full flex-1 min-w-0 overflow-hidden bg-aria-bg-light">
+                  <Sidebar
+                    activePanelId={activePanelId}
+                    currentSessionId={currentSessionId}
+                    currentPage={currentPage}
+                    extensions={extensions}
+                    onOpenFileTab={handleOpenFileTab}
+                    onFileBrowserPathChange={setFileBrowserPath}
+                    onSelectSession={(id) => {
+                      setCurrentSessionId(id);
+                      window.arsChatAPI.setActiveSession?.(id);
+                      // チャットタブがあるペインをアクティブに
+                      const chatPane = panes.find((p) => p.tabs.some((t) => t.page === 'chat'));
+                      if (chatPane) {
+                        setActivePaneId(chatPane.id);
+                        setPanes((prev) =>
+                          prev.map((p) =>
+                            p.id === chatPane.id ? { ...p, activeTabId: 'chat' } : p,
+                          ),
+                        );
+                      }
+                    }}
+                    onNewSession={() => {
+                      setCurrentSessionId(null);
+                      window.arsChatAPI.setActiveSession?.(null);
+                      const chatPane = panes.find((p) => p.tabs.some((t) => t.page === 'chat'));
+                      if (chatPane) {
+                        setActivePaneId(chatPane.id);
+                        setPanes((prev) =>
+                          prev.map((p) =>
+                            p.id === chatPane.id ? { ...p, activeTabId: 'chat' } : p,
+                          ),
+                        );
+                      }
+                    }}
+                    onNavigate={(page) => navigate(page)}
+                  />
+                </div>
+                {/* リサイズハンドル（右端） */}
+                <div
+                  onMouseDown={handleResizeStart}
+                  className="w-1 flex-none cursor-col-resize hover:bg-aria-primary/40 active:bg-aria-primary/60 transition-colors"
+                />
+              </>
+            )}
+          </div>
+
+          {/* メインコンテンツ（ペイングループ＋ターミナル） */}
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            <PaneGroup
+              panes={panes}
+              activePaneId={activePaneId}
+              dragging={dragging}
+              onTabClose={(_paneId, tabId) => closeTab(tabId)}
+              onTabActivate={(paneId, tabId) => {
+                setActivePaneId(paneId);
+                setPanes((prev) =>
+                  prev.map((p) => (p.id === paneId ? { ...p, activeTabId: tabId } : p)),
+                );
+              }}
+              onPaneActivate={setActivePaneId}
+              onDragStart={handleDragStart}
+              onDropOnTabBar={handleDropOnTabBar}
+              onDropOnContent={handleDropOnContent}
+              renderContent={renderTabContent}
+            />
+
+            {/* ターミナルパネル（中央エリア下部） */}
+            {terminalOpen && (
+              <>
+                <div
+                  onMouseDown={handleTerminalResizeStart}
+                  className="h-1 shrink-0 cursor-row-resize hover:bg-aria-primary/40 active:bg-aria-primary/60 transition-colors border-t border-aria-border"
+                />
+                <div className="shrink-0 overflow-hidden" style={{ height: terminalHeight }}>
+                  <TerminalPanel visible={terminalOpen} cwd={fileBrowserPath} />
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* 右パネル */}
+          <div
+            className="flex-none overflow-hidden flex"
+            style={
+              rightPanelOpen
+                ? { width: rightPanelWidth, transition: 'none' }
+                : { width: 0, transition: 'width 0.2s' }
+            }
+          >
+            <div
+              onMouseDown={handleRightResizeStart}
+              className="w-1 flex-none cursor-col-resize hover:bg-aria-primary/40 active:bg-aria-primary/60 transition-colors border-l border-aria-border"
+            />
+            <div className="flex-1 min-w-0 overflow-hidden">
+              <RightPanel extensions={extensions} />
+            </div>
           </div>
         </div>
+
       </div>
 
       {/* ドラッグゴースト */}

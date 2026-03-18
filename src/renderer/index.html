@@ -59,6 +59,14 @@
         moveWidget: () => {}, captureRegion: () => Promise.resolve(null),
         listLMStudioModels: () => Promise.resolve([]),
         loadLMStudioModel: () => Promise.resolve(),
+        terminal: {
+          create: () => Promise.resolve(),
+          write: () => {},
+          resize: () => {},
+          destroy: () => Promise.resolve(),
+          onData: () => () => {},
+          onExit: () => () => {},
+        },
       };
     }
   </script>
