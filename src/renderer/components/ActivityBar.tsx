@@ -4,7 +4,6 @@ import type { LoadedExtension } from '../extension-loader';
 interface ActivityBarProps {
   activePanelId: string | null;
   extensions: LoadedExtension[];
-  hasNavExtensions: boolean;
   onNewSession: () => void;
   onSelectPanel: (id: string) => void;
   onReloadExtensions: () => void;
@@ -41,7 +40,6 @@ function IconButton({
 export default function ActivityBar({
   activePanelId,
   extensions,
-  hasNavExtensions,
   onNewSession,
   onSelectPanel,
   onReloadExtensions,
@@ -85,16 +83,14 @@ export default function ActivityBar({
         <img src="./file-icons/default_folder.svg" width={16} height={16} alt="ファイルブラウザ" style={{ filter: 'invert(1) opacity(0.8)' }} />
       </IconButton>
 
-      {/* 拡張ナビリンクまとめ — codicons */}
-      {hasNavExtensions && (
-        <IconButton
-          title="拡張機能"
-          active={activePanelId === 'extensions'}
-          onClick={() => onSelectPanel('extensions')}
-        >
-          <img src="./codicons/extensions.svg" width={16} height={16} alt="拡張機能" style={{ filter: 'invert(1) opacity(0.8)' }} />
-        </IconButton>
-      )}
+      {/* 拡張機能管理 — codicons（常時表示） */}
+      <IconButton
+        title="拡張機能"
+        active={activePanelId === 'ext-manager'}
+        onClick={() => onSelectPanel('ext-manager')}
+      >
+        <img src="./codicons/extensions.svg" width={16} height={16} alt="拡張機能" style={{ filter: 'invert(1) opacity(0.8)' }} />
+      </IconButton>
 
       {/* 拡張 sidebarPanel アイテム */}
       {sidebarPanelItems.map((item) => (

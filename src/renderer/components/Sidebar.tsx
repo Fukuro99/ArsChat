@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ChatSession } from '../../shared/types';
 import type { LoadedExtension } from '../extension-loader';
 import { FileBrowserPanel, type FileBrowserPanelProps } from './FileBrowser';
+import ExtensionManagerPanel from './ExtensionManagerPanel';
 
 interface SidePanelProps {
   /** アクティブなパネル ID ('history' | 'extensions' | 'browser' | '{extId}:{pageId}') */
@@ -189,6 +190,10 @@ export default function Sidebar({
         onNavigate={onNavigate}
       />
     );
+  }
+
+  if (activePanelId === 'ext-manager') {
+    return <ExtensionManagerPanel />;
   }
 
   // 拡張 sidebarPanel: "{extId}:{pageId}"
