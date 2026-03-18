@@ -30,6 +30,11 @@ export default function WidgetOverlay() {
   const pendingChunksRef = useRef<string>('');
   const rafIdRef = useRef<number | null>(null);
 
+  // ウィジェットモードでは body の背景色を透明にする
+  useEffect(() => {
+    document.body.className = 'bg-transparent overflow-hidden';
+  }, []);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: isStreaming ? 'auto' : 'smooth' });
   }, [messages, streamingContent, isStreaming]);
