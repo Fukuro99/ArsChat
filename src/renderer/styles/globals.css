@@ -224,6 +224,48 @@ body {
   overflow-y: auto;
 }
 
+/* 拡張機能 README スタイル */
+.ext-readme {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--aria-text);
+}
+.ext-readme h1 { font-size: 1.15em; font-weight: 700; margin: 0.8em 0 0.4em; color: var(--aria-text); border-bottom: 1px solid var(--aria-border); padding-bottom: 0.3em; }
+.ext-readme h2 { font-size: 1.05em; font-weight: 600; margin: 0.8em 0 0.35em; color: var(--aria-text); }
+.ext-readme h3 { font-size: 0.95em; font-weight: 600; margin: 0.7em 0 0.3em; color: var(--aria-text-muted); }
+.ext-readme p  { margin: 0.4em 0; }
+.ext-readme ul, .ext-readme ol { margin: 0.4em 0 0.4em 1.4em; }
+.ext-readme li { margin: 0.2em 0; }
+.ext-readme code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.88em;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid var(--aria-border);
+  border-radius: 3px;
+  padding: 0.1em 0.35em;
+}
+.ext-readme pre {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--aria-border);
+  border-radius: 6px;
+  padding: 0.7em 0.9em;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+.ext-readme pre code { background: none; border: none; padding: 0; }
+.ext-readme a { color: var(--aria-primary); text-decoration: underline; }
+.ext-readme blockquote {
+  border-left: 3px solid var(--aria-border);
+  margin: 0.4em 0;
+  padding-left: 0.8em;
+  color: var(--aria-text-muted);
+}
+.ext-readme hr { border: none; border-top: 1px solid var(--aria-border); margin: 0.8em 0; }
+.ext-readme img { max-width: 100%; border-radius: 4px; }
+.ext-readme table { border-collapse: collapse; width: 100%; font-size: 0.9em; }
+.ext-readme th, .ext-readme td { border: 1px solid var(--aria-border); padding: 0.3em 0.6em; text-align: left; }
+.ext-readme th { background: rgba(255,255,255,0.05); font-weight: 600; }
+
 /* ストリーミングカーソル */
 @keyframes blink {
   0%, 50% { opacity: 1; }

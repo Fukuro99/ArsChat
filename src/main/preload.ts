@@ -55,6 +55,7 @@ const IPC_CHANNELS = {
   EXT_UPDATE: 'ext:update',
   EXT_READ_RENDERER: 'ext:read-renderer',
   EXT_RELOAD: 'ext:reload',
+  EXT_READ_README: 'ext:read-readme',
 } as const;
 const IPC_CAPTURE_IMAGE_READY = 'capture:image-ready';
 
@@ -223,6 +224,8 @@ contextBridge.exposeInMainWorld('arsChatAPI', {
     reload: () => ipcRenderer.invoke(IPC_CHANNELS.EXT_RELOAD),
     readRendererCode: (extId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.EXT_READ_RENDERER, extId),
+    readReadme: (extId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.EXT_READ_README, extId),
     /** インストール進捗リスナー */
     onInstallProgress: (callback: (progress: { step: string; message: string }) => void) => {
       const handler = (_: any, progress: any) => callback(progress);

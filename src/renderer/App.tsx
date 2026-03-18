@@ -454,12 +454,6 @@ export default function App() {
     });
   }, []);
 
-  const hasNavExtensions = extensions.some((ext) =>
-    (ext.info.manifest.pages ?? []).some(
-      (p) => p.sidebar !== false && !p.sidebarPanel && !p.rightPanel,
-    ),
-  );
-
   // ===== タブコンテンツ描画 =====
   function renderTabContent(tab: AppTab) {
     if (tab.page === 'chat') {
@@ -554,7 +548,6 @@ export default function App() {
             <ActivityBar
               activePanelId={activePanelId}
               extensions={extensions}
-              hasNavExtensions={hasNavExtensions}
               onNewSession={() => {
                 setCurrentSessionId(null);
                 window.arsChatAPI.setActiveSession?.(null);

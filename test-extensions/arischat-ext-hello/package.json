@@ -4,6 +4,7 @@
   "description": "ArsChat 拡張機能システムのテスト用拡張",
   "arschat": {
     "displayName": "Hello Extension",
+    "description": "ArsChat 拡張機能システムの動作確認用サンプル拡張。AI チャットとシンプルな Hello ページを提供します。",
     "icon": "👋",
     "permissions": ["ai:send", "ai:stream"],
     "main": "main.js",

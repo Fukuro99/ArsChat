@@ -1107,6 +1107,22 @@ function setupIPC(): void {
     }
   });
 
+  // --- README 取得 ---
+  ipcMain.handle(IPC_CHANNELS.EXT_READ_README, (_e, extId: string) => {
+    try {
+      const entry = extensionManager.list().find((e) => e.id === extId);
+      if (!entry) return { success: false, error: '拡張が見つかりません' };
+      const extDir = path.isAbsolute(entry.source) && fs.existsSync(entry.source)
+        ? entry.source
+        : path.join(extensionManager.getExtensionsDir(), extId);
+      const readmePath = path.join(extDir, 'README.md');
+      if (!fs.existsSync(readmePath)) return { success: false, error: 'README.md が見つかりません' };
+      return { success: true, content: fs.readFileSync(readmePath, 'utf-8') };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
   // --- Renderer Entry コード取得 ---
   ipcMain.handle(IPC_CHANNELS.EXT_READ_RENDERER, (_e, extId: string) => {
     try {

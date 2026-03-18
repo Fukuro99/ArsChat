@@ -72,7 +72,12 @@ export function createExtensionManager(dataDir: string): ExtensionManager {
     if (!pkg.arschat) {
       throw new Error('package.json に arschat フィールドがありません');
     }
-    return { version: pkg.version ?? '0.0.0', manifest: pkg.arschat as ExtensionManifest };
+    const manifest = pkg.arschat as ExtensionManifest;
+    // package.json 直下の description を arschat セクションにフォールバック
+    if (!manifest.description && pkg.description) {
+      manifest.description = pkg.description;
+    }
+    return { version: pkg.version ?? '0.0.0', manifest };
   }
 
   // ===== Git clone / pull =====

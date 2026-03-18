@@ -89,6 +89,7 @@ declare global {
         toggle: (extId: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>;
         update: (extId: string) => Promise<{ success: boolean; error?: string }>;
         readRendererCode: (extId: string) => Promise<{ success: boolean; code?: string; error?: string }>;
+        readReadme: (extId: string) => Promise<{ success: boolean; content?: string; error?: string }>;
         onInstallProgress: (callback: (progress: { step: string; message: string }) => void) => () => void;
         on: (extId: string, channel: string, callback: (data: any) => void) => () => void;
         invoke: (extId: string, channel: string, data?: any) => Promise<any>;
