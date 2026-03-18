@@ -244,6 +244,28 @@ contextBridge.exposeInMainWorld('arisChatAPI', {
       ipcRenderer.send(`ext:${extId}:${channel}`, data),
   },
 
+  // === ファイルブラウザ ===
+  fileBrowser: {
+    getHome: (): Promise<{ path: string }> =>
+      ipcRenderer.invoke('filebrowser:get-home'),
+    getDrives: (): Promise<{ path: string; name: string }[]> =>
+      ipcRenderer.invoke('filebrowser:get-drives'),
+    openFolderDialog: (): Promise<{ success: boolean; path: string | null }> =>
+      ipcRenderer.invoke('filebrowser:open-folder-dialog'),
+    listDir: (dirPath: string): Promise<{ success: boolean; items: any[]; dirPath: string; error?: string }> =>
+      ipcRenderer.invoke('filebrowser:list-dir', { dirPath }),
+    openFile: (filePath: string): Promise<{ success: boolean; path?: string; content?: string; size?: number; error?: string }> =>
+      ipcRenderer.invoke('filebrowser:open-file', { filePath }),
+    saveFile: (filePath: string, content: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('filebrowser:save-file', { filePath, content }),
+    openExternal: (targetPath: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('filebrowser:open-external', { targetPath }),
+    getState: (): Promise<{ rootPath: string; expandedPaths: string[] }> =>
+      ipcRenderer.invoke('filebrowser:get-state'),
+    saveState: (state: { rootPath: string; expandedPaths: string[] }): Promise<void> =>
+      ipcRenderer.invoke('filebrowser:save-state', state),
+  },
+
   // === 拡張機能変更通知 ===
   onExtChanged: (callback: () => void) => {
     const handler = () => callback();

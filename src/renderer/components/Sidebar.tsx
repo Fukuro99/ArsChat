@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { ChatSession } from '../../shared/types';
 import type { LoadedExtension } from '../extension-loader';
+import { FileBrowserPanel, type FileBrowserPanelProps } from './FileBrowser';
 
 interface SidePanelProps {
-  /** アクティブなパネル ID ('history' | 'extensions' | '{extId}:{pageId}') */
+  /** アクティブなパネル ID ('history' | 'extensions' | 'browser' | '{extId}:{pageId}') */
   activePanelId: string;
   currentSessionId: string | null;
   currentPage: string;
@@ -11,6 +12,7 @@ interface SidePanelProps {
   onSelectSession: (id: string) => void;
   onNewSession: () => void;
   onNavigate: (page: string) => void;
+  onOpenFileTab: FileBrowserPanelProps['onOpenFileTab'];
 }
 
 /** 会話履歴パネル */
@@ -151,6 +153,7 @@ export default function Sidebar({
   onSelectSession,
   onNewSession,
   onNavigate,
+  onOpenFileTab,
 }: SidePanelProps) {
   if (activePanelId === 'history') {
     return (
@@ -159,6 +162,20 @@ export default function Sidebar({
         onSelectSession={onSelectSession}
         onNewSession={onNewSession}
       />
+    );
+  }
+
+  if (activePanelId === 'browser') {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="px-3 py-2.5 border-b border-aria-border flex items-center gap-2 shrink-0">
+          <span className="text-base leading-none">📁</span>
+          <span className="text-xs font-semibold text-aria-text-muted uppercase tracking-wider">ファイルブラウザ</span>
+        </div>
+        <div className="flex-1 overflow-hidden">
+          <FileBrowserPanel onOpenFileTab={onOpenFileTab} />
+        </div>
+      </div>
     );
   }
 

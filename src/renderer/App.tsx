@@ -7,6 +7,7 @@ import Sidebar from './components/Sidebar';
 import RightPanel from './components/RightPanel';
 import WidgetOverlay from './components/WidgetOverlay';
 import PaneGroup from './components/PaneGroup';
+import { FileViewerPage } from './components/FileBrowser';
 import { loadExtensions, type LoadedExtension, type OpenTabOptions } from './extension-loader';
 import type { AppTab, DragState, Pane } from './types/app';
 
@@ -400,6 +401,34 @@ export default function App() {
     setActivePanelId((prev) => (prev === id ? null : id));
   };
 
+  // ===== ファイルブラウザ: ファイルタブを開く =====
+  const handleOpenFileTab = useCallback((tabId: string, label: string, icon: string) => {
+    setPanes((prev) => {
+      // すでに開いていれば切り替え
+      for (const pane of prev) {
+        const existing = pane.tabs.find((t) => t.id === tabId);
+        if (existing) {
+          setActivePaneId(pane.id);
+          return prev.map((p) => p.id === pane.id ? { ...p, activeTabId: tabId } : p);
+        }
+      }
+      const currentPaneId = activePaneIdRef.current;
+      const newTab: AppTab = {
+        id: tabId,
+        page: 'fb-file',
+        label,
+        icon,
+        closable: true,
+        tabId,
+      };
+      return prev.map((p) =>
+        p.id === currentPaneId
+          ? { ...p, tabs: [...p.tabs, newTab], activeTabId: tabId }
+          : p,
+      );
+    });
+  }, []);
+
   const hasNavExtensions = extensions.some((ext) =>
     (ext.info.manifest.pages ?? []).some(
       (p) => p.sidebar !== false && !p.sidebarPanel && !p.rightPanel,
@@ -431,6 +460,10 @@ export default function App() {
           }}
         />
       );
+    }
+
+    if (tab.page === 'fb-file') {
+      return <FileViewerPage tabId={tab.tabId ?? ''} />;
     }
 
     const m = tab.page.match(/^ext:(.+?):(.+)$/);
@@ -517,6 +550,7 @@ export default function App() {
                   currentSessionId={currentSessionId}
                   currentPage={currentPage}
                   extensions={extensions}
+                  onOpenFileTab={handleOpenFileTab}
                   onSelectSession={(id) => {
                     setCurrentSessionId(id);
                     window.arisChatAPI.setActiveSession?.(id);

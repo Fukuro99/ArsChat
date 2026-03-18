@@ -1,13 +1,14 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
-import { ArisChatSettings, DEFAULT_SETTINGS, ChatSession, MCPConfig, DEFAULT_MCP_CONFIG } from '../shared/types';
+import { ArisChatSettings, DEFAULT_SETTINGS, ChatSession, MCPConfig, DEFAULT_MCP_CONFIG, FileBrowserState } from '../shared/types';
 
 const DATA_DIR = path.join(app.getPath('userData'), 'arischat-data');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const MCP_CONFIG_FILE = path.join(DATA_DIR, 'mcp-config.json');
 const SESSIONS_DIR = path.join(DATA_DIR, 'sessions');
 const ICONS_DIR = path.join(DATA_DIR, 'custom-icons');
+const FILEBROWSER_STATE_FILE = path.join(DATA_DIR, 'filebrowser-state.json');
 
 export function createStore() {
   // ディレクトリ作成
@@ -105,6 +106,27 @@ export function createStore() {
         fs.writeFileSync(MCP_CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
       } catch (err) {
         console.error('Failed to save MCP config:', err);
+      }
+    },
+
+    // ===== ファイルブラウザ状態 =====
+    getFileBrowserState(): FileBrowserState {
+      try {
+        if (fs.existsSync(FILEBROWSER_STATE_FILE)) {
+          const raw = fs.readFileSync(FILEBROWSER_STATE_FILE, 'utf-8');
+          return JSON.parse(raw);
+        }
+      } catch (err) {
+        console.error('Failed to read filebrowser state:', err);
+      }
+      return { rootPath: '', expandedPaths: [] };
+    },
+
+    saveFileBrowserState(state: FileBrowserState): void {
+      try {
+        fs.writeFileSync(FILEBROWSER_STATE_FILE, JSON.stringify(state, null, 2), 'utf-8');
+      } catch (err) {
+        console.error('Failed to save filebrowser state:', err);
       }
     },
 

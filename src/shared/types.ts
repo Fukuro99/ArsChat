@@ -296,7 +296,26 @@ export const IPC_CHANNELS = {
   EXT_RELOAD: 'ext:reload',
   EXT_INVOKE: 'ext:invoke',
   EXT_UPDATED: 'ext:updated',
+
+  // ファイルブラウザ（標準搭載）
+  FILEBROWSER_GET_HOME: 'filebrowser:get-home',
+  FILEBROWSER_GET_DRIVES: 'filebrowser:get-drives',
+  FILEBROWSER_OPEN_FOLDER_DIALOG: 'filebrowser:open-folder-dialog',
+  FILEBROWSER_LIST_DIR: 'filebrowser:list-dir',
+  FILEBROWSER_OPEN_FILE: 'filebrowser:open-file',
+  FILEBROWSER_SAVE_FILE: 'filebrowser:save-file',
+  FILEBROWSER_OPEN_EXTERNAL: 'filebrowser:open-external',
+  FILEBROWSER_GET_STATE: 'filebrowser:get-state',
+  FILEBROWSER_SAVE_STATE: 'filebrowser:save-state',
 } as const;
+
+// ===== ファイルブラウザ =====
+
+/** ファイルブラウザの永続化状態 */
+export interface FileBrowserState {
+  rootPath: string;
+  expandedPaths: string[];
+}
 
 // ===== 拡張機能 =====
 

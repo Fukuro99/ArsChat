@@ -1,5 +1,15 @@
 import { ArisChatSettings, ChatMessage, ChatMessageStats, ChatSession, LMStudioModelInfo, MCPConfig, MCPServerConfig, MCPServerStatus, MCPToolInfo, Skill, ExtensionInfo } from '../../shared/types';
 
+interface FileBrowserItem {
+  name: string;
+  path: string;
+  isDir: boolean;
+  isFile: boolean;
+  ext: string;
+  size: number | null;
+  mtime: number | null;
+}
+
 declare global {
   interface Window {
     arisChatAPI: {
@@ -83,6 +93,19 @@ declare global {
         on: (extId: string, channel: string, callback: (data: any) => void) => () => void;
         invoke: (extId: string, channel: string, data?: any) => Promise<any>;
         send: (extId: string, channel: string, data?: any) => void;
+      };
+
+      // ファイルブラウザ
+      fileBrowser: {
+        getHome: () => Promise<{ path: string }>;
+        getDrives: () => Promise<{ path: string; name: string }[]>;
+        openFolderDialog: () => Promise<{ success: boolean; path: string | null }>;
+        listDir: (dirPath: string) => Promise<{ success: boolean; items: FileBrowserItem[]; dirPath: string; error?: string }>;
+        openFile: (filePath: string) => Promise<{ success: boolean; path?: string; content?: string; size?: number; error?: string }>;
+        saveFile: (filePath: string, content: string) => Promise<{ success: boolean; error?: string }>;
+        openExternal: (targetPath: string) => Promise<{ success: boolean; error?: string }>;
+        getState: () => Promise<{ rootPath: string; expandedPaths: string[] }>;
+        saveState: (state: { rootPath: string; expandedPaths: string[] }) => Promise<void>;
       };
 
       // 拡張機能変更通知
