@@ -35,8 +35,8 @@ function IconButton({
         title={title}
         className={`${small ? 'w-8 h-8' : 'w-10 h-10'} flex items-center justify-center rounded-md transition-all duration-150 ${
           active
-            ? 'text-aria-primary bg-aria-primary/10'
-            : 'text-aria-text/50 hover:text-aria-text hover:bg-white/5'
+            ? 'bg-aria-primary/10'
+            : 'hover:bg-white/5'
         }`}
       >
         {children}
@@ -66,8 +66,8 @@ function SvgIcon({
       draggable={false}
       style={{
         filter: active
-          ? 'invert(1) brightness(1.2)'
-          : 'invert(1) opacity(0.55)',
+          ? 'brightness(0) invert(1)'
+          : 'brightness(0) invert(1) opacity(0.5)',
         transition: 'filter 0.15s',
       }}
       className={spinning ? 'animate-spin' : ''}
