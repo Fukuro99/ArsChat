@@ -1,0 +1,29 @@
+{
+  "name": "arischat-ext-hello",
+  "version": "1.0.0",
+  "description": "ArisChat 拡張機能システムのテスト用拡張",
+  "arischat": {
+    "displayName": "Hello Extension",
+    "icon": "👋",
+    "permissions": ["ai:send", "ai:stream"],
+    "main": "main.js",
+    "renderer": "dist/renderer.js",
+    "pages": [
+      {
+        "id": "hello",
+        "title": "Hello Page",
+        "icon": "👋",
+        "sidebar": true
+      },
+      {
+        "id": "ai-chat",
+        "title": "AI テスト",
+        "icon": "🤖",
+        "sidebar": true
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node build.js"
+  }
+}

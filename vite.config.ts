@@ -19,6 +19,10 @@ export default defineConfig({
   ],
   root: './src/renderer',
   base: './',
+  // Monaco Editor を dev サーバーで事前バンドル（HMR 速度改善）
+  optimizeDeps: {
+    include: ['monaco-editor'],
+  },
   build: {
     outDir: '../../dist/renderer',
     emptyOutDir: true,
@@ -28,6 +32,12 @@ export default defineConfig({
         entryFileNames: 'assets/[name].js',
         chunkFileNames: 'assets/[name].js',
         assetFileNames: 'assets/[name].[ext]',
+      },
+      // Monaco の Worker URL 関連の警告を抑制
+      onwarn(warning, defaultWarn) {
+        if (warning.message?.includes('import.meta.url')) return;
+        if (warning.code === 'EVAL') return;
+        defaultWarn(warning);
       },
     },
   },

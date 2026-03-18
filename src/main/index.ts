@@ -27,6 +27,8 @@ import { createClaudeService } from './claude';
 import { createIconManager } from './icon-manager';
 import { createMCPManager } from './mcp-manager';
 import { createSkillManager } from './skill-manager';
+import { createExtensionManager } from './extension-manager';
+import { createExtensionContext } from './extension-context';
 
 // ===== グローバル変数 =====
 let mainWindow: BrowserWindow | null = null;
@@ -54,6 +56,7 @@ const store = createStore();
 const iconManager = createIconManager();
 const mcpManager = createMCPManager();
 const skillManager = createSkillManager(store.getDataDir());
+const extensionManager = createExtensionManager(store.getDataDir());
 
 async function captureDisplayBase64(targetDisplay?: Display): Promise<string> {
   const display = targetDisplay ?? screen.getPrimaryDisplay();
@@ -1007,6 +1010,90 @@ function setupIPC(): void {
     if (!skill) return `スキル "${skillId}" が見つかりません`;
     return skillManager.invokeSkillScript(skill);
   });
+
+  // ===== 拡張機能 IPC =====
+
+  // --- 拡張一覧 ---
+  ipcMain.handle(IPC_CHANNELS.EXT_LIST, () => {
+    return extensionManager.listForRenderer();
+  });
+
+  // --- 拡張インストール ---
+  ipcMain.handle(IPC_CHANNELS.EXT_INSTALL, async (event, url: string) => {
+    try {
+      const entry = await extensionManager.install(url, (progress) => {
+        event.sender.send('ext:install-progress', progress);
+      });
+      // インストール後にロード
+      const claude = createClaudeService(mcpManager);
+      await extensionManager.loadAll((e) =>
+        createExtensionContext(e, extensionManager.getExtensionsDir(), store, claude, mainWindow),
+      );
+      return { success: true, entry };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // --- 拡張アンインストール ---
+  ipcMain.handle(IPC_CHANNELS.EXT_UNINSTALL, async (_e, extId: string) => {
+    try {
+      await extensionManager.uninstall(extId);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // --- 拡張有効/無効切り替え ---
+  ipcMain.handle(IPC_CHANNELS.EXT_TOGGLE, async (_e, extId: string, enabled: boolean) => {
+    try {
+      await extensionManager.toggle(extId, enabled);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // --- 拡張更新 ---
+  ipcMain.handle(IPC_CHANNELS.EXT_UPDATE, async (event, extId: string) => {
+    try {
+      await extensionManager.update(extId, (progress) => {
+        event.sender.send('ext:install-progress', progress);
+      });
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // --- Renderer Entry コード取得 ---
+  ipcMain.handle(IPC_CHANNELS.EXT_READ_RENDERER, (_e, extId: string) => {
+    try {
+      return { success: true, code: extensionManager.readRendererCode(extId) };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // --- 拡張強制リロード ---
+  ipcMain.handle(IPC_CHANNELS.EXT_RELOAD, async () => {
+    try {
+      await extensionManager.unloadAll();
+      const claude = createClaudeService(mcpManager);
+      await extensionManager.loadAll((e) =>
+        createExtensionContext(e, extensionManager.getExtensionsDir(), store, claude, mainWindow),
+      );
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // --- 拡張専用 IPC invoke（Renderer → Main Entry） ---
+  // チャンネル名: ext:{extId}:{channel}
+  // 拡張の activate() が ipcMain.handle で登録するため、ここでは追加不要。
+  // ただし Renderer から invoke できるように preload でラップする。
 }
 
 // ===== アプリ起動 =====
@@ -1026,6 +1113,14 @@ app.whenReady().then(() => {
       console.error('[MCP] 初期接続エラー:', err?.message);
     });
   }
+
+  // 拡張機能の自動ロード（バックグラウンド）
+  const claudeForExt = createClaudeService(mcpManager);
+  extensionManager.loadAll((entry) =>
+    createExtensionContext(entry, extensionManager.getExtensionsDir(), store, claudeForExt, mainWindow),
+  ).catch((err) => {
+    console.error('[Extension] 初期ロードエラー:', err?.message);
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -1047,6 +1142,7 @@ app.on('before-quit', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  extensionManager.unloadAll().catch(() => {});
 });
 
 app.on('window-all-closed', () => {

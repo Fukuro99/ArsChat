@@ -285,4 +285,84 @@ export const IPC_CHANNELS = {
   SESSION_GET_ACTIVE: 'session:get-active',
   SESSION_ACTIVE_CHANGED: 'session:active-changed',
   SESSION_UPDATED: 'session:updated',
+
+  // 拡張機能
+  EXT_LIST: 'ext:list',
+  EXT_INSTALL: 'ext:install',
+  EXT_UNINSTALL: 'ext:uninstall',
+  EXT_TOGGLE: 'ext:toggle',
+  EXT_UPDATE: 'ext:update',
+  EXT_READ_RENDERER: 'ext:read-renderer',
+  EXT_RELOAD: 'ext:reload',
+  EXT_INVOKE: 'ext:invoke',
+  EXT_UPDATED: 'ext:updated',
 } as const;
+
+// ===== 拡張機能 =====
+
+/** 拡張機能の権限 */
+export type ExtensionPermission =
+  | 'ai:stream'
+  | 'ai:send'
+  | 'ai:config-read'
+  | 'session:read'
+  | 'session:write'
+  | 'settings:read'
+  | 'settings:write'
+  | 'shell:execute'
+  | 'fs:read'
+  | 'fs:write'
+  | 'clipboard:read'
+  | 'clipboard:write'
+  | 'notification'
+  | 'window:create';
+
+/** 拡張機能のページ定義 */
+export interface ExtensionPageDef {
+  id: string;
+  title: string;
+  icon: string;           // 絵文字 or Lucide icon名
+  sidebar?: boolean;      // 左サイドバーのナビリンクに表示するか（デフォルト true）
+  sidebarPanel?: boolean; // 左サイドバー内にインラインパネルとして描画するか
+  rightPanel?: boolean;   // 右パネルのタブとして描画するか
+}
+
+/** 拡張機能の設定パネル定義 */
+export interface ExtensionSettingsDef {
+  id: string;
+  title: string;
+}
+
+/** package.json の arischat フィールド */
+export interface ExtensionManifest {
+  displayName: string;
+  icon: string;
+  minAppVersion?: string;
+  permissions: ExtensionPermission[];
+  main?: string;         // Main Process エントリ（dist/main.js 等）
+  renderer: string;      // Renderer エントリ（dist/renderer.js 等）
+  pages?: ExtensionPageDef[];
+  settings?: ExtensionSettingsDef[];
+}
+
+/** registry.json に保存される拡張エントリ */
+export interface ExtensionRegistryEntry {
+  id: string;            // リポジトリ名（arischat-ext-xxx）
+  source: string;        // GitHub URL
+  version: string;       // package.json の version
+  installedAt: string;   // ISO 8601
+  enabled: boolean;
+  permissions: ExtensionPermission[];
+  manifest: ExtensionManifest;
+}
+
+/** Renderer 側に渡す拡張情報 */
+export interface ExtensionInfo {
+  id: string;
+  source: string;
+  version: string;
+  enabled: boolean;
+  manifest: ExtensionManifest;
+  /** Renderer Entry の絶対パス（file:// 用） */
+  rendererPath: string;
+}
