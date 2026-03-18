@@ -76,6 +76,15 @@ export default function ActivityBar({
         <img src="./codicons/history.svg" width={16} height={16} alt="会話履歴" style={{ filter: 'invert(1) opacity(0.8)' }} />
       </IconButton>
 
+      {/* ファイルブラウザ（標準搭載） */}
+      <IconButton
+        title="ファイルブラウザ"
+        active={activePanelId === 'browser'}
+        onClick={() => onSelectPanel('browser')}
+      >
+        <img src="./file-icons/default_folder.svg" width={16} height={16} alt="ファイルブラウザ" style={{ filter: 'invert(1) opacity(0.8)' }} />
+      </IconButton>
+
       {/* 拡張ナビリンクまとめ — codicons */}
       {hasNavExtensions && (
         <IconButton

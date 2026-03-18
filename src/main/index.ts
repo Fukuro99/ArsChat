@@ -15,7 +15,8 @@ import {
 import type { Rectangle, Display } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
-import { execSync } from 'child_process';
+import * as os from 'os';
+import { execSync, exec } from 'child_process';
 
 // Windows コンソールを UTF-8 に設定
 if (process.platform === 'win32') {
@@ -1112,6 +1113,105 @@ function setupIPC(): void {
   // チャンネル名: ext:{extId}:{channel}
   // 拡張の activate() が ipcMain.handle で登録するため、ここでは追加不要。
   // ただし Renderer から invoke できるように preload でラップする。
+
+  // ===== ファイルブラウザ IPC（標準搭載） =====
+
+  ipcMain.handle('filebrowser:get-home', async () => ({ path: os.homedir() }));
+
+  ipcMain.handle('filebrowser:get-drives', async () => {
+    if (process.platform === 'win32') {
+      return new Promise<{ path: string; name: string }[]>((resolve) => {
+        exec('wmic logicaldisk get name', { timeout: 4000 }, (err, stdout) => {
+          if (err) { resolve([{ path: 'C:\\', name: 'C:' }]); return; }
+          const drives = stdout.trim().split('\n').slice(1)
+            .map((l) => l.trim()).filter((l) => /^[A-Z]:$/.test(l))
+            .map((d) => ({ path: d + '\\', name: d }));
+          resolve(drives.length ? drives : [{ path: 'C:\\', name: 'C:' }]);
+        });
+      });
+    }
+    return [{ path: '/', name: '/' }, { path: os.homedir(), name: '~' }];
+  });
+
+  ipcMain.handle('filebrowser:open-folder-dialog', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: 'フォルダを開く',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    return result.canceled || !result.filePaths.length
+      ? { success: false, path: null }
+      : { success: true, path: result.filePaths[0] };
+  });
+
+  ipcMain.handle('filebrowser:list-dir', async (_e, { dirPath }: { dirPath: string }) => {
+    try {
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      const items = entries.map((entry) => {
+        const fullPath = path.join(dirPath, entry.name);
+        let size: number | null = null;
+        let mtime: number | null = null;
+        try {
+          const st = fs.statSync(fullPath);
+          size = entry.isFile() ? st.size : null;
+          mtime = st.mtimeMs;
+        } catch {}
+        return {
+          name: entry.name,
+          path: fullPath,
+          isDir: entry.isDirectory(),
+          isFile: entry.isFile(),
+          ext: entry.isFile() ? path.extname(entry.name).toLowerCase() : '',
+          size,
+          mtime,
+        };
+      });
+      items.sort((a, b) =>
+        a.isDir !== b.isDir ? (a.isDir ? -1 : 1) : a.name.localeCompare(b.name, 'ja'),
+      );
+      return { success: true, items, dirPath };
+    } catch (err: any) {
+      return { success: false, error: err.message, items: [], dirPath };
+    }
+  });
+
+  ipcMain.handle('filebrowser:open-file', async (_e, { filePath, maxBytes = 5242880 }: { filePath: string; maxBytes?: number }) => {
+    try {
+      const st = fs.statSync(filePath);
+      if (st.size > maxBytes) {
+        return { success: false, error: `ファイルが大きすぎます (${(st.size / 1048576).toFixed(1)} MB)` };
+      }
+      const content = fs.readFileSync(filePath, 'utf-8');
+      return { success: true, path: filePath, content, size: st.size };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('filebrowser:save-file', async (_e, { filePath, content }: { filePath: string; content: string }) => {
+    try {
+      fs.writeFileSync(filePath, content, 'utf-8');
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('filebrowser:open-external', async (_e, { targetPath }: { targetPath: string }) => {
+    try {
+      await shell.openPath(targetPath);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('filebrowser:get-state', () => {
+    return store.getFileBrowserState();
+  });
+
+  ipcMain.handle('filebrowser:save-state', (_e, state: { rootPath: string; expandedPaths: string[] }) => {
+    store.saveFileBrowserState(state);
+  });
 }
 
 // ===== アプリ起動 =====
