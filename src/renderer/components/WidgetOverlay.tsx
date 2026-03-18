@@ -1,6 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ChatMessage } from '../../shared/types';
+import { ChatMessage, getEffectiveAvatarPath } from '../../shared/types';
 import ariaIconUrl from '../assets/aria-icon.png';
+
+/** ローカルファイルパスをカスタムスキームの URL に変換 */
+function toFileUrl(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/');
+  const p = normalized.startsWith('/') ? normalized : `/${normalized}`;
+  return `arschat-file://${p}`;
+}
 
 /** <think>...</think> タグをすべて除去してレスポンスのみを返す */
 function stripThinkBlocks(content: string): string {
@@ -23,6 +30,7 @@ export default function WidgetOverlay() {
   const [streamingContent, setStreamingContent] = useState('');
   const [screenWatchMode, setScreenWatchMode] = useState(false);
   const [thinkMode, setThinkMode] = useState(false);
+  const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const widgetSessionIdRef = useRef<string | null>(null);
@@ -35,6 +43,14 @@ export default function WidgetOverlay() {
     document.body.className = 'bg-transparent overflow-hidden';
   }, []);
 
+  // ペルソナのアバター画像を読み込む（マウント時に一度取得）
+  useEffect(() => {
+    window.arsChatAPI.getSettings().then((settings) => {
+      const p = getEffectiveAvatarPath(settings);
+      setAvatarSrc(p ?? null);
+    });
+  }, []);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: isStreaming ? 'auto' : 'smooth' });
   }, [messages, streamingContent, isStreaming]);
@@ -45,7 +61,7 @@ export default function WidgetOverlay() {
       widgetSessionIdRef.current = crypto.randomUUID();
     }
     const title = msgs[0]?.content.slice(0, 50) || 'ウィジェットチャット';
-    await window.arisChatAPI.createSession({
+    await window.arsChatAPI.createSession({
       id: widgetSessionIdRef.current,
       title,
       messages: msgs,
@@ -53,33 +69,33 @@ export default function WidgetOverlay() {
       updatedAt: Date.now(),
     });
     // アクティブセッションをメインプロセスに通知
-    window.arisChatAPI.setActiveSession?.(widgetSessionIdRef.current);
+    window.arsChatAPI.setActiveSession?.(widgetSessionIdRef.current);
   }, []);
 
   // 起動時・セッション切り替え時にアクティブセッションを読み込む
   useEffect(() => {
-    window.arisChatAPI.getActiveSession?.().then((sessionId) => {
+    window.arsChatAPI.getActiveSession?.().then((sessionId) => {
       if (sessionId && sessionId !== widgetSessionIdRef.current) {
         widgetSessionIdRef.current = sessionId;
-        window.arisChatAPI.getSession(sessionId).then((session) => {
+        window.arsChatAPI.getSession(sessionId).then((session) => {
           if (session) setMessages(session.messages);
         });
       }
     });
 
-    const cleanupChanged = window.arisChatAPI.onActiveSessionChanged?.((sessionId) => {
+    const cleanupChanged = window.arsChatAPI.onActiveSessionChanged?.((sessionId) => {
       if (sessionId && sessionId !== widgetSessionIdRef.current) {
         widgetSessionIdRef.current = sessionId;
-        window.arisChatAPI.getSession(sessionId).then((session) => {
+        window.arsChatAPI.getSession(sessionId).then((session) => {
           if (session) setMessages(session.messages);
         });
       }
     });
 
     // 同じセッションにメッセージが追加されたときも再読み込み
-    const cleanupUpdated = window.arisChatAPI.onSessionUpdated?.((updatedId) => {
+    const cleanupUpdated = window.arsChatAPI.onSessionUpdated?.((updatedId) => {
       if (updatedId === widgetSessionIdRef.current) {
-        window.arisChatAPI.getSession(updatedId).then((session) => {
+        window.arsChatAPI.getSession(updatedId).then((session) => {
           if (session) setMessages(session.messages);
         });
       }
@@ -92,7 +108,7 @@ export default function WidgetOverlay() {
   }, []);
 
   useEffect(() => {
-    const cleanupChunk = window.arisChatAPI.onStreamChunk((chunk) => {
+    const cleanupChunk = window.arsChatAPI.onStreamChunk((chunk) => {
       pendingChunksRef.current += chunk;
       if (rafIdRef.current === null) {
         rafIdRef.current = requestAnimationFrame(() => {
@@ -105,7 +121,7 @@ export default function WidgetOverlay() {
         });
       }
     });
-    const cleanupEnd = window.arisChatAPI.onStreamEnd(() => {
+    const cleanupEnd = window.arsChatAPI.onStreamEnd(() => {
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
@@ -132,7 +148,7 @@ export default function WidgetOverlay() {
       });
       setIsStreaming(false);
     });
-    const cleanupError = window.arisChatAPI.onStreamError(() => {
+    const cleanupError = window.arsChatAPI.onStreamError(() => {
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
@@ -159,7 +175,7 @@ export default function WidgetOverlay() {
 
   const handleExpand = useCallback(() => {
     setExpanded(true);
-    window.arisChatAPI.expandWidget();
+    window.arsChatAPI.expandWidget();
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
 
@@ -172,7 +188,7 @@ export default function WidgetOverlay() {
       if (ev.movementX !== 0 || ev.movementY !== 0) {
         dragActive.current = true;
         setIsDragging(true);
-        window.arisChatAPI.moveWidget(ev.movementX, ev.movementY);
+        window.arsChatAPI.moveWidget(ev.movementX, ev.movementY);
       }
     };
     const onUp = () => {
@@ -192,7 +208,7 @@ export default function WidgetOverlay() {
 
   const handleCollapse = useCallback(() => {
     setExpanded(false);
-    window.arisChatAPI.collapseWidget();
+    window.arsChatAPI.collapseWidget();
   }, []);
 
   const handleSend = useCallback(async () => {
@@ -202,7 +218,7 @@ export default function WidgetOverlay() {
     let imageBase64: string | undefined;
     if (screenWatchMode) {
       try {
-        imageBase64 = await window.arisChatAPI.captureScreen();
+        imageBase64 = await window.arsChatAPI.captureScreen();
       } catch {
         // キャプチャ失敗時はテキストのみ送信
       }
@@ -222,7 +238,7 @@ export default function WidgetOverlay() {
     setStreamingContent('');
 
     // セッションIDを渡す（既存セッションがなければ後で新規発行）
-    window.arisChatAPI.sendMessage(newMessages, widgetSessionIdRef.current || '', { thinkMode });
+    window.arsChatAPI.sendMessage(newMessages, widgetSessionIdRef.current || '', { thinkMode });
   }, [input, isStreaming, messages, screenWatchMode, thinkMode]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -246,10 +262,11 @@ export default function WidgetOverlay() {
           draggable={false}
         >
           <img
-            src={ariaIconUrl}
-            alt="ArisChat"
+            src={avatarSrc ? toFileUrl(avatarSrc) : ariaIconUrl}
+            alt="ArsChat"
             className="w-full h-full object-contain pointer-events-none"
             draggable={false}
+            onError={(e) => { (e.currentTarget as HTMLImageElement).src = ariaIconUrl; }}
           />
         </button>
       </div>
@@ -260,11 +277,11 @@ export default function WidgetOverlay() {
     <div className="h-screen w-screen flex flex-col bg-[#1a1b2e] rounded-xl overflow-hidden border border-white/10 shadow-2xl">
       {/* ヘッダー */}
       <div className="shrink-0 flex items-center justify-between px-3 py-2 bg-[#1e1f33] border-b border-white/10 widget-drag">
-        <span className="text-xs font-semibold text-white/80 widget-drag">ArisChat</span>
+        <span className="text-xs font-semibold text-white/80 widget-drag">ArsChat</span>
         <div className="flex items-center gap-1 widget-no-drag">
           <button
             onClick={() => {
-              window.arisChatAPI.openChatWindow();
+              window.arsChatAPI.openChatWindow();
             }}
             className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 text-white/60 hover:text-white transition-colors"
             title="フルウィンドウで開く"
@@ -378,7 +395,7 @@ export default function WidgetOverlay() {
           />
           {isStreaming ? (
             <button
-              onClick={() => window.arisChatAPI.abortChat()}
+              onClick={() => window.arsChatAPI.abortChat()}
               className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
               title="停止"
             >
