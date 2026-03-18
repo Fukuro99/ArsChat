@@ -90,6 +90,47 @@ function activate(ctx) {
     try { const { shell } = require('electron'); await shell.openPath(targetPath); return { success: true }; }
     catch (err) { return { success: false, error: err.message }; }
   });
+
+  // ===== vscode-icons/vscode-icons ファイル種別アイコン提供 =====
+  ctx.ipc.handle('get-file-icons', async () => {
+    const iconsDir = path.join(__dirname, 'vscode-icons', 'icons');
+    const iconNames = [
+      // デフォルト
+      'default_file', 'default_folder', 'default_folder_opened',
+      // JavaScript / TypeScript / React
+      'file_type_js', 'file_type_typescript', 'file_type_reactts', 'file_type_reactjs',
+      // データ
+      'file_type_json', 'file_type_yaml', 'file_type_toml', 'file_type_xml',
+      'file_type_graphql', 'file_type_sql',
+      // マークアップ / スタイル
+      'file_type_markdown', 'file_type_html',
+      'file_type_css', 'file_type_scss', 'file_type_sass', 'file_type_less',
+      // システム言語
+      'file_type_python', 'file_type_rust', 'file_type_go',
+      'file_type_ruby', 'file_type_php', 'file_type_java',
+      'file_type_csharp', 'file_type_cpp', 'file_type_c',
+      // モバイル / その他言語
+      'file_type_dartlang', 'file_type_kotlin', 'file_type_swift',
+      'file_type_lua', 'file_type_elixir', 'file_type_wasm',
+      // テキスト / ログ
+      'file_type_text', 'file_type_log',
+      // シェル / スクリプト
+      'file_type_shell', 'file_type_bat', 'file_type_powershell',
+      // メディア / ドキュメント
+      'file_type_image', 'file_type_pdf',
+      // インフラ
+      'file_type_docker',
+      // Git
+      'file_type_git',
+    ];
+    const result = {};
+    for (const name of iconNames) {
+      try {
+        result[name] = fs.readFileSync(path.join(iconsDir, `${name}.svg`), 'utf-8');
+      } catch { /* アイコンが存在しない場合はスキップ */ }
+    }
+    return result;
+  });
 }
 
 module.exports = { activate };

@@ -60,41 +60,30 @@ export default function ActivityBar({
 
   return (
     <div className="h-full w-12 bg-aria-bg-light border-r border-aria-border flex flex-col items-center py-2 gap-1 shrink-0">
-      {/* 新規チャット */}
+      {/* 新規チャット — microsoft/vscode-icons (codicons) */}
       <IconButton title="新規チャット" onClick={onNewSession}>
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="8" y1="2" x2="8" y2="14"/>
-          <line x1="2" y1="8" x2="14" y2="8"/>
-        </svg>
+        <img src="./codicons/add.svg" width={16} height={16} alt="新規チャット" style={{ filter: 'invert(1) opacity(0.8)' }} />
       </IconButton>
 
       <div className="w-6 h-px bg-aria-border my-1" />
 
-      {/* 会話履歴 */}
+      {/* 会話履歴 — codicons */}
       <IconButton
         title="会話履歴"
         active={activePanelId === 'history'}
         onClick={() => onSelectPanel('history')}
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="9"/>
-          <polyline points="12 7 12 12 15 15"/>
-        </svg>
+        <img src="./codicons/history.svg" width={16} height={16} alt="会話履歴" style={{ filter: 'invert(1) opacity(0.8)' }} />
       </IconButton>
 
-      {/* 拡張ナビリンクまとめ（ブリーフケースアイコン） */}
+      {/* 拡張ナビリンクまとめ — codicons */}
       {hasNavExtensions && (
         <IconButton
           title="拡張機能"
           active={activePanelId === 'extensions'}
           onClick={() => onSelectPanel('extensions')}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2" y="7" width="20" height="14" rx="2"/>
-            <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
-            <line x1="12" y1="12" x2="12" y2="16"/>
-            <line x1="10" y1="14" x2="14" y2="14"/>
-          </svg>
+          <img src="./codicons/extensions.svg" width={16} height={16} alt="拡張機能" style={{ filter: 'invert(1) opacity(0.8)' }} />
         </IconButton>
       )}
 
@@ -112,24 +101,19 @@ export default function ActivityBar({
 
       {/* 下部：拡張リロードボタン */}
       <div className="flex-1" />
+      {/* 拡張リロード — codicons */}
       <IconButton
         title={isReloading ? '拡張機能をリロード中…' : '拡張機能をリロード'}
         onClick={onReloadExtensions}
       >
-        <svg
-          width="15"
-          height="15"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+        <img
+          src="./codicons/refresh.svg"
+          width={15}
+          height={15}
+          alt="リロード"
+          style={{ filter: 'invert(1) opacity(0.8)' }}
           className={isReloading ? 'animate-spin' : ''}
-        >
-          <polyline points="23 4 23 10 17 10"/>
-          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-        </svg>
+        />
       </IconButton>
     </div>
   );
