@@ -1,11 +1,4 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-
-/** ローカルファイルパスをカスタムスキームの URL に変換する（Windows / http:localhost 対応） */
-function toFileUrl(filePath: string): string {
-  const normalized = filePath.replace(/\\/g, '/');
-  const p = normalized.startsWith('/') ? normalized : `/${normalized}`;
-  return `arischat-file://${p}`;
-}
 import { marked } from 'marked';
 import markedKatex from 'marked-katex-extension';
 import 'katex/dist/katex.min.css';
@@ -15,6 +8,13 @@ import { parseInteractiveUI } from './interactive-ui/parser';
 import { BlockRenderer } from './interactive-ui/UIRenderer';
 import { SandboxRenderer } from './interactive-ui/SandboxRenderer';
 import './interactive-ui/styles.css';
+
+/** ローカルファイルパスをカスタムスキームの URL に変換する（Windows / http:localhost 対応） */
+function toFileUrl(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/');
+  const p = normalized.startsWith('/') ? normalized : `/${normalized}`;
+  return `arschat-file://${p}`;
+}
 
 // KaTeX 拡張を marked に登録（インライン $...$ とブロック $$...$$ 両対応）
 marked.use(markedKatex({ throwOnError: false, output: 'html' }));
@@ -233,8 +233,9 @@ export default function MessageBubble({
         <div className="shrink-0 w-8 h-8 rounded-full overflow-hidden bg-aria-primary/10 flex items-center justify-center">
           <img
             src={avatarSrc ? toFileUrl(avatarSrc) : ariaIconUrl}
-            alt="ArisChat"
+            alt="ArsChat"
             className="w-full h-full object-contain"
+            onError={(e) => { (e.currentTarget as HTMLImageElement).src = ariaIconUrl; }}
           />
         </div>
       )}

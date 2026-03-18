@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { ArisChatSettings, ChatMessage, ChatMessageStats, LMStudioModelInfo, Skill, FileBrowserState, getEffectiveSystemPrompt } from '../shared/types';
+import { ArsChatSettings, ChatMessage, ChatMessageStats, LMStudioModelInfo, Skill, FileBrowserState, getEffectiveSystemPrompt } from '../shared/types';
 import type { MCPManager } from './mcp-manager';
 
 /** スキルコンテキスト（チャット時にスキル情報を渡すための構造体） */
@@ -431,7 +431,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
 
   // ===== Anthropic ストリーミング =====
   async function streamAnthropic(
-    settings: ArisChatSettings,
+    settings: ArsChatSettings,
     messages: ChatMessage[],
     onChunk: (chunk: string) => void,
     onEnd: (stats: ChatMessageStats) => void,
@@ -567,7 +567,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
 
   // ===== LM Studio (OpenAI互換) ストリーミング =====
   async function streamLMStudio(
-    settings: ArisChatSettings,
+    settings: ArsChatSettings,
     messages: ChatMessage[],
     onChunk: (chunk: string) => void,
     onEnd: (stats: ChatMessageStats) => void,
@@ -1003,7 +1003,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
   // ===== サイレント送信（非ストリーミング、履歴保存なし） =====
 
   async function sendChatSilent(
-    settings: ArisChatSettings,
+    settings: ArsChatSettings,
     messages: ChatMessage[],
   ): Promise<{ content: string; stats: ChatMessageStats }> {
     const provider = settings.provider ?? 'anthropic';
@@ -1016,7 +1016,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
   }
 
   async function sendChatSilentAnthropic(
-    settings: ArisChatSettings,
+    settings: ArsChatSettings,
     messages: ChatMessage[],
   ): Promise<{ content: string; stats: ChatMessageStats }> {
     const client = new Anthropic({ apiKey: settings.apiKey });
@@ -1063,7 +1063,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
   }
 
   async function sendChatSilentLMStudio(
-    settings: ArisChatSettings,
+    settings: ArsChatSettings,
     messages: ChatMessage[],
   ): Promise<{ content: string; stats: ChatMessageStats }> {
     const baseUrl = normalizeBaseUrl(settings.lmstudioBaseUrl);
@@ -1141,7 +1141,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
   // ===== 公開API =====
   return {
     async streamChat(
-      settings: ArisChatSettings,
+      settings: ArsChatSettings,
       messages: ChatMessage[],
       onChunk: (chunk: string) => void,
       onEnd: (stats: ChatMessageStats) => void,
@@ -1170,7 +1170,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
 
     /** サイレント送信（非ストリーミング・履歴保存なし） */
     async sendSilent(
-      settings: ArisChatSettings,
+      settings: ArsChatSettings,
       messages: ChatMessage[],
     ): Promise<{ content: string; stats: ChatMessageStats }> {
       return sendChatSilent(settings, messages);
@@ -1181,7 +1181,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
      * 現在のプロバイダー設定に従い Anthropic または LM Studio を使用する
      */
     async generateText(
-      settings: ArisChatSettings,
+      settings: ArsChatSettings,
       systemPrompt: string,
       userMessage: string,
     ): Promise<string> {

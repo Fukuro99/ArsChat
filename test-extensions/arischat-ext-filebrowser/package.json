@@ -1,11 +1,11 @@
 {
-  "name": "arischat-ext-filebrowser",
+  "name": "arschat-ext-filebrowser",
   "version": "1.0.0",
   "scripts": {
     "build": "echo renderer.js is pre-built, skipping"
   },
-  "arischat": {
-    "id": "arischat-ext-filebrowser",
+  "arschat": {
+    "id": "arschat-ext-filebrowser",
     "displayName": "ファイルブラウザ",
     "description": "ファイルシステムを閲覧・パスをチャットに挿入できる拡張機能",
     "version": "1.0.0",

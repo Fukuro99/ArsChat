@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 // 型のみのインポート（コンパイル後に require を生成しない）
-import type { ArisChatSettings, ChatMessage, ChatMessageStats, ChatSession, LMStudioModelInfo, MCPConfig, MCPServerStatus, MCPToolInfo, Skill } from '../shared/types';
+import type { ArsChatSettings, ChatMessage, ChatMessageStats, ChatSession, LMStudioModelInfo, MCPConfig, MCPServerStatus, MCPToolInfo, Skill } from '../shared/types';
 
 // sandbox preload 環境では require('../shared/types') が使えないため直接定義
 const IPC_CHANNELS = {
@@ -59,7 +59,7 @@ const IPC_CHANNELS = {
 const IPC_CAPTURE_IMAGE_READY = 'capture:image-ready';
 
 // レンダラープロセスに公開するAPI
-contextBridge.exposeInMainWorld('arisChatAPI', {
+contextBridge.exposeInMainWorld('arsChatAPI', {
   // === チャット ===
   sendMessage: (messages: ChatMessage[], sessionId: string, options?: { thinkMode?: boolean; openFilePaths?: string[] }) => {
     ipcRenderer.send(IPC_CHANNELS.CHAT_SEND, { messages, sessionId, thinkMode: options?.thinkMode ?? false, openFilePaths: options?.openFilePaths ?? [] });
@@ -101,10 +101,10 @@ contextBridge.exposeInMainWorld('arisChatAPI', {
   },
 
   // === 設定 ===
-  getSettings: (): Promise<ArisChatSettings> => {
+  getSettings: (): Promise<ArsChatSettings> => {
     return ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET);
   },
-  setSettings: (settings: Partial<ArisChatSettings>): Promise<ArisChatSettings> => {
+  setSettings: (settings: Partial<ArsChatSettings>): Promise<ArsChatSettings> => {
     return ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET, settings);
   },
 
@@ -287,4 +287,4 @@ contextBridge.exposeInMainWorld('arisChatAPI', {
 });
 
 // 型定義をグローバルに公開
-export type ArisChatAPI = typeof import('./preload');
+export type ArsChatAPI = typeof import('./preload');

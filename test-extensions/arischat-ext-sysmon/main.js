@@ -1,5 +1,5 @@
 /**
- * arischat-ext-sysmon / main.js
+ * arschat-ext-sysmon / main.js
  * CPU・メモリ・GPU リソースを取得して IPC で公開する
  */
 const os = require('os');

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { marked } from 'marked';
-import { ChatMessage, ChatMessageStats, ArisChatSettings, DEFAULT_SETTINGS, getEffectiveAvatarPath } from '../../shared/types';
+import { ChatMessage, ChatMessageStats, ArsChatSettings, DEFAULT_SETTINGS, getEffectiveAvatarPath } from '../../shared/types';
 import MessageBubble from './MessageBubble';
 import { parseInteractiveUI, parseUIUpdate } from './interactive-ui/parser';
 import { BlockRenderer } from './interactive-ui/UIRenderer';
@@ -53,7 +53,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
   const [error, setError] = useState<string | null>(null);
   const [screenWatchMode, setScreenWatchMode] = useState(false);
   const [thinkMode, setThinkMode] = useState(false);
-  const [settings, setSettings] = useState<ArisChatSettings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<ArsChatSettings>(DEFAULT_SETTINGS);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const currentSessionIdRef = useRef<string | null>(sessionId);
@@ -144,14 +144,14 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
 
   // 設定読み込み（アバター反映のため）— settingsVersion が変わるたびに再取得
   useEffect(() => {
-    window.arisChatAPI.getSettings().then(setSettings);
+    window.arsChatAPI.getSettings().then(setSettings);
   }, [settingsVersion]);
 
   useEffect(() => {
     // メインプロセスからのナビゲーション時も再取得
-    const cleanup = window.arisChatAPI.onNavigate((page) => {
+    const cleanup = window.arsChatAPI.onNavigate((page) => {
       if (page === 'chat') {
-        window.arisChatAPI.getSettings().then(setSettings);
+        window.arsChatAPI.getSettings().then(setSettings);
       }
     });
     return cleanup;
@@ -161,7 +161,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
   useEffect(() => {
     currentSessionIdRef.current = sessionId;
     if (sessionId) {
-      window.arisChatAPI.getSession(sessionId).then((session) => {
+      window.arsChatAPI.getSession(sessionId).then((session) => {
         if (session) {
           setMessages(session.messages);
         }
@@ -173,9 +173,9 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
 
   // 他ウィンドウ（ウィジェット等）でセッションが更新されたら再読み込み
   useEffect(() => {
-    const cleanup = window.arisChatAPI.onSessionUpdated?.((updatedId) => {
+    const cleanup = window.arsChatAPI.onSessionUpdated?.((updatedId) => {
       if (updatedId === currentSessionIdRef.current && !isStreaming) {
-        window.arisChatAPI.getSession(updatedId).then((session) => {
+        window.arsChatAPI.getSession(updatedId).then((session) => {
           if (session) setMessages(session.messages);
         });
       }
@@ -191,7 +191,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
 
   // ストリーミングイベント登録
   useEffect(() => {
-    const cleanupChunk = window.arisChatAPI.onStreamChunk((chunk) => {
+    const cleanupChunk = window.arsChatAPI.onStreamChunk((chunk) => {
       // チャンクをバッファに追加し、RAF で1フレームに1回だけ state を更新する。
       // これにより高速なトークン生成時のレンダラースレッド過負荷(マウスがくかく)を防ぐ。
       pendingChunksRef.current += chunk;
@@ -207,7 +207,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
       }
     });
 
-    const cleanupEnd = window.arisChatAPI.onStreamEnd((stats: ChatMessageStats) => {
+    const cleanupEnd = window.arsChatAPI.onStreamEnd((stats: ChatMessageStats) => {
       // ストリーム終了時: 残ったバッファを即座にフラッシュ
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current);
@@ -237,7 +237,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
       setIsStreaming(false);
     });
 
-    const cleanupError = window.arisChatAPI.onStreamError((err) => {
+    const cleanupError = window.arsChatAPI.onStreamError((err) => {
       // エラー時もバッファをリセット
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current);
@@ -263,7 +263,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
   }, []);
 
   useEffect(() => {
-    const cleanupCapture = window.arisChatAPI.onCapturedImage((imageBase64) => {
+    const cleanupCapture = window.arsChatAPI.onCapturedImage((imageBase64) => {
       setPendingImageBase64(imageBase64);
       setError(null);
       setTimeout(() => {
@@ -285,7 +285,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     }
 
     const title = msgs[0]?.content.slice(0, 50) || '新しい会話';
-    await window.arisChatAPI.createSession({
+    await window.arsChatAPI.createSession({
       id: sid,
       title,
       messages: msgs,
@@ -318,7 +318,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
       const truncated = prev.slice(0, idx); // このメッセージを除いたそれ以前
       setIsStreaming(true);
       setStreamingContent('');
-      window.arisChatAPI.sendMessage(truncated, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
+      window.arsChatAPI.sendMessage(truncated, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
       return truncated;
     });
   }, [thinkMode]);
@@ -337,7 +337,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
       const newMsgs = [...prev.slice(0, idx + 1), continueMsg];
       setIsStreaming(true);
       setStreamingContent('');
-      window.arisChatAPI.sendMessage(newMsgs, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
+      window.arsChatAPI.sendMessage(newMsgs, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
       return newMsgs;
     });
   }, [thinkMode]);
@@ -349,7 +349,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     const branchedMsgs = messages.slice(0, idx + 1);
     const newSessionId = crypto.randomUUID();
     const title = branchedMsgs[0]?.content.slice(0, 50) || '分岐した会話';
-    await window.arisChatAPI.createSession({
+    await window.arsChatAPI.createSession({
       id: newSessionId,
       title: `[分岐] ${title}`,
       messages: branchedMsgs,
@@ -397,7 +397,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     setMessages(newMessages);
     setIsStreaming(true);
     setStreamingContent('');
-    window.arisChatAPI.sendMessage(newMessages, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
+    window.arsChatAPI.sendMessage(newMessages, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
   }, [messages, thinkMode]);
 
   /** ライブUIのローカルstate更新（local: true アクション用・AI送信なし） */
@@ -518,7 +518,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     setIsLiveProcessing(true);
     try {
       // 3. AIにサイレント送信
-      const response = await window.arisChatAPI.sendSilentMessage(
+      const response = await window.arsChatAPI.sendSilentMessage(
         contextMessages,
         currentSessionIdRef.current || '',
       );
@@ -574,7 +574,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     let imageBase64 = pendingImageBase64 || undefined;
     if (screenWatchMode && !imageBase64) {
       try {
-        imageBase64 = await window.arisChatAPI.captureScreen();
+        imageBase64 = await window.arsChatAPI.captureScreen();
       } catch {
         // キャプチャ失敗時はテキストのみ送信
       }
@@ -596,14 +596,14 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     setStreamingContent('');
 
     // API送信
-    window.arisChatAPI.sendMessage(newMessages, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
+    window.arsChatAPI.sendMessage(newMessages, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
   }, [input, isStreaming, messages, pendingImageBase64, screenWatchMode, thinkMode]);
 
   const handleCaptureScreen = useCallback(async () => {
     if (isStreaming) return;
     setError(null);
     try {
-      const imageBase64 = await window.arisChatAPI.captureScreen();
+      const imageBase64 = await window.arsChatAPI.captureScreen();
       setPendingImageBase64(imageBase64);
     } catch (err: any) {
       setError(err?.message || 'スクリーンキャプチャに失敗しました。');
@@ -615,7 +615,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     if (isStreaming) return;
     setError(null);
     try {
-      const imageBase64 = await window.arisChatAPI.captureRegion();
+      const imageBase64 = await window.arsChatAPI.captureRegion();
       if (imageBase64) {
         setPendingImageBase64(imageBase64);
       }
@@ -636,7 +636,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
 
   const attachImageFromSystemClipboard = useCallback(async (showNotFoundError: boolean): Promise<boolean> => {
     try {
-      const base64 = await window.arisChatAPI.readClipboardImage();
+      const base64 = await window.arsChatAPI.readClipboardImage();
       if (base64) {
         setPendingImageBase64(base64);
         setError(null);
@@ -712,7 +712,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
             <div className="w-16 h-16 rounded-2xl bg-aria-primary/20 flex items-center justify-center mb-4">
               <span className="text-2xl font-bold text-aria-primary">A</span>
             </div>
-            <h2 className="text-lg font-semibold text-aria-text mb-2">Aris へようこそ</h2>
+            <h2 className="text-lg font-semibold text-aria-text mb-2">Ars へようこそ</h2>
             <p className="text-sm text-aria-text-muted max-w-xs">
               何でも聞いてください。テキストで質問するか、画面キャプチャを添付して質問できます。
             </p>
@@ -1013,7 +1013,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
             {/* 右側：送信・停止ボタン */}
             {isStreaming ? (
               <button
-                onClick={() => window.arisChatAPI.abortChat()}
+                onClick={() => window.arsChatAPI.abortChat()}
                 className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
                 title="停止"
               >

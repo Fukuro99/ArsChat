@@ -248,7 +248,7 @@ export function FileBrowserPanel({ onOpenFileTab }: FileBrowserPanelProps) {
   const saveState = (root: string, exp: Set<string>) => {
     if (saveStateRef.current) clearTimeout(saveStateRef.current);
     saveStateRef.current = setTimeout(() => {
-      window.arisChatAPI.fileBrowser.saveState({
+      window.arsChatAPI.fileBrowser.saveState({
         rootPath: root,
         expandedPaths: Array.from(exp),
       }).catch(() => {});
@@ -258,9 +258,9 @@ export function FileBrowserPanel({ onOpenFileTab }: FileBrowserPanelProps) {
   useEffect(() => {
     // 保存済み状態を復元
     Promise.all([
-      window.arisChatAPI.fileBrowser.getState(),
-      window.arisChatAPI.fileBrowser.getHome(),
-      window.arisChatAPI.fileBrowser.getDrives(),
+      window.arsChatAPI.fileBrowser.getState(),
+      window.arsChatAPI.fileBrowser.getHome(),
+      window.arsChatAPI.fileBrowser.getDrives(),
     ]).then(([state, homeResult, drivesResult]) => {
       if (Array.isArray(drivesResult)) setDrives(drivesResult);
       const startPath = state.rootPath || homeResult.path;
@@ -270,10 +270,10 @@ export function FileBrowserPanel({ onOpenFileTab }: FileBrowserPanelProps) {
       }
     }).catch(() => {
       // フォールバック: ホームディレクトリ
-      window.arisChatAPI.fileBrowser.getHome().then((r) => {
+      window.arsChatAPI.fileBrowser.getHome().then((r) => {
         if (r?.path) loadDir(r.path, new Set());
       });
-      window.arisChatAPI.fileBrowser.getDrives().then((r) => {
+      window.arsChatAPI.fileBrowser.getDrives().then((r) => {
         if (Array.isArray(r)) setDrives(r);
       });
     });
@@ -292,7 +292,7 @@ export function FileBrowserPanel({ onOpenFileTab }: FileBrowserPanelProps) {
     setSelectedPath('');
     setStatusMsg('');
 
-    const result = await window.arisChatAPI.fileBrowser.listDir(dirPath);
+    const result = await window.arsChatAPI.fileBrowser.listDir(dirPath);
     if (result.success) {
       setTreeData(new Map([[dirPath, result.items]]));
       // 保存済み展開状態を再現
@@ -317,7 +317,7 @@ export function FileBrowserPanel({ onOpenFileTab }: FileBrowserPanelProps) {
     for (const item of items) {
       if (item.isDir && savedExpanded.has(item.path)) {
         if (!newData.has(item.path)) {
-          const r = await window.arisChatAPI.fileBrowser.listDir(item.path);
+          const r = await window.arsChatAPI.fileBrowser.listDir(item.path);
           if (r.success) {
             newData.set(item.path, r.items);
             await restoreExpanded(item.path, r.items, savedExpanded, newData);
@@ -338,7 +338,7 @@ export function FileBrowserPanel({ onOpenFileTab }: FileBrowserPanelProps) {
       saveState(rootPath, newExp);
     } else {
       if (!treeData.has(item.path)) {
-        const result = await window.arisChatAPI.fileBrowser.listDir(item.path);
+        const result = await window.arsChatAPI.fileBrowser.listDir(item.path);
         if (result.success) {
           setTreeData((prev) => new Map([...prev, [item.path, result.items]]));
         }
@@ -356,7 +356,7 @@ export function FileBrowserPanel({ onOpenFileTab }: FileBrowserPanelProps) {
       return;
     }
     setStatusMsg('読み込み中...');
-    const result = await window.arisChatAPI.fileBrowser.openFile(item.path);
+    const result = await window.arsChatAPI.fileBrowser.openFile(item.path);
     if (result.success && result.path && result.content !== undefined) {
       const tabId = 'fb:' + result.path;
       pendingFiles.set(tabId, {
@@ -372,7 +372,7 @@ export function FileBrowserPanel({ onOpenFileTab }: FileBrowserPanelProps) {
   }
 
   async function handleOpenFolder() {
-    const result = await window.arisChatAPI.fileBrowser.openFolderDialog();
+    const result = await window.arsChatAPI.fileBrowser.openFolderDialog();
     if (result.success && result.path) {
       loadDir(result.path, new Set());
     }
@@ -533,13 +533,13 @@ export function FileViewerPage({ tabId }: { tabId: string }) {
     });
 
     const saveAction = editor.addAction({
-      id: 'arischat-save-file',
+      id: 'arschat-save-file',
       label: 'ファイルを保存',
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
       run: async (ed: any) => {
         if (!modifiedRef.current || !filePath) return;
         const content = ed.getValue();
-        const result = await window.arisChatAPI.fileBrowser.saveFile(filePath, content);
+        const result = await window.arsChatAPI.fileBrowser.saveFile(filePath, content);
         if (!result.success) {
           alert('保存に失敗しました: ' + result.error);
         } else {
@@ -561,7 +561,7 @@ export function FileViewerPage({ tabId }: { tabId: string }) {
   async function handleSave() {
     if (!modifiedRef.current || !filePath || !editorRef.current) return;
     const content = editorRef.current.getValue();
-    const result = await window.arisChatAPI.fileBrowser.saveFile(filePath, content);
+    const result = await window.arsChatAPI.fileBrowser.saveFile(filePath, content);
     if (!result.success) {
       alert('保存に失敗しました: ' + result.error);
     } else {
@@ -615,7 +615,7 @@ export function FileViewerPage({ tabId }: { tabId: string }) {
         </button>
         <button
           style={btnStyle}
-          onClick={() => window.arisChatAPI.fileBrowser.openExternal(filePath)}
+          onClick={() => window.arsChatAPI.fileBrowser.openExternal(filePath)}
           title="システムの既定アプリで開く"
         >
           ↗ 外部

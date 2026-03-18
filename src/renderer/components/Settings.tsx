@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ArisChatSettings, DEFAULT_SETTINGS, LMStudioModelInfo, MCPConfig, MCPServerConfig, MCPServerStatus, Persona, Skill } from '../../shared/types';
+import { ArsChatSettings, DEFAULT_SETTINGS, LMStudioModelInfo, MCPConfig, MCPServerConfig, MCPServerStatus, Persona, Skill } from '../../shared/types';
 
 /** ローカルファイルパスをカスタムスキームの URL に変換する（Windows / http:localhost 対応） */
 function toFileUrl(filePath: string): string {
   const normalized = filePath.replace(/\\/g, '/');
   const p = normalized.startsWith('/') ? normalized : `/${normalized}`;
-  return `arischat-file://${p}`;
+  return `arschat-file://${p}`;
 }
 
 // ===== スキル共通コンポーネント =====
@@ -113,7 +113,7 @@ interface SettingsProps {
 }
 
 export default function Settings({ onBack, extensions = [] }: SettingsProps) {
-  const [settings, setSettings] = useState<ArisChatSettings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<ArsChatSettings>(DEFAULT_SETTINGS);
   const [saved, setSaved] = useState(false);
 
   // LM Studio モデル関連
@@ -147,7 +147,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
   const [extList, setExtList] = useState<any[]>([]);
 
   const loadExtList = async () => {
-    const list = await window.arisChatAPI.extensions.list();
+    const list = await window.arsChatAPI.extensions.list();
     setExtList(list);
   };
 
@@ -155,7 +155,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
     if (!extInstallUrl.trim()) return;
     setExtInstalling(true);
     setExtInstallMsg(null);
-    const result = await window.arisChatAPI.extensions.install(extInstallUrl.trim());
+    const result = await window.arsChatAPI.extensions.install(extInstallUrl.trim());
     setExtInstalling(false);
     if (result.success) {
       setExtInstallMsg({ type: 'success', text: `"${result.entry.id}" をインストールしました` });
@@ -167,18 +167,18 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
   };
 
   const handleExtToggle = async (extId: string, enabled: boolean) => {
-    await window.arisChatAPI.extensions.toggle(extId, enabled);
+    await window.arsChatAPI.extensions.toggle(extId, enabled);
     loadExtList();
   };
 
   const handleExtUninstall = async (extId: string) => {
     if (!confirm(`拡張機能 "${extId}" をアンインストールしますか？`)) return;
-    await window.arisChatAPI.extensions.uninstall(extId);
+    await window.arsChatAPI.extensions.uninstall(extId);
     loadExtList();
   };
 
   const handleExtUpdate = async (extId: string) => {
-    await window.arisChatAPI.extensions.update(extId);
+    await window.arsChatAPI.extensions.update(extId);
     loadExtList();
     setExtInstallMsg({ type: 'success', text: `"${extId}" を更新しました` });
   };
@@ -202,10 +202,10 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
   const [formHeadersText, setFormHeadersText] = useState('');
 
   useEffect(() => {
-    window.arisChatAPI.getSettings().then(setSettings);
+    window.arsChatAPI.getSettings().then(setSettings);
     // MCP 設定と状態を取得
-    window.arisChatAPI.getMCPConfig().then(setMcpConfig);
-    window.arisChatAPI.getMCPStatus().then(setMcpStatus);
+    window.arsChatAPI.getMCPConfig().then(setMcpConfig);
+    window.arsChatAPI.getMCPStatus().then(setMcpStatus);
     // 拡張機能一覧を取得
     loadExtList();
   }, []);
@@ -217,7 +217,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
     setIsFetchingModels(true);
     setFetchError(null);
     try {
-      const models = await window.arisChatAPI.listLMStudioModels();
+      const models = await window.arsChatAPI.listLMStudioModels();
       setLmsModels(models);
       // 現在選択中のモデルがリストにない場合、最初のモデルを選択
       if (models.length > 0 && !models.find((m) => m.id === settings.lmstudioModel)) {
@@ -235,10 +235,10 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
     setIsLoadingModel(true);
     setLoadStatus('ロード中...');
     try {
-      await window.arisChatAPI.loadLMStudioModel(settings.lmstudioModel, settings.lmstudioContextLength);
+      await window.arsChatAPI.loadLMStudioModel(settings.lmstudioModel, settings.lmstudioContextLength);
       setLoadStatus('ロード完了！');
       // 状態を更新するためにモデル一覧を再取得
-      const models = await window.arisChatAPI.listLMStudioModels();
+      const models = await window.arsChatAPI.listLMStudioModels();
       setLmsModels(models);
       setTimeout(() => setLoadStatus(null), 3000);
     } catch (err: any) {
@@ -249,15 +249,15 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
     }
   }, [settings.lmstudioModel, settings.lmstudioContextLength]);
 
-  const updateSetting = async <K extends keyof ArisChatSettings>(key: K, value: ArisChatSettings[K]) => {
-    const updated = await window.arisChatAPI.setSettings({ [key]: value });
+  const updateSetting = async <K extends keyof ArsChatSettings>(key: K, value: ArsChatSettings[K]) => {
+    const updated = await window.arsChatAPI.setSettings({ [key]: value });
     setSettings(updated);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
   const handleIconSelect = async (target: 'app' | 'tray' | 'avatar') => {
-    const path = await window.arisChatAPI.selectIcon(target);
+    const path = await window.arsChatAPI.selectIcon(target);
     if (path) {
       const keyMap = {
         app: 'customIconPath',
@@ -341,7 +341,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
     const newConfig = { servers };
     setMcpConfig(newConfig);
     try {
-      const status = await window.arisChatAPI.saveMCPConfig(newConfig);
+      const status = await window.arsChatAPI.saveMCPConfig(newConfig);
       setMcpStatus(status);
     } catch (err: any) {
       console.error('MCP toggle save error:', err?.message);
@@ -352,7 +352,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
     setIsSavingMCP(true);
     setMcpSaveMsg(null);
     try {
-      const status = await window.arisChatAPI.saveMCPConfig(mcpConfig);
+      const status = await window.arsChatAPI.saveMCPConfig(mcpConfig);
       setMcpStatus(status);
       setMcpSaveMsg('保存・接続完了');
       setTimeout(() => setMcpSaveMsg(null), 3000);
@@ -367,7 +367,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
   const handleReconnectMCP = useCallback(async () => {
     setIsSavingMCP(true);
     try {
-      const status = await window.arisChatAPI.reconnectMCP();
+      const status = await window.arsChatAPI.reconnectMCP();
       setMcpStatus(status);
       setMcpSaveMsg('再接続完了');
       setTimeout(() => setMcpSaveMsg(null), 3000);
@@ -434,7 +434,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
   };
 
   const handlePersonaIconSelect = async (personaId: string) => {
-    const path = await window.arisChatAPI.selectPersonaIcon(personaId);
+    const path = await window.arsChatAPI.selectPersonaIcon(personaId);
     if (path) {
       setPersonaForm((prev) => ({ ...prev, avatarPath: path }));
     }
@@ -450,7 +450,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
     setSkillsPersonaId(personaId);
     setIsLoadingSkills(true);
     try {
-      const list = await window.arisChatAPI.listSkills(personaId);
+      const list = await window.arsChatAPI.listSkills(personaId);
       setSkills(list);
     } finally {
       setIsLoadingSkills(false);
@@ -458,7 +458,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
   }, [skillsPersonaId]);
 
   const openEditSkillForm = async (personaId: string, skill: Skill) => {
-    const body = await window.arisChatAPI.getSkillContent(personaId, skill.id) ?? '';
+    const body = await window.arsChatAPI.getSkillContent(personaId, skill.id) ?? '';
     setSkillForm({
       name: skill.name,
       description: skill.description,
@@ -474,7 +474,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
     if (!editingSkillId) return;
     setIsSavingSkill(true);
     try {
-      const updated = await window.arisChatAPI.saveSkill(personaId, editingSkillId, {
+      const updated = await window.arsChatAPI.saveSkill(personaId, editingSkillId, {
         name: skillForm.name,
         description: skillForm.description,
         trigger: skillForm.trigger || undefined,
@@ -492,23 +492,23 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
   };
 
   const handleCreateSkill = async (personaId: string) => {
-    await window.arisChatAPI.createSkill(personaId);
+    await window.arsChatAPI.createSkill(personaId);
     // 少し待ってリロード（エディタで開いた後にファイルが作成される）
     setTimeout(async () => {
-      const list = await window.arisChatAPI.listSkills(personaId);
+      const list = await window.arsChatAPI.listSkills(personaId);
       setSkills(list);
     }, 500);
   };
 
   const handleDeleteSkill = async (personaId: string, skillId: string) => {
-    await window.arisChatAPI.deleteSkill(personaId, skillId);
+    await window.arsChatAPI.deleteSkill(personaId, skillId);
     setSkills((prev) => prev.filter((s) => s.id !== skillId));
   };
 
   const handleRefreshSkills = async (personaId: string) => {
     setIsLoadingSkills(true);
     try {
-      const list = await window.arisChatAPI.listSkills(personaId);
+      const list = await window.arsChatAPI.listSkills(personaId);
       setSkills(list);
     } finally {
       setIsLoadingSkills(false);
@@ -853,7 +853,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
                         </svg>
                       </button>
                       <button
-                        onClick={() => window.arisChatAPI.openSkillsFolder(persona.id)}
+                        onClick={() => window.arsChatAPI.openSkillsFolder(persona.id)}
                         className="w-6 h-6 flex items-center justify-center rounded text-aria-text-muted hover:text-aria-text transition-colors"
                         title="フォルダを開く"
                       >
@@ -898,7 +898,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
                             <SkillRow
                               skill={skill}
                               onEdit={() => openEditSkillForm(persona.id, skill)}
-                              onOpenEditor={() => window.arisChatAPI.openSkillInEditor(skill.filePath)}
+                              onOpenEditor={() => window.arsChatAPI.openSkillInEditor(skill.filePath)}
                               onDelete={() => handleDeleteSkill(persona.id, skill.id)}
                             />
                           )}
@@ -1048,7 +1048,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
                       </svg>
                     </button>
                     <button
-                      onClick={() => window.arisChatAPI.openSkillsFolder(skillsPersonaId)}
+                      onClick={() => window.arsChatAPI.openSkillsFolder(skillsPersonaId)}
                       className="w-6 h-6 flex items-center justify-center rounded text-aria-text-muted hover:text-aria-text transition-colors"
                       title="フォルダを開く"
                     >
@@ -1093,7 +1093,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
                           <SkillRow
                             skill={skill}
                             onEdit={() => openEditSkillForm(skillsPersonaId!, skill)}
-                            onOpenEditor={() => window.arisChatAPI.openSkillInEditor(skill.filePath)}
+                            onOpenEditor={() => window.arsChatAPI.openSkillInEditor(skill.filePath)}
                             onDelete={() => handleDeleteSkill(skillsPersonaId!, skill.id)}
                           />
                         )}
@@ -1286,7 +1286,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-aria-text">OS起動時に自動起動</p>
-              <p className="text-xs text-aria-text-muted">PCを起動した時に自動的にArisを起動</p>
+              <p className="text-xs text-aria-text-muted">PCを起動した時に自動的にArsを起動</p>
             </div>
             <button
               onClick={() => updateSetting('launchAtStartup', !settings.launchAtStartup)}
@@ -1463,7 +1463,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
                       if (!serverForm.name.trim()) return;
                       setGeneratingDescFor(serverForm.name);
                       try {
-                        const desc = await window.arisChatAPI.generateMCPDescription(serverForm);
+                        const desc = await window.arsChatAPI.generateMCPDescription(serverForm);
                         if (desc) setServerForm((f) => ({ ...f, description: desc }));
                       } catch (err: any) {
                         console.error('MCP description generation error:', err?.message);
@@ -1617,7 +1617,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
                 value={extInstallUrl}
                 onChange={(e) => setExtInstallUrl(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleExtInstall()}
-                placeholder="https://github.com/user/arischat-ext-xxx"
+                placeholder="https://github.com/user/arschat-ext-xxx"
                 className="flex-1 bg-aria-surface border border-aria-border rounded-lg px-3 py-2 text-sm text-aria-text placeholder-aria-text-muted focus:outline-none focus:border-aria-primary"
                 disabled={extInstalling}
               />
@@ -1714,7 +1714,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
 
         {/* バージョン情報 */}
         <div className="text-center pb-6">
-          <p className="text-xs text-aria-text-muted">Aris v1.0.0 — AI Responsive Interactive System</p>
+          <p className="text-xs text-aria-text-muted">Ars v1.0.0 — AI Responsive Interactive System</p>
         </div>
       </div>
     </div>

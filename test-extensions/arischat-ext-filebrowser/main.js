@@ -1,5 +1,5 @@
 /**
- * arischat-ext-filebrowser / main.js
+ * arschat-ext-filebrowser / main.js
  * ファイル I/O の IPC ハンドラ（タブ管理はレンダラー側の store で行う）
  */
 'use strict';

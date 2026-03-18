@@ -12,24 +12,24 @@ import {
   screen,
   shell,
   protocol,
-  net,
 } from 'electron';
-
-// ローカル画像ファイルを http://localhost から安全に読み込むためのカスタムスキーム
-protocol.registerSchemesAsPrivileged([
-  { scheme: 'arischat-file', privileges: { bypassCSP: true, corsEnabled: true, supportFetchAPI: true } },
-]);
 import type { Rectangle, Display } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { execSync, exec } from 'child_process';
 
+// ローカル画像ファイルを http://localhost から安全に読み込むためのカスタムスキーム
+// ※ app.ready より前に呼び出す必要がある
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'arschat-file', privileges: { bypassCSP: true, corsEnabled: true, supportFetchAPI: true } },
+]);
+
 // Windows コンソールを UTF-8 に設定
 if (process.platform === 'win32') {
   try { execSync('chcp 65001', { stdio: 'ignore' }); } catch {}
 }
-import { ArisChatSettings, DEFAULT_SETTINGS, IPC_CHANNELS, ChatMessage, ChatMessageStats, ChatSession, MCPServerConfig } from '../shared/types';
+import { ArsChatSettings, DEFAULT_SETTINGS, IPC_CHANNELS, ChatMessage, ChatMessageStats, ChatSession, MCPServerConfig } from '../shared/types';
 import { createStore } from './store';
 import { createClaudeService } from './claude';
 import { createIconManager } from './icon-manager';
@@ -147,7 +147,7 @@ async function startCaptureWorkflow(): Promise<void> {
     showMainWindow({ mini: true });
     sendCapturedImageToRenderer(imageBase64);
   } catch (err: any) {
-    dialog.showErrorBox('ArisChat', `キャプチャ起動に失敗しました: ${err?.message || 'unknown error'}`);
+    dialog.showErrorBox('ArsChat', `キャプチャ起動に失敗しました: ${err?.message || 'unknown error'}`);
   }
 }
 
@@ -357,7 +357,7 @@ async function startRegionCaptureWorkflow(): Promise<string | null> {
     }
     regionCaptureWindow = null;
     widgetWindow?.showInactive();
-    dialog.showErrorBox('ArisChat', `範囲キャプチャに失敗しました: ${err?.message || 'unknown error'}`);
+    dialog.showErrorBox('ArsChat', `範囲キャプチャに失敗しました: ${err?.message || 'unknown error'}`);
     return null;
   }
 }
@@ -489,7 +489,7 @@ function createWidgetWindow(): BrowserWindow {
   win.webContents.on('context-menu', () => {
     const menu = Menu.buildFromTemplate([
       {
-        label: 'Aris を開く',
+        label: 'Ars を開く',
         click: () => {
           showMainWindow({ mini: false });
           mainWindow?.webContents.send('navigate', 'chat');
@@ -532,7 +532,7 @@ function createTray(): Tray {
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Aris を開く',
+      label: 'Ars を開く',
       click: () => {
         showMainWindow({ mini: false });
       },
@@ -561,7 +561,7 @@ function createTray(): Tray {
     },
   ]);
 
-  newTray.setToolTip('ArisChat - AI Assistant');
+  newTray.setToolTip('ArsChat - AI Assistant');
   newTray.setContextMenu(contextMenu);
 
   newTray.on('click', () => {
@@ -738,7 +738,7 @@ function setupIPC(): void {
     return store.getSettings();
   });
 
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_SET, (_e, newSettings: Partial<ArisChatSettings>) => {
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_SET, (_e, newSettings: Partial<ArsChatSettings>) => {
     const current = store.getSettings();
     const merged = { ...current, ...newSettings };
     store.saveSettings(merged);
@@ -1228,10 +1228,28 @@ function setupIPC(): void {
 
 // ===== アプリ起動 =====
 app.whenReady().then(() => {
-  // arischat-file:///C:/path/to/file → ローカルファイルとして提供
-  protocol.handle('arischat-file', (request) => {
-    const fileUrl = request.url.replace(/^arischat-file:/, 'file:');
-    return net.fetch(fileUrl);
+  // arschat-file:///C:/path/to/file → ローカルファイルとして提供
+  protocol.handle('arschat-file', (request) => {
+    // "arschat-file:///C:/Users/..." → "/C:/Users/..."
+    const withoutScheme = request.url.slice('arschat-file://'.length);
+    const decoded = decodeURIComponent(withoutScheme);
+    // Windows: "/C:/Users/..." → "C:/Users/..."  Unix: "/home/..." → "/home/..."
+    const filePath = process.platform === 'win32'
+      ? decoded.replace(/^\/([A-Za-z]:)/, '$1')
+      : decoded;
+    try {
+      const data = fs.readFileSync(filePath);
+      const ext = path.extname(filePath).slice(1).toLowerCase();
+      const mime =
+        ext === 'png' ? 'image/png' :
+        ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' :
+        ext === 'svg' ? 'image/svg+xml' :
+        ext === 'ico' ? 'image/x-icon' :
+        'image/png';
+      return new Response(data, { headers: { 'Content-Type': mime } });
+    } catch {
+      return new Response('Not found', { status: 404 });
+    }
   });
 
   setupIPC();

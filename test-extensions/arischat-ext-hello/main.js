@@ -1,5 +1,5 @@
 /**
- * arischat-ext-hello - Main Entry (CommonJS)
+ * arschat-ext-hello - Main Entry (CommonJS)
  * Main Process 側で動作し、Renderer からの IPC を処理する
  */
 
@@ -12,7 +12,7 @@ function activate(ctx) {
     try {
       const result = await ctx.ai.send({
         messages: data.messages,
-        systemPrompt: 'あなたは ArisChat 拡張機能のテスト用 AI です。簡潔に答えてください。',
+        systemPrompt: 'あなたは ArsChat 拡張機能のテスト用 AI です。簡潔に答えてください。',
       });
       return result;
     } catch (err) {

@@ -25,7 +25,7 @@ export function createMCPManager() {
 
   /** 単一サーバーへ接続してツール一覧を取得 */
   async function connectServer(config: MCPServerConfig): Promise<ConnectedServer> {
-    const client = new Client({ name: 'arischat', version: '1.0.0' });
+    const client = new Client({ name: 'arschat', version: '1.0.0' });
 
     let transport;
     if (config.type === 'stdio') {

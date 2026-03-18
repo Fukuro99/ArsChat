@@ -116,7 +116,7 @@ APIキー不要。`mcp-remote` が OAuth フロー（ブラウザ認可）とト
 | サイレント IPC | `src/main/claude.ts` | `sendSilent()` — ストリーミングなし、履歴保存なし |
 | IPC ハンドラ | `src/main/index.ts` | `chat:send-silent` チャンネルを追加 |
 | Preload 公開 | `src/main/preload.ts` | `sendSilentMessage()` を `contextBridge` 経由で公開 |
-| 型定義 | `src/renderer/types/global.d.ts` | `arisChatAPI.sendSilentMessage()` 型追加 |
+| 型定義 | `src/renderer/types/global.d.ts` | `arsChatAPI.sendSilentMessage()` 型追加 |
 | 状態管理 Hook | `src/renderer/components/interactive-ui/state-manager.ts` | `useLiveUIState`, `mergePatch` |
 | Live 描画 | `src/renderer/components/interactive-ui/UIRenderer.tsx` | `mode: "live"` / `status: "finished"` 対応 |
 | スタイル | `src/renderer/components/interactive-ui/styles.css` | `.iui-block-live`, `.iui-live-badge` 等 |

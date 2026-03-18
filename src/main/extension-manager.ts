@@ -69,10 +69,10 @@ export function createExtensionManager(dataDir: string): ExtensionManager {
   function readManifest(extDir: string): { version: string; manifest: ExtensionManifest } {
     const pkgPath = path.join(extDir, 'package.json');
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-    if (!pkg.arischat) {
-      throw new Error('package.json に arischat フィールドがありません');
+    if (!pkg.arschat) {
+      throw new Error('package.json に arschat フィールドがありません');
     }
-    return { version: pkg.version ?? '0.0.0', manifest: pkg.arischat as ExtensionManifest };
+    return { version: pkg.version ?? '0.0.0', manifest: pkg.arschat as ExtensionManifest };
   }
 
   // ===== Git clone / pull =====

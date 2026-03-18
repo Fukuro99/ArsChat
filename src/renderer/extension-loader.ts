@@ -78,7 +78,7 @@ export async function loadExtensions(
   onNavigate: (page: string) => void,
   onOpenTab: (options: OpenTabOptions) => void,
 ): Promise<LoadedExtension[]> {
-  const extInfoList: ExtensionInfo[] = await window.arisChatAPI.extensions.list();
+  const extInfoList: ExtensionInfo[] = await window.arsChatAPI.extensions.list();
   const results: LoadedExtension[] = [];
 
   for (const info of extInfoList) {
@@ -101,7 +101,7 @@ async function loadOneExtension(
   onOpenTab: (options: OpenTabOptions) => void,
 ): Promise<LoadedExtension> {
   // Main Process から Renderer Entry のコードを取得
-  const result = await window.arisChatAPI.extensions.readRendererCode(info.id);
+  const result = await window.arsChatAPI.extensions.readRendererCode(info.id);
   if (!result.success) {
     throw new Error(result.error ?? 'Renderer Entry の読み込みに失敗しました');
   }
@@ -169,11 +169,11 @@ function createRendererAPI(
   return {
     ipc: {
       invoke: (channel: string, data?: any) =>
-        window.arisChatAPI.extensions.invoke(info.id, channel, data),
+        window.arsChatAPI.extensions.invoke(info.id, channel, data),
       send: (channel: string, data?: any) =>
-        window.arisChatAPI.extensions.send(info.id, channel, data),
+        window.arsChatAPI.extensions.send(info.id, channel, data),
       on: (channel: string, handler: (data: any) => void) =>
-        window.arisChatAPI.extensions.on(info.id, channel, handler),
+        window.arsChatAPI.extensions.on(info.id, channel, handler),
     },
     extension: {
       id: info.id,

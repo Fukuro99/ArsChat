@@ -1,10 +1,10 @@
 {
-  "name": "arischat-ext-sysmon",
+  "name": "arschat-ext-sysmon",
   "version": "1.0.0",
   "scripts": {
     "build": "echo renderer.js is pre-built, skipping"
   },
-  "arischat": {
+  "arschat": {
     "displayName": "システムモニター",
     "icon": "💻",
     "permissions": [],

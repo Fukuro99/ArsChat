@@ -1,7 +1,7 @@
 {
-  "name": "arischat",
+  "name": "arschat",
   "version": "1.0.0",
-  "description": "ArisChat - AI Desktop Chat Assistant",
+  "description": "ArsChat - AI Desktop Chat Assistant",
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:main\" \"npm run dev:renderer\"",
@@ -43,8 +43,8 @@
     "vite": "^6.0.0"
   },
   "build": {
-    "appId": "com.arischat.desktop",
-    "productName": "ArisChat",
+    "appId": "com.arschat.desktop",
+    "productName": "ArsChat",
     "files": [
       "dist/**/*",
       "assets/**/*"

@@ -1,8 +1,8 @@
 {
-  "name": "arischat-ext-hello",
+  "name": "arschat-ext-hello",
   "version": "1.0.0",
-  "description": "ArisChat 拡張機能システムのテスト用拡張",
-  "arischat": {
+  "description": "ArsChat 拡張機能システムのテスト用拡張",
+  "arschat": {
     "displayName": "Hello Extension",
     "icon": "👋",
     "permissions": ["ai:send", "ai:stream"],

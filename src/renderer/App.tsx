@@ -337,20 +337,20 @@ export default function App() {
 
   // ===== 初期化 =====
   useEffect(() => {
-    window.arisChatAPI.getActiveSession?.().then((sessionId) => {
+    window.arsChatAPI.getActiveSession?.().then((sessionId) => {
       if (sessionId) setCurrentSessionId(sessionId);
     });
 
-    const cleanupNav = window.arisChatAPI.onNavigate((page) => {
+    const cleanupNav = window.arsChatAPI.onNavigate((page) => {
       stableNavigate(page);
     });
 
-    const cleanupSession = window.arisChatAPI.onActiveSessionChanged?.((sessionId) => {
+    const cleanupSession = window.arsChatAPI.onActiveSessionChanged?.((sessionId) => {
       if (sessionId) setCurrentSessionId(sessionId);
     });
 
     // 拡張機能の変更（インストール・有効化・無効化・更新）を自動検知してリロード
-    const cleanupExtChanged = window.arisChatAPI.onExtChanged?.(() => {
+    const cleanupExtChanged = window.arsChatAPI.onExtChanged?.(() => {
       setSettingsVersion((v) => v + 1);
     });
 
@@ -387,7 +387,7 @@ export default function App() {
     if (isReloadingExtensions) return;
     setIsReloadingExtensions(true);
     try {
-      await window.arisChatAPI.extensions.reload?.();
+      await window.arsChatAPI.extensions.reload?.();
       setSettingsVersion((v) => v + 1);
     } catch (err) {
       console.error('[App] 拡張リロード失敗:', err);
@@ -449,7 +449,7 @@ export default function App() {
           sessionId={currentSessionId}
           onSessionCreated={(id) => {
             setCurrentSessionId(id);
-            window.arisChatAPI.setActiveSession?.(id);
+            window.arsChatAPI.setActiveSession?.(id);
           }}
           settingsVersion={settingsVersion}
           openFilePaths={openFilePaths}
@@ -528,7 +528,7 @@ export default function App() {
             hasNavExtensions={hasNavExtensions}
             onNewSession={() => {
               setCurrentSessionId(null);
-              window.arisChatAPI.setActiveSession?.(null);
+              window.arsChatAPI.setActiveSession?.(null);
               setActivePaneId(panes[0].id);
               setPanes((prev) =>
                 prev.map((p, i) => (i === 0 ? { ...p, activeTabId: 'chat' } : p)),
@@ -560,7 +560,7 @@ export default function App() {
                   onOpenFileTab={handleOpenFileTab}
                   onSelectSession={(id) => {
                     setCurrentSessionId(id);
-                    window.arisChatAPI.setActiveSession?.(id);
+                    window.arsChatAPI.setActiveSession?.(id);
                     // チャットタブがあるペインをアクティブに
                     const chatPane = panes.find((p) => p.tabs.some((t) => t.page === 'chat'));
                     if (chatPane) {
@@ -574,7 +574,7 @@ export default function App() {
                   }}
                   onNewSession={() => {
                     setCurrentSessionId(null);
-                    window.arisChatAPI.setActiveSession?.(null);
+                    window.arsChatAPI.setActiveSession?.(null);
                     const chatPane = panes.find((p) => p.tabs.some((t) => t.page === 'chat'));
                     if (chatPane) {
                       setActivePaneId(chatPane.id);
