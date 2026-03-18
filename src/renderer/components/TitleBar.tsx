@@ -32,7 +32,7 @@ export default function TitleBar({
           <div className="w-4 h-4 rounded-full bg-aria-primary flex items-center justify-center">
             <span className="text-[8px] font-bold text-white">A</span>
           </div>
-          <span className="text-sm font-medium text-aria-text">Aris</span>
+          <span className="text-sm font-medium text-aria-text">Ars</span>
         </div>
       </div>
 
@@ -66,19 +66,19 @@ export default function TitleBar({
           </svg>
         </button>
         <button
-          onClick={() => window.arisChatAPI.minimizeWindow()}
+          onClick={() => window.arsChatAPI.minimizeWindow()}
           className="w-7 h-7 flex items-center justify-center rounded hover:bg-aria-surface text-aria-text-muted transition-colors"
         >
           <svg width="12" height="12" viewBox="0 0 12 12"><rect y="5" width="12" height="1.5" fill="currentColor" rx="0.5"/></svg>
         </button>
         <button
-          onClick={() => window.arisChatAPI.maximizeWindow()}
+          onClick={() => window.arsChatAPI.maximizeWindow()}
           className="w-7 h-7 flex items-center justify-center rounded hover:bg-aria-surface text-aria-text-muted transition-colors"
         >
           <svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="1" width="10" height="10" stroke="currentColor" strokeWidth="1.5" fill="none" rx="1"/></svg>
         </button>
         <button
-          onClick={() => window.arisChatAPI.closeWindow()}
+          onClick={() => window.arsChatAPI.closeWindow()}
           className="w-7 h-7 flex items-center justify-center rounded hover:bg-red-500/80 text-aria-text-muted hover:text-white transition-colors"
         >
           <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>

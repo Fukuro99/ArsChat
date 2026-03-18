@@ -1,9 +1,9 @@
 import { nativeImage, NativeImage, app } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
-import { ArisChatSettings } from '../shared/types';
+import { ArsChatSettings } from '../shared/types';
 
-const ICONS_DIR = path.join(app.getPath('userData'), 'arischat-data', 'custom-icons');
+const ICONS_DIR = path.join(app.getPath('userData'), 'arschat-data', 'custom-icons');
 const ASSETS_DIR = path.join(__dirname, '../../assets');
 
 export function createIconManager() {
@@ -33,17 +33,17 @@ export function createIconManager() {
   }
 
   return {
-    getAppIcon(settings: ArisChatSettings): NativeImage {
+    getAppIcon(settings: ArsChatSettings): NativeImage {
       return loadIcon(settings.customIconPath, 'default.png');
     },
 
-    getTrayIcon(settings: ArisChatSettings): NativeImage {
+    getTrayIcon(settings: ArsChatSettings): NativeImage {
       const icon = loadIcon(settings.customTrayIconPath || settings.customIconPath, 'default.png');
       // トレイアイコンは小さくリサイズ
       return icon.resize({ width: 24, height: 24 });
     },
 
-    getAvatarPath(settings: ArisChatSettings): string | null {
+    getAvatarPath(settings: ArsChatSettings): string | null {
       if (settings.customAvatarPath && fs.existsSync(settings.customAvatarPath)) {
         return settings.customAvatarPath;
       }

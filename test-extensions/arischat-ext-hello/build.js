@@ -7,7 +7,7 @@ const path = require('path');
 
 const rendererCode = `
 // ===== Hello Extension - Renderer Entry =====
-// ArisChat が window.__ARISCHAT_REACT__ に React を公開してくれる
+// ArsChat が window.__ARISCHAT_REACT__ に React を公開してくれる
 // ローダー側で React / useState / useEffect 等をグローバルに注入済み
 
 // ===== Page 1: Hello Page =====

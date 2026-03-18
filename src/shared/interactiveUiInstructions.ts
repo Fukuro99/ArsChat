@@ -102,12 +102,12 @@ export const INSTRUCTION_INTERACTIVE_HTML = `
 <body>
   <!-- UIコンテンツ -->
   <script>
-    // 親（Aris）へのアクション通知:
+    // 親（Ars）へのアクション通知:
     window.parent.postMessage(
       { type: 'interactive-ui-action', uiId: 'YOUR_ID', action: 'ACTION', data: { /* 任意データ */ } },
       '*'
     );
-    // 親（Aris）からの状態更新を受信:
+    // 親（Ars）からの状態更新を受信:
     window.addEventListener('message', (e) => {
       if (e.data.type === 'interactive-ui-update') {
         const patch = e.data.patch; // 変更差分を適用する

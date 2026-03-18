@@ -48,7 +48,7 @@ export interface Persona {
   avatarPath: string | null; // カスタムアバター画像パス
 }
 
-export interface ArisChatSettings {
+export interface ArsChatSettings {
   // AI プロバイダー
   provider: AIProvider;
 
@@ -97,7 +97,7 @@ function currentDateTimeTag(): string {
 }
 
 export function getEffectiveSystemPrompt(
-  settings: ArisChatSettings,
+  settings: ArsChatSettings,
   skills?: Skill[],
   fileBrowserState?: FileBrowserState,
   openFilePaths?: string[],
@@ -135,7 +135,7 @@ export function getEffectiveSystemPrompt(
 }
 
 /** アクティブな人格のアバターパスを返す */
-export function getEffectiveAvatarPath(settings: ArisChatSettings): string | null {
+export function getEffectiveAvatarPath(settings: ArsChatSettings): string | null {
   if (settings.activePersonaId) {
     const persona = settings.personas.find((p) => p.id === settings.activePersonaId);
     if (persona) return persona.avatarPath;
@@ -143,7 +143,7 @@ export function getEffectiveAvatarPath(settings: ArisChatSettings): string | nul
   return settings.customAvatarPath;
 }
 
-export const DEFAULT_SETTINGS: ArisChatSettings = {
+export const DEFAULT_SETTINGS: ArsChatSettings = {
   provider: 'anthropic',
   apiKey: '',
   model: 'claude-sonnet-4-20250514',
@@ -152,7 +152,7 @@ export const DEFAULT_SETTINGS: ArisChatSettings = {
   lmstudioModel: '',
   lmstudioContextLength: 4096,
 
-  systemPrompt: 'あなたはArisChat（アリスチャット）という名前のAIアシスタントです。ユーザーの質問に丁寧かつ的確に日本語で回答してください。コードを含む回答にはマークダウンを使用してください。',
+  systemPrompt: 'あなたはArsChat（アリスチャット）という名前のAIアシスタントです。ユーザーの質問に丁寧かつ的確に日本語で回答してください。コードを含む回答にはマークダウンを使用してください。',
 
   personas: [],
   activePersonaId: null,
@@ -370,7 +370,7 @@ export interface ExtensionSettingsDef {
   title: string;
 }
 
-/** package.json の arischat フィールド */
+/** package.json の arschat フィールド */
 export interface ExtensionManifest {
   displayName: string;
   icon: string;
@@ -384,7 +384,7 @@ export interface ExtensionManifest {
 
 /** registry.json に保存される拡張エントリ */
 export interface ExtensionRegistryEntry {
-  id: string;            // リポジトリ名（arischat-ext-xxx）
+  id: string;            // リポジトリ名（arschat-ext-xxx）
   source: string;        // GitHub URL
   version: string;       // package.json の version
   installedAt: string;   // ISO 8601

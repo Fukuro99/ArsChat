@@ -30,13 +30,13 @@ function HistoryPanel({
   useEffect(() => { loadSessions(); }, []);
 
   const loadSessions = async () => {
-    const list = await window.arisChatAPI.listSessions();
+    const list = await window.arsChatAPI.listSessions();
     setSessions(list);
   };
 
   const handleDelete = async (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
-    await window.arisChatAPI.deleteSession(sessionId);
+    await window.arsChatAPI.deleteSession(sessionId);
     if (currentSessionId === sessionId) onNewSession();
     loadSessions();
   };

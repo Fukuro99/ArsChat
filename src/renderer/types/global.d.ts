@@ -1,4 +1,4 @@
-import { ArisChatSettings, ChatMessage, ChatMessageStats, ChatSession, LMStudioModelInfo, MCPConfig, MCPServerConfig, MCPServerStatus, MCPToolInfo, Skill, ExtensionInfo } from '../../shared/types';
+import { ArsChatSettings, ChatMessage, ChatMessageStats, ChatSession, LMStudioModelInfo, MCPConfig, MCPServerConfig, MCPServerStatus, MCPToolInfo, Skill, ExtensionInfo } from '../../shared/types';
 
 interface FileBrowserItem {
   name: string;
@@ -12,7 +12,7 @@ interface FileBrowserItem {
 
 declare global {
   interface Window {
-    arisChatAPI: {
+    arsChatAPI: {
       // チャット
       sendMessage: (messages: ChatMessage[], sessionId: string, options?: { thinkMode?: boolean; openFilePaths?: string[] }) => void;
       onStreamChunk: (callback: (chunk: string) => void) => () => void;
@@ -28,8 +28,8 @@ declare global {
       deleteSession: (sessionId: string) => Promise<void>;
 
       // 設定
-      getSettings: () => Promise<ArisChatSettings>;
-      setSettings: (settings: Partial<ArisChatSettings>) => Promise<ArisChatSettings>;
+      getSettings: () => Promise<ArsChatSettings>;
+      setSettings: (settings: Partial<ArsChatSettings>) => Promise<ArsChatSettings>;
 
       // アイコン
       selectIcon: (target: 'app' | 'tray' | 'avatar') => Promise<string | null>;

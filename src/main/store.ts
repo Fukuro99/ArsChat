@@ -1,9 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
-import { ArisChatSettings, DEFAULT_SETTINGS, ChatSession, MCPConfig, DEFAULT_MCP_CONFIG, FileBrowserState } from '../shared/types';
+import { ArsChatSettings, DEFAULT_SETTINGS, ChatSession, MCPConfig, DEFAULT_MCP_CONFIG, FileBrowserState } from '../shared/types';
 
-const DATA_DIR = path.join(app.getPath('userData'), 'arischat-data');
+const DATA_DIR = path.join(app.getPath('userData'), 'arschat-data');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const MCP_CONFIG_FILE = path.join(DATA_DIR, 'mcp-config.json');
 const SESSIONS_DIR = path.join(DATA_DIR, 'sessions');
@@ -20,7 +20,7 @@ export function createStore() {
 
   return {
     // ===== 設定 =====
-    getSettings(): ArisChatSettings {
+    getSettings(): ArsChatSettings {
       try {
         if (fs.existsSync(SETTINGS_FILE)) {
           const raw = fs.readFileSync(SETTINGS_FILE, 'utf-8');
@@ -32,7 +32,7 @@ export function createStore() {
       return { ...DEFAULT_SETTINGS };
     },
 
-    saveSettings(settings: ArisChatSettings): void {
+    saveSettings(settings: ArsChatSettings): void {
       try {
         fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf-8');
       } catch (err) {

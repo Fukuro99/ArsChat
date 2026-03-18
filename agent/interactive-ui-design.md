@@ -6,7 +6,7 @@
 
 ## 実現可能性: **可能**
 
-ArisChatの現在のアーキテクチャ（Electron + React + Markdown描画パイプライン）は、この機能を自然に拡張できる構造を持っている。
+ArsChatの現在のアーキテクチャ（Electron + React + Markdown描画パイプライン）は、この機能を自然に拡張できる構造を持っている。
 
 **根拠:**
 - MessageBubble.tsx が既に `dangerouslySetInnerHTML` でリッチコンテンツを描画しており、カスタムコンポーネント描画への拡張が自然
@@ -567,7 +567,7 @@ AIがHTML/CSS/JavaScriptを直接記述し、**サンドボックス化された
     board[row][col] = 1; // 黒（ユーザー）
     drawBoard();
 
-    // 親ウィンドウ（ArisChat）に操作を通知
+    // 親ウィンドウ（ArsChat）に操作を通知
     window.parent.postMessage({
       type: 'interactive-ui-action',
       uiId: 'gomoku',
@@ -649,7 +649,7 @@ function SandboxRenderer({ htmlContent, uiId, onAction }: Props) {
 
 ```
 ┌─────────────────────────────────────────┐
-│  ArisChat (親ウィンドウ)                 │
+│  ArsChat (親ウィンドウ)                 │
 │                                          │
 │  ┌───────────────────────────────────┐   │
 │  │  iframe sandbox="allow-scripts"   │   │

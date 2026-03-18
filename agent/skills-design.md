@@ -1,4 +1,4 @@
-# ArisChat Skills 機能 設計書
+# ArsChat Skills 機能 設計書
 
 ## 概要
 
@@ -12,7 +12,7 @@
 スキルはペルソナごとのディレクトリにMarkdownファイルとして保存する。
 
 ```
-%APPDATA%/ArisChat/arischat-data/
+%APPDATA%/ArsChat/arschat-data/
 ├── settings.json          # 既存: アプリ設定（ペルソナ一覧含む）
 ├── sessions/              # 既存: チャットセッション
 └── personas/
