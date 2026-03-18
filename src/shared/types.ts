@@ -311,6 +311,7 @@ export const IPC_CHANNELS = {
   EXT_TOGGLE: 'ext:toggle',
   EXT_UPDATE: 'ext:update',
   EXT_READ_RENDERER: 'ext:read-renderer',
+  EXT_READ_README: 'ext:read-readme',
   EXT_RELOAD: 'ext:reload',
   EXT_INVOKE: 'ext:invoke',
   EXT_UPDATED: 'ext:updated',
