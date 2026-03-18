@@ -1,4 +1,11 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
+
+/** ローカルファイルパスをカスタムスキームの URL に変換する（Windows / http:localhost 対応） */
+function toFileUrl(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/');
+  const p = normalized.startsWith('/') ? normalized : `/${normalized}`;
+  return `arischat-file://${p}`;
+}
 import { marked } from 'marked';
 import markedKatex from 'marked-katex-extension';
 import 'katex/dist/katex.min.css';
@@ -225,7 +232,7 @@ export default function MessageBubble({
       ) : (
         <div className="shrink-0 w-8 h-8 rounded-full overflow-hidden bg-aria-primary/10 flex items-center justify-center">
           <img
-            src={avatarSrc ? `file://${avatarSrc}` : ariaIconUrl}
+            src={avatarSrc ? toFileUrl(avatarSrc) : ariaIconUrl}
             alt="ArisChat"
             className="w-full h-full object-contain"
           />

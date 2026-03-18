@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ArisChatSettings, DEFAULT_SETTINGS, LMStudioModelInfo, MCPConfig, MCPServerConfig, MCPServerStatus, Persona, Skill } from '../../shared/types';
 
+/** ローカルファイルパスをカスタムスキームの URL に変換する（Windows / http:localhost 対応） */
+function toFileUrl(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/');
+  const p = normalized.startsWith('/') ? normalized : `/${normalized}`;
+  return `arischat-file://${p}`;
+}
+
 // ===== スキル共通コンポーネント =====
 
 interface SkillFormState { name: string; description: string; trigger: string; scriptType: string; scriptValue: string; body: string; }
@@ -776,7 +783,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
               >
                 <div className="shrink-0 w-10 h-10 rounded-full overflow-hidden bg-aria-primary/20 flex items-center justify-center">
                   {persona.avatarPath ? (
-                    <img src={`file://${persona.avatarPath}`} alt="" className="w-full h-full object-cover" />
+                    <img src={toFileUrl(persona.avatarPath)} alt="" className="w-full h-full object-cover" />
                   ) : (
                     <span className="text-lg font-bold text-aria-primary">
                       {persona.name.charAt(0).toUpperCase() || 'P'}
@@ -928,7 +935,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
               <div className="flex items-center gap-3">
                 <div className="shrink-0 w-12 h-12 rounded-full overflow-hidden bg-aria-primary/20 flex items-center justify-center">
                   {personaForm.avatarPath ? (
-                    <img src={`file://${personaForm.avatarPath}`} alt="" className="w-full h-full object-cover" />
+                    <img src={toFileUrl(personaForm.avatarPath)} alt="" className="w-full h-full object-cover" />
                   ) : (
                     <span className="text-xl font-bold text-aria-primary">
                       {personaForm.name.charAt(0).toUpperCase() || 'P'}
@@ -1112,7 +1119,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-aria-primary/20 flex items-center justify-center overflow-hidden">
                 {settings.customIconPath ? (
-                  <img src={`file://${settings.customIconPath}`} alt="" className="w-full h-full object-cover" />
+                  <img src={toFileUrl(settings.customIconPath!)} alt="" className="w-full h-full object-cover" />
                 ) : (
                   <span className="text-lg font-bold text-aria-primary">A</span>
                 )}
@@ -1147,7 +1154,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-aria-bg flex items-center justify-center overflow-hidden">
                 {settings.customTrayIconPath ? (
-                  <img src={`file://${settings.customTrayIconPath}`} alt="" className="w-6 h-6 object-cover" />
+                  <img src={toFileUrl(settings.customTrayIconPath!)} alt="" className="w-6 h-6 object-cover" />
                 ) : (
                   <span className="text-sm font-bold text-aria-primary">T</span>
                 )}
@@ -1182,7 +1189,7 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-aria-primary/20 flex items-center justify-center overflow-hidden">
                 {settings.customAvatarPath ? (
-                  <img src={`file://${settings.customAvatarPath}`} alt="" className="w-full h-full object-cover" />
+                  <img src={toFileUrl(settings.customAvatarPath!)} alt="" className="w-full h-full object-cover" />
                 ) : (
                   <span className="text-lg font-bold text-aria-primary">A</span>
                 )}

@@ -11,7 +11,14 @@ import {
   dialog,
   screen,
   shell,
+  protocol,
+  net,
 } from 'electron';
+
+// ローカル画像ファイルを http://localhost から安全に読み込むためのカスタムスキーム
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'arischat-file', privileges: { bypassCSP: true, corsEnabled: true, supportFetchAPI: true } },
+]);
 import type { Rectangle, Display } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -1221,6 +1228,12 @@ function setupIPC(): void {
 
 // ===== アプリ起動 =====
 app.whenReady().then(() => {
+  // arischat-file:///C:/path/to/file → ローカルファイルとして提供
+  protocol.handle('arischat-file', (request) => {
+    const fileUrl = request.url.replace(/^arischat-file:/, 'file:');
+    return net.fetch(fileUrl);
+  });
+
   setupIPC();
   mainWindow = createMainWindow();
   widgetWindow = createWidgetWindow();
