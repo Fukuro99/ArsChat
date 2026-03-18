@@ -1316,6 +1316,25 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
               }`} />
             </button>
           </div>
+
+          {/* 最大ツール呼び出し回数 */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm text-aria-text">最大ツール呼び出し回数</p>
+              <p className="text-xs text-aria-text-muted">1回の返答で連続してツールを呼び出せる上限。0 で無制限</p>
+            </div>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={settings.maxToolRounds ?? 10}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                if (!isNaN(v) && v >= 0) updateSetting('maxToolRounds', v);
+              }}
+              className="w-20 shrink-0 bg-aria-surface border border-aria-border rounded-lg px-3 py-1.5 text-sm text-aria-text text-center focus:outline-none focus:border-aria-primary"
+            />
+          </div>
         </section>
 
         {/* === MCP サーバー設定 === */}

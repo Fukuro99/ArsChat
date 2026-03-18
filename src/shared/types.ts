@@ -83,6 +83,7 @@ export interface ArsChatSettings {
   windowHeight: number;
   enableInteractiveUI: boolean; // インタラクティブAI機能
   mcpTokenSaving: boolean;      // MCPツール省トークン化（サーバー選択→ツール取得の2段階方式）
+  maxToolRounds: number;        // 最大ツール呼び出しラウンド数（0 = 無制限）
 }
 
 /** 現在日時を [yyyy:MM:DD;hh:mm] 形式で返す */
@@ -170,6 +171,7 @@ export const DEFAULT_SETTINGS: ArsChatSettings = {
   windowHeight: 720,
   enableInteractiveUI: true,
   mcpTokenSaving: false,
+  maxToolRounds: 10,
 };
 
 // ===== スキル =====
