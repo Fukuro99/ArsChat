@@ -235,6 +235,7 @@ export default function MessageBubble({
             src={avatarSrc ? toFileUrl(avatarSrc) : ariaIconUrl}
             alt="ArsChat"
             className="w-full h-full object-contain"
+            onError={(e) => { (e.currentTarget as HTMLImageElement).src = ariaIconUrl; }}
           />
         </div>
       )}
