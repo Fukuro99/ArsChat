@@ -484,7 +484,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
     });
 
     const systemPrompt = getEffectiveSystemPrompt(settings, skillContext?.skills, fileBrowserState, openFilePaths);
-    const MAX_ROUNDS = 5;
+    const MAX_ROUNDS = (settings.maxToolRounds ?? 10) === 0 ? Infinity : (settings.maxToolRounds ?? 10);
 
     for (let round = 0; round < MAX_ROUNDS; round++) {
       if (currentAbortController?.signal.aborted) break;
@@ -901,7 +901,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
     requestStartTime: number,
     skillContext?: SkillContext,
   ): Promise<void> {
-    const MAX_ROUNDS = 10;
+    const MAX_ROUNDS = (settings.maxToolRounds ?? 10) === 0 ? Infinity : (settings.maxToolRounds ?? 10);
     const messages = [...initialMessages];
     const signal = currentAbortController!.signal;
 
