@@ -6,6 +6,8 @@
  */
 import React, { useState, useEffect, useRef } from 'react';
 
+import { pendingFiles } from './fileBrowserStore';
+
 // ===== 型定義 =====
 interface FileBrowserItem {
   name: string;
@@ -16,10 +18,6 @@ interface FileBrowserItem {
   size: number | null;
   mtime: number | null;
 }
-
-// ===== ファイルデータストア（tabId → 初期データ） =====
-// FileBrowserPanel → FileViewerPage へのデータ受け渡し用
-export const pendingFiles = new Map<string, { path: string; name: string; content: string }>();
 
 // ===== 拡張子 → アイコンファイル名 マッピング =====
 const EXT_ICON: Record<string, string> = {
