@@ -84,6 +84,7 @@ export interface ArsChatSettings {
   enableInteractiveUI: boolean; // インタラクティブAI機能
   mcpTokenSaving: boolean;      // MCPツール省トークン化（サーバー選択→ツール取得の2段階方式）
   maxToolRounds: number;        // 最大ツール呼び出しラウンド数（0 = 無制限）
+  chatIconSize: number;         // チャットアイコンサイズ（px、デフォルト 32）
 }
 
 /** 現在日時を [yyyy:MM:DD;hh:mm] 形式で返す */
@@ -172,6 +173,7 @@ export const DEFAULT_SETTINGS: ArsChatSettings = {
   enableInteractiveUI: true,
   mcpTokenSaving: false,
   maxToolRounds: 10,
+  chatIconSize: 32,
 };
 
 // ===== スキル =====
