@@ -737,6 +737,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
                   showThinking={thinkMode}
                   isEditing={editingMessageId === msg.id}
                   avatarSrc={getEffectiveAvatarPath(settings)}
+                  iconSize={settings.chatIconSize ?? 32}
                   onCopy={() => handleCopyMessage(msg.content)}
                   onDelete={() => handleDeleteMessage(msg.id)}
                   onRegenerate={() => handleRegenerateMessage(msg.id)}
@@ -800,6 +801,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
               showThinking={thinkMode}
               isEditing={editingMessageId === msg.id}
               avatarSrc={getEffectiveAvatarPath(settings)}
+              iconSize={settings.chatIconSize ?? 32}
               onCopy={() => handleCopyMessage(msg.content)}
               onDelete={() => handleDeleteMessage(msg.id)}
               onBranch={() => { void handleBranchMessage(msg.id); }}
@@ -822,6 +824,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
             isStreaming
             showThinking={thinkMode}
             avatarSrc={getEffectiveAvatarPath(settings)}
+            iconSize={settings.chatIconSize ?? 32}
             onSandboxIframeReady={handleSandboxIframeReady}
           />
         )}

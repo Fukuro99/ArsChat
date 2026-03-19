@@ -42,6 +42,7 @@ interface MessageBubbleProps {
   showThinking?: boolean;
   isEditing?: boolean;
   avatarSrc?: string | null; // カスタムアバター画像パス（null/undefined = デフォルト）
+  iconSize?: number;         // アイコンサイズ（px、デフォルト 32）
   onCopy?: () => void;
   onDelete?: () => void;
   onRegenerate?: () => void;
@@ -140,6 +141,7 @@ export default function MessageBubble({
   hideLiveUIBlocks = false,
   hideInteractiveUIBlocks = false,
   onSandboxIframeReady,
+  iconSize = 32,
 }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const [thinkOpen, setThinkOpen] = useState(false);
@@ -226,11 +228,17 @@ export default function MessageBubble({
     >
       {/* アバター */}
       {isUser ? (
-        <div className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold bg-emerald-500/20 text-emerald-400">
+        <div
+          className="shrink-0 rounded-full flex items-center justify-center font-bold bg-emerald-500/20 text-emerald-400"
+          style={{ width: iconSize, height: iconSize, fontSize: Math.max(10, iconSize * 0.375) }}
+        >
           U
         </div>
       ) : (
-        <div className="shrink-0 w-8 h-8 rounded-full overflow-hidden bg-aria-primary/10 flex items-center justify-center">
+        <div
+          className="shrink-0 rounded-full overflow-hidden bg-aria-primary/10 flex items-center justify-center"
+          style={{ width: iconSize, height: iconSize }}
+        >
           <img
             src={avatarSrc ? toFileUrl(avatarSrc) : ariaIconUrl}
             alt="ArsChat"
