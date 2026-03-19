@@ -738,6 +738,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
           onChunk,
           onEnd,
           requestStartTime,
+          settings,
           options?.skillContext,
         );
       } else {
@@ -899,6 +900,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
     onChunk: (chunk: string) => void,
     onEnd: (stats: ChatMessageStats) => void,
     requestStartTime: number,
+    settings: ArsChatSettings,
     skillContext?: SkillContext,
   ): Promise<void> {
     const MAX_ROUNDS = (settings.maxToolRounds ?? 10) === 0 ? Infinity : (settings.maxToolRounds ?? 10);
