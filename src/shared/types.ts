@@ -46,6 +46,7 @@ export interface Persona {
   name: string;
   systemPrompt: string;
   avatarPath: string | null; // カスタムアバター画像パス
+  allowAIEditUserSkills: boolean; // AI がユーザースキルを編集できるか（デフォルト: false）
 }
 
 export interface ArsChatSettings {
@@ -85,6 +86,7 @@ export interface ArsChatSettings {
   mcpTokenSaving: boolean;      // MCPツール省トークン化（サーバー選択→ツール取得の2段階方式）
   maxToolRounds: number;        // 最大ツール呼び出しラウンド数（0 = 無制限）
   chatIconSize: number;         // チャットアイコンサイズ（px、デフォルト 32）
+  autoExtractMemory: boolean;   // 会話後にメモリを自動更新するか（デフォルト: false）
 }
 
 /** 現在日時を [yyyy:MM:DD;hh:mm] 形式で返す */
@@ -103,14 +105,15 @@ export function getEffectiveSystemPrompt(
   skills?: Skill[],
   fileBrowserState?: FileBrowserState,
   openFilePaths?: string[],
+  userMemory?: string | null,
 ): string {
   const dateTime = currentDateTimeTag();
 
   // スキル概要の注入
   let skillsSection = '';
   if (skills && skills.length > 0) {
-    const rows = skills.map((s) => `| ${s.id} | ${s.name} | ${s.description} |`).join('\n');
-    skillsSection = `\n\n## あなたが持つスキル\n\n以下のスキルを活用できます。ユーザーの要求にスキルが役立つと判断した場合は、\`get_skill_details\` ツールでスキルの詳細を取得してから回答してください。\n\n| ID | 名前 | 概要 |\n|----|------|------|\n${rows}`;
+    const rows = skills.map((s) => `| ${s.id} | ${s.name} | ${s.description} | ${s.source ?? 'user'} |`).join('\n');
+    skillsSection = `\n\n## あなたが持つスキル\n\n以下のスキルを活用できます。ユーザーの要求にスキルが役立つと判断した場合は、\`get_skill_details\` ツールでスキルの詳細を取得してから回答してください。\n\n| ID | 名前 | 概要 | 作成者 |\n|----|------|------|--------|\n${rows}`;
   }
 
   // ファイルブラウザのコンテキスト注入
@@ -126,14 +129,20 @@ export function getEffectiveSystemPrompt(
     openFilesSection = `\n\n## 開いているファイル\n\n${list}`;
   }
 
+  // ユーザーメモリの注入
+  let memorySection = '';
+  if (userMemory && userMemory.trim()) {
+    memorySection = `\n\n## ユーザーについての記憶\n\n${userMemory.trim()}`;
+  }
+
   if (settings.activePersonaId) {
     const persona = settings.personas.find((p) => p.id === settings.activePersonaId);
     if (persona) {
       const namePrefix = `あなたの名前は「${persona.name}」です。\n\n`;
-      return namePrefix + persona.systemPrompt + skillsSection + fileBrowserSection + openFilesSection + `\n\n現在日時: ${dateTime}`;
+      return namePrefix + persona.systemPrompt + memorySection + skillsSection + fileBrowserSection + openFilesSection + `\n\n現在日時: ${dateTime}`;
     }
   }
-  return settings.systemPrompt + skillsSection + fileBrowserSection + openFilesSection + `\n\n現在日時: ${dateTime}`;
+  return settings.systemPrompt + memorySection + skillsSection + fileBrowserSection + openFilesSection + `\n\n現在日時: ${dateTime}`;
 }
 
 /** アクティブな人格のアバターパスを返す */
@@ -174,6 +183,7 @@ export const DEFAULT_SETTINGS: ArsChatSettings = {
   mcpTokenSaving: false,
   maxToolRounds: 10,
   chatIconSize: 32,
+  autoExtractMemory: false,
 };
 
 // ===== スキル =====
@@ -192,6 +202,7 @@ export interface Skill {
   trigger?: string;     // frontmatter.trigger（例: "/review"）
   script?: SkillScript; // frontmatter.script
   filePath: string;     // 絶対ファイルパス
+  source: 'user' | 'ai' | 'builtin'; // スキルの作成者
 }
 
 // ===== MCP 設定 =====
@@ -291,6 +302,14 @@ export const IPC_CHANNELS = {
   MCP_LIST_TOOLS: 'mcp:list-tools',
   MCP_RECONNECT: 'mcp:reconnect',
   MCP_GENERATE_DESC: 'mcp:generate-desc',
+
+  // メモリ
+  MEMORY_GET: 'memory:get',
+  MEMORY_SET: 'memory:set',
+  MEMORY_CLEAR: 'memory:clear',
+
+  // スキル変更通知（push）
+  SKILLS_UPDATED: 'skills:updated',
 
   // スキル
   SKILL_LIST: 'skill:list',

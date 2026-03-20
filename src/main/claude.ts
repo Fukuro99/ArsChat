@@ -7,6 +7,12 @@ export interface SkillContext {
   skills: Skill[];
   getContent: (skillId: string) => string | null;
   invokeScript: (skillId: string) => Promise<string>;
+  // AI スキル管理（permission チェック込み）
+  createAISkill?: (name: string, description: string, body: string, trigger?: string) => { success: boolean; skill?: Skill; message?: string };
+  editSkill?: (skillId: string, fields: { name?: string; description?: string; body?: string; trigger?: string }) => { success: boolean; message?: string };
+  deleteAISkill?: (skillId: string) => { success: boolean; message?: string };
+  // メモリ
+  updateMemory?: (content: string) => void;
 }
 
 /** <think>...</think> / <thinking>...</thinking> ブロックを除去して本文だけ返す */
@@ -438,6 +444,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
     skillContext?: SkillContext,
     fileBrowserState?: FileBrowserState,
     openFilePaths?: string[],
+    userMemory?: string,
   ): Promise<void> {
     const client = new Anthropic({ apiKey: settings.apiKey });
     const requestStartTime = Date.now();
@@ -470,6 +477,61 @@ export function createClaudeService(mcpManager?: MCPManager) {
         },
       });
     }
+    // メモリ・AI スキル管理ツール（常に追加）
+    if (skillContext) {
+      tools.push({
+        name: 'update_user_memory',
+        description: 'ユーザーについて覚えておくべき情報を記録・更新する。会話から得たユーザーの好み・背景・状況・習慣などを自由な文章で書き込む。既存の記憶は完全に上書きされるため、既存内容を保持したい場合は含めること。',
+        input_schema: {
+          type: 'object',
+          properties: {
+            content: { type: 'string', description: 'ユーザーについての記憶テキスト（自由記述）' },
+          },
+          required: ['content'],
+        },
+      });
+      tools.push({
+        name: 'create_skill',
+        description: '新しいスキルを作成して永続化する。ユーザーから繰り返し依頼されるタスクや手順を再利用可能なスキルとして保存する際に使う。作成したスキルは ai-skills/ に保存され、次回以降の会話でも利用できる。',
+        input_schema: {
+          type: 'object',
+          properties: {
+            name:        { type: 'string', description: 'スキル名（短く明確に）' },
+            description: { type: 'string', description: 'スキルの説明（システムプロンプトに表示）' },
+            body:        { type: 'string', description: 'スキルの詳細手順・指示（Markdown）' },
+            trigger:     { type: 'string', description: 'トリガーキーワード（例: /review）省略可' },
+          },
+          required: ['name', 'description', 'body'],
+        },
+      });
+      tools.push({
+        name: 'edit_skill',
+        description: '既存スキルの内容を更新する。改善・修正が必要なときに使う。ユーザー作成スキルは設定で許可されている場合のみ編集可能。',
+        input_schema: {
+          type: 'object',
+          properties: {
+            skill_id:    { type: 'string', description: '編集対象のスキルID' },
+            name:        { type: 'string', description: '新しいスキル名（省略時は変更なし）' },
+            description: { type: 'string', description: '新しい説明（省略時は変更なし）' },
+            body:        { type: 'string', description: '新しい本文（省略時は変更なし）' },
+            trigger:     { type: 'string', description: '新しいトリガー（省略時は変更なし）' },
+          },
+          required: ['skill_id'],
+        },
+      });
+      tools.push({
+        name: 'delete_skill',
+        description: 'AIが作成したスキル（ai-skills/）を削除する。ユーザーが作成したスキルは削除できない。',
+        input_schema: {
+          type: 'object',
+          properties: {
+            skill_id: { type: 'string', description: '削除対象のスキルID' },
+            reason:   { type: 'string', description: '削除理由（ユーザーへの説明用）' },
+          },
+          required: ['skill_id'],
+        },
+      });
+    }
 
     let apiMessages: Anthropic.MessageParam[] = messages.map((msg) => {
       const content: any[] = [];
@@ -483,7 +545,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
       return { role: msg.role as 'user' | 'assistant', content };
     });
 
-    const systemPrompt = getEffectiveSystemPrompt(settings, skillContext?.skills, fileBrowserState, openFilePaths);
+    const systemPrompt = getEffectiveSystemPrompt(settings, skillContext?.skills, fileBrowserState, openFilePaths, userMemory);
     const MAX_ROUNDS = (settings.maxToolRounds ?? 10) === 0 ? Infinity : (settings.maxToolRounds ?? 10);
 
     for (let round = 0; round < MAX_ROUNDS; round++) {
@@ -546,11 +608,24 @@ export function createClaudeService(mcpManager?: MCPManager) {
         if (block.type !== 'tool_use') continue;
         let result = '';
         if (skillContext) {
-          const skillId = (block.input as any).skill_id as string;
+          const inp = block.input as any;
+          const skillId = inp.skill_id as string;
           if (block.name === 'get_skill_details') {
             result = skillContext.getContent(skillId) ?? `スキル "${skillId}" が見つかりません`;
           } else if (block.name === 'invoke_skill_script') {
             result = await skillContext.invokeScript(skillId);
+          } else if (block.name === 'update_user_memory') {
+            skillContext.updateMemory?.(inp.content as string);
+            result = JSON.stringify({ success: true, message: '記憶を更新しました' });
+          } else if (block.name === 'create_skill') {
+            const res = skillContext.createAISkill?.(inp.name, inp.description, inp.body, inp.trigger);
+            result = JSON.stringify(res ?? { success: false, message: 'スキル作成機能が無効です' });
+          } else if (block.name === 'edit_skill') {
+            const res = skillContext.editSkill?.(skillId, { name: inp.name, description: inp.description, body: inp.body, trigger: inp.trigger });
+            result = JSON.stringify(res ?? { success: false, message: 'スキル編集機能が無効です' });
+          } else if (block.name === 'delete_skill') {
+            const res = skillContext.deleteAISkill?.(skillId);
+            result = JSON.stringify(res ?? { success: false, message: 'スキル削除機能が無効です' });
           }
         }
         toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
@@ -571,7 +646,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
     messages: ChatMessage[],
     onChunk: (chunk: string) => void,
     onEnd: (stats: ChatMessageStats) => void,
-    options?: { thinkMode?: boolean; skillContext?: SkillContext; fileBrowserState?: FileBrowserState; openFilePaths?: string[] },
+    options?: { thinkMode?: boolean; skillContext?: SkillContext; fileBrowserState?: FileBrowserState; openFilePaths?: string[]; userMemory?: string },
   ): Promise<void> {
     const baseUrl = normalizeBaseUrl(settings.lmstudioBaseUrl);
     if (!baseUrl) {
@@ -615,7 +690,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
 
     // OpenAI互換メッセージ形式を構築
     const apiMessages: any[] = [];
-    let effectiveSystemPrompt = getEffectiveSystemPrompt(settings, options?.skillContext?.skills, options?.fileBrowserState, options?.openFilePaths);
+    let effectiveSystemPrompt = getEffectiveSystemPrompt(settings, options?.skillContext?.skills, options?.fileBrowserState, options?.openFilePaths, options?.userMemory);
 
     // 省トークンモード: 接続中MCPサーバーの概要をシステムプロンプトに注入
     if (settings.mcpTokenSaving && mcpManager) {
@@ -679,6 +754,13 @@ export function createClaudeService(mcpManager?: MCPManager) {
           },
         },
       });
+    }
+    // メモリ・AI スキル管理ツール（LMStudio 側・常に追加）
+    if (options?.skillContext) {
+      skillTools.push({ type: 'function', function: { name: 'update_user_memory', description: 'ユーザーについて覚えておくべき情報を記録・更新する。既存の記憶は完全に上書きされるため、既存内容を保持したい場合は含めること。', parameters: { type: 'object', properties: { content: { type: 'string' } }, required: ['content'] } } });
+      skillTools.push({ type: 'function', function: { name: 'create_skill', description: '新しいスキルを作成して永続化する。', parameters: { type: 'object', properties: { name: { type: 'string' }, description: { type: 'string' }, body: { type: 'string' }, trigger: { type: 'string' } }, required: ['name', 'description', 'body'] } } });
+      skillTools.push({ type: 'function', function: { name: 'edit_skill', description: '既存スキルの内容を更新する。ユーザー作成スキルは設定で許可されている場合のみ編集可能。', parameters: { type: 'object', properties: { skill_id: { type: 'string' }, name: { type: 'string' }, description: { type: 'string' }, body: { type: 'string' }, trigger: { type: 'string' } }, required: ['skill_id'] } } });
+      skillTools.push({ type: 'function', function: { name: 'delete_skill', description: 'AIが作成したスキルのみ削除できる。ユーザースキルは削除不可。', parameters: { type: 'object', properties: { skill_id: { type: 'string' }, reason: { type: 'string' } }, required: ['skill_id'] } } });
     }
 
     // MCP ツールが有効かつ LM Studio の場合にツール呼び出しループを実行
@@ -963,6 +1045,18 @@ export function createClaudeService(mcpManager?: MCPManager) {
           toolResult = skillContext.getContent(skillId) ?? `スキル "${skillId}" が見つかりません`;
         } else if (tc.function.name === 'invoke_skill_script' && skillContext && skillId) {
           toolResult = await skillContext.invokeScript(skillId);
+        } else if (tc.function.name === 'update_user_memory' && skillContext) {
+          skillContext.updateMemory?.(args.content as string);
+          toolResult = JSON.stringify({ success: true, message: '記憶を更新しました' });
+        } else if (tc.function.name === 'create_skill' && skillContext) {
+          const res = skillContext.createAISkill?.(args.name as string, args.description as string, args.body as string, args.trigger as string | undefined);
+          toolResult = JSON.stringify(res ?? { success: false, message: 'スキル作成機能が無効です' });
+        } else if (tc.function.name === 'edit_skill' && skillContext && skillId) {
+          const res = skillContext.editSkill?.(skillId, { name: args.name as string, description: args.description as string, body: args.body as string, trigger: args.trigger as string });
+          toolResult = JSON.stringify(res ?? { success: false, message: 'スキル編集機能が無効です' });
+        } else if (tc.function.name === 'delete_skill' && skillContext && skillId) {
+          const res = skillContext.deleteAISkill?.(skillId);
+          toolResult = JSON.stringify(res ?? { success: false, message: 'スキル削除機能が無効です' });
         } else if (tc.function.name === 'get_mcp_server_tools' && mcpManager) {
           // 省トークンモード: 指定サーバーのツール定義を返す
           const serverName = args.server_name as string;
@@ -1147,7 +1241,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
       messages: ChatMessage[],
       onChunk: (chunk: string) => void,
       onEnd: (stats: ChatMessageStats) => void,
-      options?: { thinkMode?: boolean; skillContext?: SkillContext; fileBrowserState?: FileBrowserState; openFilePaths?: string[] },
+      options?: { thinkMode?: boolean; skillContext?: SkillContext; fileBrowserState?: FileBrowserState; openFilePaths?: string[]; userMemory?: string },
     ): Promise<void> {
       currentAbortController = new AbortController();
       const provider = settings.provider ?? 'anthropic';
@@ -1156,7 +1250,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
         if (provider === 'lmstudio') {
           await streamLMStudio(settings, messages, onChunk, onEnd, options);
         } else {
-          await streamAnthropic(settings, messages, onChunk, onEnd, options?.skillContext, options?.fileBrowserState, options?.openFilePaths);
+          await streamAnthropic(settings, messages, onChunk, onEnd, options?.skillContext, options?.fileBrowserState, options?.openFilePaths, options?.userMemory);
         }
       } catch (err: any) {
         if (err.name === 'AbortError') { onEnd({}); return; }

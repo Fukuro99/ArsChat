@@ -20,18 +20,21 @@ const BUILTIN_SKILLS: Skill[] = [
     name: 'Interactive UI コンポーネント',
     description: 'ユーザー側にボタン・フォーム・スライダー等のUIを表示し操作結果をAIに送信する（liveモード・ローカルアクション対応）',
     filePath: '__builtin__',
+    source: 'builtin',
   },
   {
     id: 'iframe',
     name: 'iframe HTML表示',
     description: 'グラフ・図解・アニメーション等の表示専用HTMLをAIメッセージ欄に埋め込む',
     filePath: '__builtin__',
+    source: 'builtin',
   },
   {
     id: 'interactive-html',
     name: 'Interactive HTML サンドボックス',
     description: 'ゲーム・Canvasなど複雑なHTMLをユーザー側に表示し操作をAIに通知する（liveモード）',
     filePath: '__builtin__',
+    source: 'builtin',
   },
 ];
 
@@ -77,7 +80,7 @@ function parseFrontmatter(content: string): { meta: Record<string, any>; body: s
 }
 
 /** .md ファイルを Skill オブジェクトに変換 */
-function parseSkillFile(filePath: string): Skill | null {
+function parseSkillFile(filePath: string, source: Skill['source'] = 'user'): Skill | null {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
     const { meta } = parseFrontmatter(content);
@@ -104,6 +107,7 @@ function parseSkillFile(filePath: string): Skill | null {
       trigger: meta.trigger ? String(meta.trigger).trim() : undefined,
       script,
       filePath,
+      source,
     };
   } catch {
     return null;
@@ -151,9 +155,14 @@ trigger: /skill-name
 `;
 
 export function createSkillManager(dataDir: string) {
-  /** ペルソナのスキルディレクトリパスを返す */
+  /** ペルソナのユーザースキルディレクトリパスを返す */
   function getSkillsDir(personaId: string): string {
     return path.join(dataDir, 'personas', personaId, 'skills');
+  }
+
+  /** ペルソナの AI スキルディレクトリパスを返す */
+  function getAISkillsDir(personaId: string): string {
+    return path.join(dataDir, 'personas', personaId, 'ai-skills');
   }
 
   /** スキルディレクトリが存在しなければ作成 */
@@ -165,13 +174,32 @@ export function createSkillManager(dataDir: string) {
     return dir;
   }
 
+  /** AI スキルディレクトリが存在しなければ作成 */
+  function ensureAISkillsDir(personaId: string): string {
+    const dir = getAISkillsDir(personaId);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    return dir;
+  }
+
+  /** スキルファイルのフロントマター＋本文を生成 */
+  function buildSkillContent(fields: { name: string; description: string; trigger?: string; scriptType?: string; scriptValue?: string; body: string }): string {
+    let frontmatter = `name: ${fields.name}\ndescription: ${fields.description}`;
+    if (fields.trigger) frontmatter += `\ntrigger: ${fields.trigger}`;
+    if (fields.scriptType && fields.scriptValue) {
+      frontmatter += `\nscript:\n  type: ${fields.scriptType}\n  value: ${fields.scriptValue}`;
+    }
+    return `---\n${frontmatter}\n---\n\n${fields.body}`;
+  }
+
   return {
     /** ビルトインスキル一覧を返す */
     getBuiltinSkills(): Skill[] {
       return BUILTIN_SKILLS;
     },
 
-    /** ペルソナのスキル一覧を返す */
+    /** ペルソナのユーザースキル一覧を返す */
     listSkills(personaId: string): Skill[] {
       const dir = getSkillsDir(personaId);
       if (!fs.existsSync(dir)) return [];
@@ -179,41 +207,100 @@ export function createSkillManager(dataDir: string) {
         return fs
           .readdirSync(dir)
           .filter((f) => f.endsWith('.md'))
-          .map((f) => parseSkillFile(path.join(dir, f)))
+          .map((f) => parseSkillFile(path.join(dir, f), 'user'))
           .filter((s): s is Skill => s !== null);
       } catch {
         return [];
       }
     },
 
-    /** スキルの本文（詳細プロンプト）を返す。ビルトインスキルも対応 */
+    /** ペルソナの AI スキル一覧を返す */
+    listAISkills(personaId: string): Skill[] {
+      const dir = getAISkillsDir(personaId);
+      if (!fs.existsSync(dir)) return [];
+      try {
+        return fs
+          .readdirSync(dir)
+          .filter((f) => f.endsWith('.md'))
+          .map((f) => parseSkillFile(path.join(dir, f), 'ai'))
+          .filter((s): s is Skill => s !== null);
+      } catch {
+        return [];
+      }
+    },
+
+    /** ユーザー・AI 両方のスキルを source 付きで返す */
+    listAllSkills(personaId: string): Skill[] {
+      return [...this.listSkills(personaId), ...this.listAISkills(personaId)];
+    },
+
+    /** スキルIDで両ディレクトリを検索して返す */
+    findSkill(personaId: string, skillId: string): Skill | null {
+      // ユーザースキルを先に探す
+      const userPath = path.join(getSkillsDir(personaId), `${skillId}.md`);
+      if (fs.existsSync(userPath)) return parseSkillFile(userPath, 'user');
+      // AI スキルを探す
+      const aiPath = path.join(getAISkillsDir(personaId), `${skillId}.md`);
+      if (fs.existsSync(aiPath)) return parseSkillFile(aiPath, 'ai');
+      return null;
+    },
+
+    /** スキルの本文（詳細プロンプト）を返す。ビルトイン・ユーザー・AI すべて対応 */
     getSkillContent(personaId: string, skillId: string): string | null {
       // ビルトインスキルを優先チェック
       if (skillId in BUILTIN_SKILL_CONTENT) {
         return BUILTIN_SKILL_CONTENT[skillId];
       }
-      const filePath = path.join(getSkillsDir(personaId), `${skillId}.md`);
-      if (!fs.existsSync(filePath)) return null;
-      return readSkillBody(filePath);
+      // ユーザースキル → AI スキルの順で探す
+      const userPath = path.join(getSkillsDir(personaId), `${skillId}.md`);
+      if (fs.existsSync(userPath)) return readSkillBody(userPath);
+      const aiPath = path.join(getAISkillsDir(personaId), `${skillId}.md`);
+      if (fs.existsSync(aiPath)) return readSkillBody(aiPath);
+      return null;
     },
 
-    /** スキルをフロントマターと本文から保存 */
+    /** スキルをフロントマターと本文から保存（既存スキルの上書き。source に応じてディレクトリ選択） */
     saveSkill(personaId: string, skillId: string, fields: { name: string; description: string; trigger?: string; scriptType?: string; scriptValue?: string; body: string }): Skill | null {
-      const filePath = path.join(getSkillsDir(personaId), `${skillId}.md`);
-      if (!fs.existsSync(filePath)) return null;
+      // まず既存ファイルの場所を特定
+      const userPath = path.join(getSkillsDir(personaId), `${skillId}.md`);
+      const aiPath = path.join(getAISkillsDir(personaId), `${skillId}.md`);
 
-      let frontmatter = `name: ${fields.name}\ndescription: ${fields.description}`;
-      if (fields.trigger) frontmatter += `\ntrigger: ${fields.trigger}`;
-      if (fields.scriptType && fields.scriptValue) {
-        frontmatter += `\nscript:\n  type: ${fields.scriptType}\n  value: ${fields.scriptValue}`;
+      let filePath: string;
+      let source: Skill['source'];
+      if (fs.existsSync(userPath)) {
+        filePath = userPath;
+        source = 'user';
+      } else if (fs.existsSync(aiPath)) {
+        filePath = aiPath;
+        source = 'ai';
+      } else {
+        return null;
       }
 
-      const content = `---\n${frontmatter}\n---\n\n${fields.body}`;
-      fs.writeFileSync(filePath, content, 'utf-8');
-      return parseSkillFile(filePath);
+      fs.writeFileSync(filePath, buildSkillContent(fields), 'utf-8');
+      return parseSkillFile(filePath, source);
     },
 
-    /** テンプレートファイルを生成してエディタで開く */
+    /** AI スキルを新規作成して保存 */
+    createAISkill(personaId: string, fields: { name: string; description: string; body: string; trigger?: string }): Skill {
+      const dir = ensureAISkillsDir(personaId);
+      // 重複しない ID を生成（名前をスラッグ化 → 被ったら連番）
+      const base = fields.name
+        .toLowerCase()
+        .replace(/[^\w\u3040-\u30ff\u4e00-\u9fff]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 40) || 'ai-skill';
+      let fileName = `${base}.md`;
+      let counter = 1;
+      while (fs.existsSync(path.join(dir, fileName))) {
+        fileName = `${base}-${counter++}.md`;
+      }
+      const filePath = path.join(dir, fileName);
+      fs.writeFileSync(filePath, buildSkillContent({ ...fields, body: fields.body }), 'utf-8');
+      return parseSkillFile(filePath, 'ai')!;
+    },
+
+    /** テンプレートファイルを生成してエディタで開く（ユーザースキル） */
     createSkill(personaId: string): string {
       const dir = ensureSkillsDir(personaId);
       // 重複しない名前を生成
@@ -228,12 +315,22 @@ export function createSkillManager(dataDir: string) {
       return filePath;
     },
 
-    /** スキルファイルを削除 */
+    /** スキルファイルを削除（source に関わらず両ディレクトリから探して削除） */
     deleteSkill(personaId: string, skillId: string): void {
-      const filePath = path.join(getSkillsDir(personaId), `${skillId}.md`);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+      const userPath = path.join(getSkillsDir(personaId), `${skillId}.md`);
+      if (fs.existsSync(userPath)) { fs.unlinkSync(userPath); return; }
+      const aiPath = path.join(getAISkillsDir(personaId), `${skillId}.md`);
+      if (fs.existsSync(aiPath)) fs.unlinkSync(aiPath);
+    },
+
+    /** AI スキルのみ削除（ユーザースキルには触らない） */
+    deleteAISkill(personaId: string, skillId: string): boolean {
+      const aiPath = path.join(getAISkillsDir(personaId), `${skillId}.md`);
+      if (fs.existsSync(aiPath)) {
+        fs.unlinkSync(aiPath);
+        return true;
       }
+      return false;
     },
 
     /** スキルファイルをエディタで開く */

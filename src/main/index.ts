@@ -36,6 +36,7 @@ import { createClaudeService } from './claude';
 import { createIconManager } from './icon-manager';
 import { createMCPManager } from './mcp-manager';
 import { createSkillManager } from './skill-manager';
+import { createMemoryManager } from './memory-manager';
 import { createExtensionManager } from './extension-manager';
 import { createExtensionContext } from './extension-context';
 
@@ -73,6 +74,7 @@ const store = createStore();
 const iconManager = createIconManager();
 const mcpManager = createMCPManager();
 const skillManager = createSkillManager(store.getDataDir());
+const memoryManager = createMemoryManager(store.getDataDir());
 const extensionManager = createExtensionManager(store.getDataDir());
 
 async function captureDisplayBase64(targetDisplay?: Display): Promise<string> {
@@ -644,12 +646,72 @@ function setupIPC(): void {
     const builtinSkills = settings.enableInteractiveUI !== false
       ? skillManager.getBuiltinSkills()
       : [];
-    const personaSkills = settings.activePersonaId
-      ? skillManager.listSkills(settings.activePersonaId)
+    const personaId = settings.activePersonaId ?? '';
+    const personaSkills = personaId
+      ? skillManager.listAllSkills(personaId)
       : [];
     const skills = [...builtinSkills, ...personaSkills];
 
+    // アクティブペルソナのユーザーメモリ
+    const userMemory = personaId ? memoryManager.getMemory(personaId) : null;
+
     const fileBrowserState = store.getFileBrowserState();
+
+    // AI スキル管理コールバック（permission チェック込み）
+    const skillContext = {
+      skills,
+      getContent: (skillId: string) =>
+        skillManager.getSkillContent(personaId, skillId),
+      invokeScript: async (skillId: string) => {
+        const skill = skills.find((s) => s.id === skillId);
+        if (!skill) return `スキル "${skillId}" が見つかりません`;
+        return skillManager.invokeSkillScript(skill);
+      },
+      createAISkill: (name: string, description: string, body: string, trigger?: string) => {
+        if (!personaId) return { success: false as const, message: 'アクティブなペルソナがありません' };
+        try {
+          const skill = skillManager.createAISkill(personaId, { name, description, body, trigger });
+          mainWindow?.webContents.send(IPC_CHANNELS.SKILLS_UPDATED, personaId);
+          return { success: true as const, skill, message: `スキル「${skill.name}」を作成しました` };
+        } catch (e: any) {
+          return { success: false as const, message: e.message };
+        }
+      },
+      editSkill: (skillId: string, fields: { name?: string; description?: string; body?: string; trigger?: string }) => {
+        if (!personaId) return { success: false as const, message: 'アクティブなペルソナがありません' };
+        const existing = skillManager.findSkill(personaId, skillId);
+        if (!existing) return { success: false as const, message: `スキル "${skillId}" が見つかりません` };
+        if (existing.source === 'user') {
+          const persona = settings.personas.find((p) => p.id === personaId);
+          if (!persona?.allowAIEditUserSkills) {
+            return { success: false as const, message: 'ユーザー作成スキルの編集は許可されていません。設定で「AIによるユーザースキル編集を許可」を有効にしてください。' };
+          }
+        }
+        const body = fields.body ?? skillManager.getSkillContent(personaId, skillId) ?? '';
+        skillManager.saveSkill(personaId, skillId, {
+          name: fields.name ?? existing.name,
+          description: fields.description ?? existing.description,
+          trigger: fields.trigger ?? existing.trigger,
+          body,
+        });
+        mainWindow?.webContents.send(IPC_CHANNELS.SKILLS_UPDATED, personaId);
+        return { success: true as const };
+      },
+      deleteAISkill: (skillId: string) => {
+        if (!personaId) return { success: false as const, message: 'アクティブなペルソナがありません' };
+        const existing = skillManager.findSkill(personaId, skillId);
+        if (!existing) return { success: false as const, message: `スキル "${skillId}" が見つかりません` };
+        if (existing.source === 'user') {
+          return { success: false as const, message: 'ユーザー作成スキルはAIが削除できません。削除が必要な場合はユーザーにお願いしてください。' };
+        }
+        skillManager.deleteAISkill(personaId, skillId);
+        mainWindow?.webContents.send(IPC_CHANNELS.SKILLS_UPDATED, personaId);
+        return { success: true as const };
+      },
+      updateMemory: (content: string) => {
+        if (personaId) memoryManager.setMemory(personaId, content);
+      },
+    };
 
     try {
       await claude.streamChat(
@@ -665,16 +727,8 @@ function setupIPC(): void {
           thinkMode: payload.thinkMode ?? false,
           fileBrowserState: fileBrowserState.rootPath ? fileBrowserState : undefined,
           openFilePaths: payload.openFilePaths && payload.openFilePaths.length > 0 ? payload.openFilePaths : undefined,
-          skillContext: skills.length > 0 ? {
-            skills,
-            getContent: (skillId: string) =>
-              skillManager.getSkillContent(settings.activePersonaId ?? '', skillId),
-            invokeScript: async (skillId: string) => {
-              const skill = skills.find((s) => s.id === skillId);
-              if (!skill) return `スキル "${skillId}" が見つかりません`;
-              return skillManager.invokeSkillScript(skill);
-            },
-          } : undefined,
+          userMemory: userMemory ?? undefined,
+          skillContext,
         },
       );
     } catch (err: any) {
@@ -990,9 +1044,24 @@ function setupIPC(): void {
     return claude.generateText(settings, systemPrompt, userMessage);
   });
 
-  // --- スキル: 一覧取得 ---
+  // --- メモリ: 取得 ---
+  ipcMain.handle(IPC_CHANNELS.MEMORY_GET, (_e, personaId: string) => {
+    return memoryManager.getMemory(personaId);
+  });
+
+  // --- メモリ: 保存 ---
+  ipcMain.handle(IPC_CHANNELS.MEMORY_SET, (_e, personaId: string, content: string) => {
+    memoryManager.setMemory(personaId, content);
+  });
+
+  // --- メモリ: クリア ---
+  ipcMain.handle(IPC_CHANNELS.MEMORY_CLEAR, (_e, personaId: string) => {
+    memoryManager.clearMemory(personaId);
+  });
+
+  // --- スキル: 一覧取得（ユーザー + AI 両方） ---
   ipcMain.handle(IPC_CHANNELS.SKILL_LIST, (_e, personaId: string) => {
-    return skillManager.listSkills(personaId);
+    return skillManager.listAllSkills(personaId);
   });
 
   // --- スキル: 本文取得 ---

@@ -35,6 +35,10 @@ const IPC_CHANNELS = {
   MCP_RECONNECT: 'mcp:reconnect',
   MCP_GENERATE_DESC: 'mcp:generate-desc',
   CHAT_SEND_SILENT: 'chat:send-silent',
+  MEMORY_GET: 'memory:get',
+  MEMORY_SET: 'memory:set',
+  MEMORY_CLEAR: 'memory:clear',
+  SKILLS_UPDATED: 'skills:updated',
   SKILL_LIST: 'skill:list',
   SKILL_GET_CONTENT: 'skill:get-content',
   SKILL_SAVE: 'skill:save',
@@ -167,6 +171,22 @@ contextBridge.exposeInMainWorld('arsChatAPI', {
   },
   generateMCPDescription: (serverConfig: import('../shared/types').MCPServerConfig): Promise<string> => {
     return ipcRenderer.invoke(IPC_CHANNELS.MCP_GENERATE_DESC, serverConfig);
+  },
+
+  // === メモリ ===
+  getMemory: (personaId: string): Promise<string | null> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.MEMORY_GET, personaId);
+  },
+  setMemory: (personaId: string, content: string): Promise<void> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.MEMORY_SET, personaId, content);
+  },
+  clearMemory: (personaId: string): Promise<void> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.MEMORY_CLEAR, personaId);
+  },
+  onSkillsUpdated: (callback: (personaId: string) => void) => {
+    const handler = (_: any, personaId: string) => callback(personaId);
+    ipcRenderer.on(IPC_CHANNELS.SKILLS_UPDATED, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.SKILLS_UPDATED, handler);
   },
 
   // === スキル ===
