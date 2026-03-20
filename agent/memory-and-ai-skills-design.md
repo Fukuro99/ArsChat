@@ -3,8 +3,18 @@
 ## 概要
 
 ### 対象機能
-1. **ユーザー情報記録（User Memory）** — ペルソナがユーザーについて自由記述テキストで覚える
+1. **ユーザー情報記録（User Memory）** — ペルソナがユーザーの性格・好み・印象を自由記述テキストで覚える
 2. **AIスキル自己編集・作成** — AIがスキルをCRUDできる。ユーザースキルとAIスキルを分離管理
+
+### 用語の定義
+
+| 用語 | 意味 | 実装 |
+|------|------|------|
+| **User Memory** | ペルソナがユーザーの「印象・性格・好み・習慣」を記憶したもの。ペルソナ視点でのユーザー理解 | `user-memory.md`（自由記述テキスト） |
+| **MemOS / Chat History** | チャット履歴を SQLite+Vector で保存し意味的に検索できるようにしたもの。別フェーズで実装予定 | `memory.db`（SQLite + embedding） |
+
+> **注意**: User Memory は配列や構造化データではなく、ペルソナが自然言語で書く「メモ帳」。
+> チャット履歴の意味検索（MemOS相当機能）は別ブランチ・別フェーズで実装する。
 
 ---
 
@@ -395,15 +405,62 @@ interface ArsChatSettings {
 
 ---
 
-## 実装ステップ
+## 実装ステップ（✅ = 完了）
 
-| # | 内容 | ファイル |
-|---|------|---------|
-| 1 | `Skill.source`・`Persona.allowAIEditUserSkills`・メモリ関連型定義追加 | `src/shared/types.ts` |
-| 2 | IPC定数追加、`getEffectiveSystemPrompt()`にメモリ注入追加 | `src/shared/types.ts` |
-| 3 | `MemoryManager` 実装 | `src/main/memory-manager.ts` |
-| 4 | `skill-manager.ts` に `ai-skills/` 対応・`findSkill()` 追加 | `src/main/skill-manager.ts` |
-| 5 | `claude.ts` に4ツール追加（`update_user_memory`, `create_skill`, `edit_skill`, `delete_skill`） | `src/main/claude.ts` |
-| 6 | IPCハンドラー・`MemoryManager`インスタンス化 | `src/main/index.ts` |
-| 7 | contextBridgeにmemory系メソッド追加 | `src/main/preload.ts` |
-| 8 | Settings UIにスキル分割・メモリ表示・AI権限設定を追加 | `src/renderer/components/Settings.tsx` |
+| # | 内容 | ファイル | 状態 |
+|---|------|---------|------|
+| 1 | `Skill.source`・`Persona.allowAIEditUserSkills`・メモリ関連型定義追加 | `src/shared/types.ts` | ✅ |
+| 2 | IPC定数追加、`getEffectiveSystemPrompt()`にメモリ注入追加 | `src/shared/types.ts` | ✅ |
+| 3 | `MemoryManager` 実装 | `src/main/memory-manager.ts` | ✅ |
+| 4 | `skill-manager.ts` に `ai-skills/` 対応・`findSkill()` 追加 | `src/main/skill-manager.ts` | ✅ |
+| 5 | `claude.ts` に4ツール追加（`update_user_memory`, `create_skill`, `edit_skill`, `delete_skill`） | `src/main/claude.ts` | ✅ |
+| 6 | IPCハンドラー・`MemoryManager`インスタンス化 | `src/main/index.ts` | ✅ |
+| 7 | contextBridgeにmemory系メソッド追加 | `src/main/preload.ts` | ✅ |
+| 8 | Settings UIにスキル分割・メモリ表示・AI権限設定を追加 | `src/renderer/components/Settings.tsx` | ✅ |
+
+---
+
+## 次フェーズ: MemOS 相当機能（チャット履歴の意味検索）
+
+> User Memory（ペルソナのユーザー印象メモ）とは別の機能。
+> チャット履歴を SQLite + Vector Embedding で保存し、会話前に関連する過去履歴を自動注入する。
+
+### 設計方針
+
+```
+personas/{personaId}/memory.db  ← SQLite ファイル
+
+テーブル:
+┌─ memories ─────────────────────────────────────┐
+│ id           TEXT PRIMARY KEY                   │
+│ type         TEXT  ('episodic')                 │
+│ content      TEXT  会話の要約・スニペット         │
+│ embedding    BLOB  Float32Array                 │
+│ importance   REAL  0.0〜1.0                     │
+│ access_count INTEGER                            │
+│ created_at   INTEGER                            │
+│ accessed_at  INTEGER                            │
+└─────────────────────────────────────────────────┘
+```
+
+### Embedding の選択肢
+
+| 方式 | 推奨度 | 理由 |
+|------|--------|------|
+| LM Studio `/v1/embeddings` | ⭐⭐⭐ | 既存クライアント流用・無料・ローカル |
+| Anthropic API | ⭐⭐ | 品質高いがコスト発生 |
+| `@xenova/transformers` | ⭐ | 完全オフラインだがバンドル肥大化 |
+
+### ベクトル検索
+
+純粋 JS の cosine similarity（〜1万件は十分高速）。
+件数増加時は `sqlite-vec` 拡張（HNSW）へ移行可能。
+
+### 追加ツール（claude.ts）
+
+- `store_memory(content, importance?)` — 会話スニペットを保存
+- `search_memories(query)` → Top-K 類似メモリを返す（AI向け）
+
+### 実装ブランチ
+
+`feat/memos-chat-history`（別ブランチで実装予定）
