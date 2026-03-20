@@ -445,6 +445,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
     fileBrowserState?: FileBrowserState,
     openFilePaths?: string[],
     userMemory?: string,
+    chatMemories?: string,
   ): Promise<void> {
     const client = new Anthropic({ apiKey: settings.apiKey });
     const requestStartTime = Date.now();
@@ -545,7 +546,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
       return { role: msg.role as 'user' | 'assistant', content };
     });
 
-    const systemPrompt = getEffectiveSystemPrompt(settings, skillContext?.skills, fileBrowserState, openFilePaths, userMemory);
+    const systemPrompt = getEffectiveSystemPrompt(settings, skillContext?.skills, fileBrowserState, openFilePaths, userMemory, chatMemories);
     const MAX_ROUNDS = (settings.maxToolRounds ?? 10) === 0 ? Infinity : (settings.maxToolRounds ?? 10);
 
     for (let round = 0; round < MAX_ROUNDS; round++) {
@@ -646,7 +647,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
     messages: ChatMessage[],
     onChunk: (chunk: string) => void,
     onEnd: (stats: ChatMessageStats) => void,
-    options?: { thinkMode?: boolean; skillContext?: SkillContext; fileBrowserState?: FileBrowserState; openFilePaths?: string[]; userMemory?: string },
+    options?: { thinkMode?: boolean; skillContext?: SkillContext; fileBrowserState?: FileBrowserState; openFilePaths?: string[]; userMemory?: string; chatMemories?: string },
   ): Promise<void> {
     const baseUrl = normalizeBaseUrl(settings.lmstudioBaseUrl);
     if (!baseUrl) {
@@ -690,7 +691,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
 
     // OpenAI互換メッセージ形式を構築
     const apiMessages: any[] = [];
-    let effectiveSystemPrompt = getEffectiveSystemPrompt(settings, options?.skillContext?.skills, options?.fileBrowserState, options?.openFilePaths, options?.userMemory);
+    let effectiveSystemPrompt = getEffectiveSystemPrompt(settings, options?.skillContext?.skills, options?.fileBrowserState, options?.openFilePaths, options?.userMemory, options?.chatMemories);
 
     // 省トークンモード: 接続中MCPサーバーの概要をシステムプロンプトに注入
     if (settings.mcpTokenSaving && mcpManager) {
@@ -1241,7 +1242,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
       messages: ChatMessage[],
       onChunk: (chunk: string) => void,
       onEnd: (stats: ChatMessageStats) => void,
-      options?: { thinkMode?: boolean; skillContext?: SkillContext; fileBrowserState?: FileBrowserState; openFilePaths?: string[]; userMemory?: string },
+      options?: { thinkMode?: boolean; skillContext?: SkillContext; fileBrowserState?: FileBrowserState; openFilePaths?: string[]; userMemory?: string; chatMemories?: string },
     ): Promise<void> {
       currentAbortController = new AbortController();
       const provider = settings.provider ?? 'anthropic';
@@ -1250,7 +1251,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
         if (provider === 'lmstudio') {
           await streamLMStudio(settings, messages, onChunk, onEnd, options);
         } else {
-          await streamAnthropic(settings, messages, onChunk, onEnd, options?.skillContext, options?.fileBrowserState, options?.openFilePaths, options?.userMemory);
+          await streamAnthropic(settings, messages, onChunk, onEnd, options?.skillContext, options?.fileBrowserState, options?.openFilePaths, options?.userMemory, options?.chatMemories);
         }
       } catch (err: any) {
         if (err.name === 'AbortError') { onEnd({}); return; }

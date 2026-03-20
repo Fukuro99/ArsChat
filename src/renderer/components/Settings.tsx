@@ -149,6 +149,10 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
   const [isSavingMemory, setIsSavingMemory] = useState(false);
   const [memoryPersonaId, setMemoryPersonaId] = useState<string | null>(null);
 
+  // チャット履歴メモリ（MemOS）関連
+  const [chatMemoryCounts, setChatMemoryCounts] = useState<Record<string, number>>({});
+  const [chatMemoryClearing, setChatMemoryClearing] = useState<string | null>(null);
+
   // 拡張機能関連
   const [extInstallUrl, setExtInstallUrl] = useState('');
   const [extInstalling, setExtInstalling] = useState(false);
@@ -458,6 +462,8 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
     }
     setSkillsPersonaId(personaId);
     setIsLoadingSkills(true);
+    // チャット履歴メモリ件数も同時にロード
+    loadChatMemoryCount(personaId);
     try {
       const list = await window.arsChatAPI.listSkills(personaId);
       setSkills(list);
@@ -556,6 +562,26 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
     if (!confirm('このペルソナのメモリをクリアしますか？')) return;
     await window.arsChatAPI.clearMemory(memoryPersonaId);
     setMemory('');
+  };
+
+  // チャット履歴メモリ: ペルソナ別件数ロード
+  const loadChatMemoryCount = async (personaId: string) => {
+    try {
+      const count = await window.arsChatAPI.chatMemory.count(personaId);
+      setChatMemoryCounts((prev) => ({ ...prev, [personaId]: count }));
+    } catch {}
+  };
+
+  // チャット履歴メモリ: クリア
+  const handleClearChatMemory = async (personaId: string) => {
+    if (!confirm('このペルソナのチャット履歴メモリをすべて削除しますか？\n削除したデータは元に戻せません。')) return;
+    setChatMemoryClearing(personaId);
+    try {
+      await window.arsChatAPI.chatMemory.clear(personaId);
+      setChatMemoryCounts((prev) => ({ ...prev, [personaId]: 0 }));
+    } finally {
+      setChatMemoryClearing(null);
+    }
   };
 
   return (
@@ -1532,6 +1558,127 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
               className="w-20 shrink-0 bg-aria-surface border border-aria-border rounded-lg px-3 py-1.5 text-sm text-aria-text text-center focus:outline-none focus:border-aria-primary"
             />
           </div>
+        </section>
+
+        {/* === チャット履歴メモリ（MemOS） === */}
+        <section className="space-y-4">
+          <h2 className="text-sm font-semibold text-aria-text-muted uppercase tracking-wider">チャット履歴メモリ</h2>
+
+          {/* 有効/無効 トグル */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-aria-text">チャット履歴の意味検索</p>
+              <p className="text-xs text-aria-text-muted">
+                会話内容を SQLite に保存し、関連する過去の会話を自動で参照する（LM Studio 専用）
+              </p>
+            </div>
+            <button
+              onClick={() => updateSetting('chatHistoryEnabled', !settings.chatHistoryEnabled)}
+              className={`relative w-11 h-6 rounded-full transition-colors ${
+                settings.chatHistoryEnabled ? 'bg-aria-primary' : 'bg-aria-border'
+              }`}
+            >
+              <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-md transition-transform ${
+                settings.chatHistoryEnabled ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
+          </div>
+
+          {settings.chatHistoryEnabled && (
+            <div className="space-y-3 pl-1">
+              {/* Embedding モデル */}
+              <div className="space-y-1.5">
+                <label className="text-xs text-aria-text-muted">Embedding モデル（LM Studio）</label>
+                <input
+                  type="text"
+                  value={settings.chatHistoryEmbeddingModel ?? ''}
+                  onChange={(e) => updateSetting('chatHistoryEmbeddingModel', e.target.value)}
+                  placeholder="例: text-embedding-nomic-embed-text-v1.5"
+                  className="w-full bg-aria-surface border border-aria-border rounded-lg px-3 py-2 text-xs text-aria-text placeholder:text-aria-text-muted focus:outline-none focus:border-aria-primary"
+                />
+                <p className="text-xs text-aria-text-muted">
+                  LM Studio でロードした Embedding モデルの ID を入力してください。
+                  空欄の場合は最新 N 件にフォールバックします。
+                </p>
+              </div>
+
+              {/* 検索結果件数 */}
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-xs text-aria-text">注入件数 (Top-K)</p>
+                  <p className="text-xs text-aria-text-muted">チャット前に参照する関連履歴の最大件数</p>
+                </div>
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={settings.chatHistoryTopK ?? 3}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    if (!isNaN(v) && v >= 1) updateSetting('chatHistoryTopK', v);
+                  }}
+                  className="w-20 shrink-0 bg-aria-surface border border-aria-border rounded-lg px-3 py-1.5 text-xs text-aria-text text-center focus:outline-none focus:border-aria-primary"
+                />
+              </div>
+
+              {/* 最大保存件数 */}
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-xs text-aria-text">最大保存件数</p>
+                  <p className="text-xs text-aria-text-muted">超過時は重要度スコアが低いものから自動削除</p>
+                </div>
+                <input
+                  type="number"
+                  min={10}
+                  max={2000}
+                  step={10}
+                  value={settings.chatHistoryMaxItems ?? 200}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    if (!isNaN(v) && v >= 10) updateSetting('chatHistoryMaxItems', v);
+                  }}
+                  className="w-24 shrink-0 bg-aria-surface border border-aria-border rounded-lg px-3 py-1.5 text-xs text-aria-text text-center focus:outline-none focus:border-aria-primary"
+                />
+              </div>
+
+              {/* ペルソナ別メモリ管理 */}
+              {(settings.personas ?? []).length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs text-aria-text-muted font-medium">ペルソナ別チャット履歴</p>
+                  <div className="space-y-1.5">
+                    {(settings.personas ?? []).map((p) => (
+                      <div key={p.id} className="flex items-center justify-between bg-aria-surface rounded-lg px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="text-xs text-aria-text truncate">{p.name}</p>
+                          <p className="text-xs text-aria-text-muted">
+                            {chatMemoryCounts[p.id] != null
+                              ? `${chatMemoryCounts[p.id]} 件保存`
+                              : '—'}
+                          </p>
+                        </div>
+                        <div className="flex gap-1.5 shrink-0">
+                          <button
+                            onClick={() => loadChatMemoryCount(p.id)}
+                            className="px-2 py-1 text-xs text-aria-text-muted bg-aria-bg rounded hover:text-aria-text transition-colors"
+                            title="件数を更新"
+                          >
+                            確認
+                          </button>
+                          <button
+                            onClick={() => handleClearChatMemory(p.id)}
+                            disabled={chatMemoryClearing === p.id}
+                            className="px-2 py-1 text-xs text-red-400 bg-red-500/10 rounded hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                          >
+                            {chatMemoryClearing === p.id ? '削除中...' : 'クリア'}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         {/* === MCP サーバー設定 === */}

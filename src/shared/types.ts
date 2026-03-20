@@ -87,6 +87,12 @@ export interface ArsChatSettings {
   maxToolRounds: number;        // 最大ツール呼び出しラウンド数（0 = 無制限）
   chatIconSize: number;         // チャットアイコンサイズ（px、デフォルト 32）
   autoExtractMemory: boolean;   // 会話後にメモリを自動更新するか（デフォルト: false）
+
+  // チャット履歴メモリ（MemOS 相当）
+  chatHistoryEnabled: boolean;        // チャット履歴の意味検索を有効化（デフォルト: false）
+  chatHistoryEmbeddingModel: string;  // LM Studio で使用する Embedding モデル ID
+  chatHistoryTopK: number;            // 検索時に注入する件数（デフォルト: 3）
+  chatHistoryMaxItems: number;        // ペルソナごとの最大保存件数（デフォルト: 200）
 }
 
 /** 現在日時を [yyyy:MM:DD;hh:mm] 形式で返す */
@@ -106,6 +112,7 @@ export function getEffectiveSystemPrompt(
   fileBrowserState?: FileBrowserState,
   openFilePaths?: string[],
   userMemory?: string | null,
+  chatMemories?: string | null,
 ): string {
   const dateTime = currentDateTimeTag();
 
@@ -135,14 +142,20 @@ export function getEffectiveSystemPrompt(
     memorySection = `\n\n## ユーザーについての記憶\n\n${userMemory.trim()}`;
   }
 
+  // 関連チャット履歴の注入
+  let chatMemoriesSection = '';
+  if (chatMemories && chatMemories.trim()) {
+    chatMemoriesSection = `\n\n## 関連する過去の会話\n\n以下は今回の話題と関連性の高い過去のやりとりです。参考にしてください。\n\n${chatMemories.trim()}`;
+  }
+
   if (settings.activePersonaId) {
     const persona = settings.personas.find((p) => p.id === settings.activePersonaId);
     if (persona) {
       const namePrefix = `あなたの名前は「${persona.name}」です。\n\n`;
-      return namePrefix + persona.systemPrompt + memorySection + skillsSection + fileBrowserSection + openFilesSection + `\n\n現在日時: ${dateTime}`;
+      return namePrefix + persona.systemPrompt + memorySection + chatMemoriesSection + skillsSection + fileBrowserSection + openFilesSection + `\n\n現在日時: ${dateTime}`;
     }
   }
-  return settings.systemPrompt + memorySection + skillsSection + fileBrowserSection + openFilesSection + `\n\n現在日時: ${dateTime}`;
+  return settings.systemPrompt + memorySection + chatMemoriesSection + skillsSection + fileBrowserSection + openFilesSection + `\n\n現在日時: ${dateTime}`;
 }
 
 /** アクティブな人格のアバターパスを返す */
@@ -184,6 +197,11 @@ export const DEFAULT_SETTINGS: ArsChatSettings = {
   maxToolRounds: 10,
   chatIconSize: 32,
   autoExtractMemory: false,
+
+  chatHistoryEnabled: false,
+  chatHistoryEmbeddingModel: '',
+  chatHistoryTopK: 3,
+  chatHistoryMaxItems: 200,
 };
 
 // ===== スキル =====
@@ -307,6 +325,11 @@ export const IPC_CHANNELS = {
   MEMORY_GET: 'memory:get',
   MEMORY_SET: 'memory:set',
   MEMORY_CLEAR: 'memory:clear',
+
+  // チャット履歴メモリ（MemOS）
+  CHAT_MEMORY_LIST: 'chat-memory:list',
+  CHAT_MEMORY_COUNT: 'chat-memory:count',
+  CHAT_MEMORY_CLEAR: 'chat-memory:clear',
 
   // スキル変更通知（push）
   SKILLS_UPDATED: 'skills:updated',

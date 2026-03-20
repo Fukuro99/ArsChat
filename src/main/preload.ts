@@ -38,6 +38,9 @@ const IPC_CHANNELS = {
   MEMORY_GET: 'memory:get',
   MEMORY_SET: 'memory:set',
   MEMORY_CLEAR: 'memory:clear',
+  CHAT_MEMORY_LIST: 'chat-memory:list',
+  CHAT_MEMORY_COUNT: 'chat-memory:count',
+  CHAT_MEMORY_CLEAR: 'chat-memory:clear',
   SKILLS_UPDATED: 'skills:updated',
   SKILL_LIST: 'skill:list',
   SKILL_GET_CONTENT: 'skill:get-content',
@@ -187,6 +190,16 @@ contextBridge.exposeInMainWorld('arsChatAPI', {
     const handler = (_: any, personaId: string) => callback(personaId);
     ipcRenderer.on(IPC_CHANNELS.SKILLS_UPDATED, handler);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.SKILLS_UPDATED, handler);
+  },
+
+  // === チャット履歴メモリ（MemOS） ===
+  chatMemory: {
+    list: (personaId: string, limit?: number): Promise<any[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.CHAT_MEMORY_LIST, personaId, limit),
+    count: (personaId: string): Promise<number> =>
+      ipcRenderer.invoke(IPC_CHANNELS.CHAT_MEMORY_COUNT, personaId),
+    clear: (personaId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.CHAT_MEMORY_CLEAR, personaId),
   },
 
   // === スキル ===

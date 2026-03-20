@@ -71,6 +71,19 @@ declare global {
       reconnectMCP: () => Promise<MCPServerStatus[]>;
       generateMCPDescription: (serverConfig: MCPServerConfig) => Promise<string>;
 
+      // メモリ
+      getMemory: (personaId: string) => Promise<string | null>;
+      setMemory: (personaId: string, content: string) => Promise<void>;
+      clearMemory: (personaId: string) => Promise<void>;
+      onSkillsUpdated: (callback: (personaId: string) => void) => () => void;
+
+      // チャット履歴メモリ（MemOS）
+      chatMemory: {
+        list: (personaId: string, limit?: number) => Promise<any[]>;
+        count: (personaId: string) => Promise<number>;
+        clear: (personaId: string) => Promise<void>;
+      };
+
       // スキル
       listSkills: (personaId: string) => Promise<Skill[]>;
       getSkillContent: (personaId: string, skillId: string) => Promise<string | null>;

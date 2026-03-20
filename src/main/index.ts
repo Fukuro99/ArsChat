@@ -37,6 +37,7 @@ import { createIconManager } from './icon-manager';
 import { createMCPManager } from './mcp-manager';
 import { createSkillManager } from './skill-manager';
 import { createMemoryManager } from './memory-manager';
+import { createChatMemoryManager } from './chat-memory-manager';
 import { createExtensionManager } from './extension-manager';
 import { createExtensionContext } from './extension-context';
 
@@ -75,6 +76,7 @@ const iconManager = createIconManager();
 const mcpManager = createMCPManager();
 const skillManager = createSkillManager(store.getDataDir());
 const memoryManager = createMemoryManager(store.getDataDir());
+const chatMemoryManager = createChatMemoryManager(store.getDataDir());
 const extensionManager = createExtensionManager(store.getDataDir());
 
 async function captureDisplayBase64(targetDisplay?: Display): Promise<string> {
@@ -655,6 +657,31 @@ function setupIPC(): void {
     // アクティブペルソナのユーザーメモリ
     const userMemory = personaId ? memoryManager.getMemory(personaId) : null;
 
+    // チャット履歴メモリ（MemOS）: 直近のユーザーメッセージで関連履歴を検索して注入
+    let chatMemoriesText: string | undefined;
+    if (settings.chatHistoryEnabled && personaId && settings.chatHistoryEmbeddingModel) {
+      const lastUserMsg = [...payload.messages].reverse().find((m) => m.role === 'user');
+      if (lastUserMsg) {
+        try {
+          const results = await chatMemoryManager.searchMemories(personaId, lastUserMsg.content, {
+            topK: settings.chatHistoryTopK ?? 3,
+            baseUrl: settings.lmstudioBaseUrl,
+            embeddingModel: settings.chatHistoryEmbeddingModel,
+          });
+          if (results.length > 0) {
+            chatMemoriesText = results
+              .map((r) => {
+                const date = new Date(r.item.createdAt).toLocaleDateString('ja-JP');
+                return `[${date}]\n${r.item.content}`;
+              })
+              .join('\n\n---\n\n');
+          }
+        } catch {
+          // 失敗しても無視（LM Studio 未起動等）
+        }
+      }
+    }
+
     const fileBrowserState = store.getFileBrowserState();
 
     // AI スキル管理コールバック（permission チェック込み）
@@ -713,21 +740,45 @@ function setupIPC(): void {
       },
     };
 
+    // チャット後にアシスタント応答を蓄積してメモリ保存するためのバッファ
+    let assistantBuffer = '';
+
     try {
       await claude.streamChat(
         settings,
         payload.messages,
         (chunk: string) => {
+          assistantBuffer += chunk;
           event.sender.send(IPC_CHANNELS.CHAT_STREAM, chunk);
         },
         (stats: ChatMessageStats) => {
           event.sender.send(IPC_CHANNELS.CHAT_STREAM_END, stats);
+
+          // チャット履歴メモリへ自動保存（非同期・失敗無視）
+          if (settings.chatHistoryEnabled && personaId && assistantBuffer.trim()) {
+            const lastUserMsg = [...payload.messages].reverse().find((m) => m.role === 'user');
+            if (lastUserMsg) {
+              const snippet = `ユーザー: ${lastUserMsg.content.slice(0, 500)}\nアシスタント: ${assistantBuffer.slice(0, 1000)}`;
+              chatMemoryManager
+                .storeMemory(personaId, snippet, {
+                  sessionId: payload.sessionId,
+                  baseUrl: settings.lmstudioBaseUrl,
+                  embeddingModel: settings.chatHistoryEmbeddingModel,
+                })
+                .then(() => {
+                  // 件数超過時にプルーニング（非同期）
+                  chatMemoryManager.pruneMemories(personaId, settings.chatHistoryMaxItems ?? 200);
+                })
+                .catch(() => {});
+            }
+          }
         },
         {
           thinkMode: payload.thinkMode ?? false,
           fileBrowserState: fileBrowserState.rootPath ? fileBrowserState : undefined,
           openFilePaths: payload.openFilePaths && payload.openFilePaths.length > 0 ? payload.openFilePaths : undefined,
           userMemory: userMemory ?? undefined,
+          chatMemories: chatMemoriesText,
           skillContext,
         },
       );
@@ -1057,6 +1108,21 @@ function setupIPC(): void {
   // --- メモリ: クリア ---
   ipcMain.handle(IPC_CHANNELS.MEMORY_CLEAR, (_e, personaId: string) => {
     memoryManager.clearMemory(personaId);
+  });
+
+  // --- チャット履歴メモリ: 一覧取得 ---
+  ipcMain.handle(IPC_CHANNELS.CHAT_MEMORY_LIST, (_e, personaId: string, limit?: number) => {
+    return chatMemoryManager.listMemories(personaId, limit ?? 50);
+  });
+
+  // --- チャット履歴メモリ: 件数取得 ---
+  ipcMain.handle(IPC_CHANNELS.CHAT_MEMORY_COUNT, (_e, personaId: string) => {
+    return chatMemoryManager.getMemoryCount(personaId);
+  });
+
+  // --- チャット履歴メモリ: クリア ---
+  ipcMain.handle(IPC_CHANNELS.CHAT_MEMORY_CLEAR, (_e, personaId: string) => {
+    chatMemoryManager.clearMemories(personaId);
   });
 
   // --- スキル: 一覧取得（ユーザー + AI 両方） ---
