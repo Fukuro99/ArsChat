@@ -1,0 +1,31 @@
+{
+  "name": "arschat-ext-memory-browser",
+  "version": "1.0.0",
+  "description": "チャット履歴メモリ（SQLite）ブラウザ",
+  "arschat": {
+    "displayName": "Memory Browser",
+    "description": "チャット履歴メモリの参照・検索・クエリ操作ができるデータベース UI",
+    "icon": "🗄️",
+    "permissions": [
+      "settings:read",
+      "fs:read",
+      "fs:write"
+    ],
+    "main": "main.js",
+    "renderer": "renderer.js",
+    "pages": [
+      {
+        "id": "memory-browser",
+        "title": "Memory Browser",
+        "icon": "🗄️",
+        "sidebar": true
+      }
+    ]
+  },
+  "scripts": {
+    "build": "echo No build step required"
+  },
+  "dependencies": {
+    "sql.js": "^1.10.3"
+  }
+}
