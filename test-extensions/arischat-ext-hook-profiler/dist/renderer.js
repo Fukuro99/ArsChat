@@ -1,42 +1,11 @@
-/**
- * Hook Profiler - Renderer Build Script
- * ・main bar: chat:beforeSend → chat:afterResponse
- * ・above lanes: memory / tool / session の before→after ペア
- * ・マウスホイールでズーム、ドラッグでパン
- */
-const fs   = require('fs');
-const path = require('path');
 
-// 左パネル統計用（全イベント）
-const STAT_ROWS = [
-  { name: 'chat:beforeSend',    color: '#4FC3F7' },
-  { name: 'chat:afterResponse', color: '#0288D1' },
-  { name: 'memory:beforeSearch',color: '#66BB6A' },
-  { name: 'memory:afterSearch', color: '#A5D6A7' },
-  { name: 'memory:beforeStore', color: '#388E3C' },
-  { name: 'memory:afterStore',  color: '#81C784' },
-  { name: 'session:beforeSave', color: '#FFA726' },
-  { name: 'session:afterSave',  color: '#FFD54F' },
-  { name: 'tool:beforeExecute', color: '#CE93D8' },
-  { name: 'tool:afterExecute',  color: '#AB47BC' },
-];
-
-// タイムライン上のレーン（main bar より上）
-const ABOVE_LANES = [
-  { label: 'mem:search', before: 'memory:beforeSearch', after: 'memory:afterSearch',  color: '#66BB6A' },
-  { label: 'tool',       before: 'tool:beforeExecute',  after: 'tool:afterExecute',   color: '#CE93D8' },
-  { label: 'mem:store',  before: 'memory:beforeStore',  after: 'memory:afterStore',   color: '#388E3C' },
-  { label: 'session',    before: 'session:beforeSave',  after: 'session:afterSave',   color: '#FFA726' },
-];
-
-const rendererCode = `
 // ============================================================
 // Hook Profiler Renderer  (auto-generated)
 // main bar (beforeSend→afterResponse) + above lanes
 // ============================================================
 
-const STAT_ROWS   = ${JSON.stringify(STAT_ROWS)};
-const ABOVE_LANES = ${JSON.stringify(ABOVE_LANES)};
+const STAT_ROWS   = [{"name":"chat:beforeSend","color":"#4FC3F7"},{"name":"chat:afterResponse","color":"#0288D1"},{"name":"memory:beforeSearch","color":"#66BB6A"},{"name":"memory:afterSearch","color":"#A5D6A7"},{"name":"memory:beforeStore","color":"#388E3C"},{"name":"memory:afterStore","color":"#81C784"},{"name":"session:beforeSave","color":"#FFA726"},{"name":"session:afterSave","color":"#FFD54F"},{"name":"tool:beforeExecute","color":"#CE93D8"},{"name":"tool:afterExecute","color":"#AB47BC"}];
+const ABOVE_LANES = [{"label":"mem:search","before":"memory:beforeSearch","after":"memory:afterSearch","color":"#66BB6A"},{"label":"tool","before":"tool:beforeExecute","after":"tool:afterExecute","color":"#CE93D8"},{"label":"mem:store","before":"memory:beforeStore","after":"memory:afterStore","color":"#388E3C"},{"label":"session","before":"session:beforeSave","after":"session:afterSave","color":"#FFA726"}];
 
 // ─── レイアウト
 const LABEL_W     = 140;
@@ -587,8 +556,3 @@ function btnStyle() {
 }
 
 export default { pages:{ profiler:ProfilerPage } };
-`;
-
-fs.mkdirSync(path.join(__dirname, 'dist'), { recursive: true });
-fs.writeFileSync(path.join(__dirname, 'dist', 'renderer.js'), rendererCode, 'utf-8');
-console.log('✓ dist/renderer.js を生成しました');
