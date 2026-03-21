@@ -1,0 +1,24 @@
+{
+  "name": "arschat-ext-hook-profiler",
+  "version": "1.0.0",
+  "description": "ArsChat Hook API の動作確認 + 処理時間プロファイラー",
+  "arschat": {
+    "displayName": "Hook Profiler",
+    "description": "チャット処理フローの各フックイベントをリアルタイム計測・可視化するプロファイラー。CUDA Nsight Systems ライクなガントチャートで処理時間を表示します。",
+    "icon": "⏱",
+    "permissions": ["hooks:observe"],
+    "main": "main.js",
+    "renderer": "dist/renderer.js",
+    "pages": [
+      {
+        "id": "profiler",
+        "title": "Hook Profiler",
+        "icon": "⏱",
+        "sidebar": true
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node build.js"
+  }
+}

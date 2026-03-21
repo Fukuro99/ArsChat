@@ -20,6 +20,7 @@ import type {
 } from '../shared/types';
 import type { createStore } from './store';
 import type { createClaudeService } from './claude';
+import type { HookEventName, HookListener, HookManager } from './hook-manager';
 
 const execAsync = promisify(exec);
 
@@ -115,6 +116,9 @@ export interface ExtensionContext {
     on(channel: string, handler: (data: any) => void): () => void;
     handle(channel: string, handler: (data: any) => Promise<any>): () => void;
   };
+  hooks: {
+    on<K extends HookEventName>(event: K, listener: HookListener<K>): () => void;
+  };
   log: {
     info(...args: any[]): void;
     warn(...args: any[]): void;
@@ -150,6 +154,7 @@ export function createExtensionContext(
   store: ReturnType<typeof createStore>,
   claudeService: ReturnType<typeof createClaudeService>,
   mainWindow: BrowserWindow | null,
+  hookManager: HookManager,
 ): ExtensionContext {
   const granted = new Set<ExtensionPermission>(entry.permissions);
   const extId = entry.id;
@@ -438,6 +443,13 @@ export function createExtensionContext(
     },
   };
 
+  // ===== Hooks API =====
+
+  const hooksAPI = {
+    on: <K extends HookEventName>(event: K, listener: HookListener<K>) =>
+      hookManager.on(extId, event, listener),
+  };
+
   // ===== Log =====
 
   const log = {
@@ -474,6 +486,9 @@ export function createExtensionContext(
       ? clipboardAPI
       : guarded('clipboard:read', granted, clipboardAPI),
     ipc: ipcAPI,
+    hooks: granted.has('hooks:observe')
+      ? hooksAPI
+      : guarded('hooks:observe', granted, hooksAPI),
     log,
   };
 }

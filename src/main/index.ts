@@ -40,6 +40,7 @@ import { createMemoryManager } from './memory-manager';
 import { createChatMemoryManager } from './chat-memory-manager';
 import { createExtensionManager } from './extension-manager';
 import { createExtensionContext } from './extension-context';
+import { createHookManager } from './hook-manager';
 
 // ===== PTY セッション管理 =====
 interface PtySession {
@@ -78,6 +79,7 @@ const skillManager = createSkillManager(store.getDataDir());
 const memoryManager = createMemoryManager(store.getDataDir());
 const chatMemoryManager = createChatMemoryManager(store.getDataDir());
 const extensionManager = createExtensionManager(store.getDataDir());
+const hookManager = createHookManager();
 
 async function captureDisplayBase64(targetDisplay?: Display): Promise<string> {
   const display = targetDisplay ?? screen.getPrimaryDisplay();
@@ -662,6 +664,7 @@ function setupIPC(): void {
     if (settings.chatHistoryEnabled && personaId && settings.chatHistoryEmbeddingModel) {
       const lastUserMsg = [...payload.messages].reverse().find((m) => m.role === 'user');
       if (lastUserMsg) {
+        hookManager.emit('memory:beforeSearch', { personaId, query: lastUserMsg.content });
         try {
           const results = await chatMemoryManager.searchMemories(personaId, lastUserMsg.content, {
             topK: settings.chatHistoryTopK ?? 3,
@@ -743,6 +746,8 @@ function setupIPC(): void {
     // チャット後にアシスタント応答を蓄積してメモリ保存するためのバッファ
     let assistantBuffer = '';
 
+    hookManager.emit('chat:beforeSend', { messages: payload.messages, systemPrompt: settings.systemPrompt });
+
     try {
       await claude.streamChat(
         settings,
@@ -750,8 +755,10 @@ function setupIPC(): void {
         (chunk: string) => {
           assistantBuffer += chunk;
           event.sender.send(IPC_CHANNELS.CHAT_STREAM, chunk);
+
         },
         (stats: ChatMessageStats) => {
+          hookManager.emit('chat:afterResponse', { messages: payload.messages, response: assistantBuffer, stats });
           event.sender.send(IPC_CHANNELS.CHAT_STREAM_END, stats);
 
           // チャット履歴メモリへ自動保存（非同期・失敗無視）
@@ -759,6 +766,7 @@ function setupIPC(): void {
             const lastUserMsg = [...payload.messages].reverse().find((m) => m.role === 'user');
             if (lastUserMsg) {
               const snippet = `ユーザー: ${lastUserMsg.content.slice(0, 500)}\nアシスタント: ${assistantBuffer.slice(0, 1000)}`;
+              hookManager.emit('memory:beforeStore', { personaId, content: snippet });
               chatMemoryManager
                 .storeMemory(personaId, snippet, {
                   sessionId: payload.sessionId,
@@ -780,6 +788,10 @@ function setupIPC(): void {
           userMemory: userMemory ?? undefined,
           chatMemories: chatMemoriesText,
           skillContext,
+          onToolBefore: (toolName, input) =>
+            hookManager.emit('tool:beforeExecute', { toolName, input }),
+          onToolAfter: (toolName, input, result) =>
+            hookManager.emit('tool:afterExecute', { toolName, input, result }),
         },
       );
     } catch (err: any) {
@@ -816,6 +828,7 @@ function setupIPC(): void {
   });
 
   ipcMain.handle(IPC_CHANNELS.SESSION_CREATE, (_e, session: ChatSession) => {
+    hookManager.emit('session:beforeSave', { session });
     store.saveSession(session);
     // 送信元以外のウィンドウへセッション更新を通知（リアルタイム同期）
     const sender = _e.sender;
@@ -1184,7 +1197,7 @@ function setupIPC(): void {
       // インストール後にロード
       const claude = createClaudeService(mcpManager);
       await extensionManager.loadAll((e) =>
-        createExtensionContext(e, extensionManager.getExtensionsDir(), store, claude, mainWindow),
+        createExtensionContext(e, extensionManager.getExtensionsDir(), store, claude, mainWindow, hookManager),
       );
       // レンダラーへ変更を通知
       mainWindow?.webContents.send('ext:changed');
@@ -1212,9 +1225,10 @@ function setupIPC(): void {
       await extensionManager.toggle(extId, enabled);
       // 切り替え後にメインプロセスの拡張を再ロードし、レンダラーへ通知
       await extensionManager.unloadAll();
+      hookManager.removeAll();
       const claude = createClaudeService(mcpManager);
       await extensionManager.loadAll((e) =>
-        createExtensionContext(e, extensionManager.getExtensionsDir(), store, claude, mainWindow),
+        createExtensionContext(e, extensionManager.getExtensionsDir(), store, claude, mainWindow, hookManager),
       );
       mainWindow?.webContents.send('ext:changed');
       return { success: true };
@@ -1231,9 +1245,10 @@ function setupIPC(): void {
       });
       // 更新後にメインプロセスの拡張を再ロードし、レンダラーへ通知
       await extensionManager.unloadAll();
+      hookManager.removeAll();
       const claude = createClaudeService(mcpManager);
       await extensionManager.loadAll((e) =>
-        createExtensionContext(e, extensionManager.getExtensionsDir(), store, claude, mainWindow),
+        createExtensionContext(e, extensionManager.getExtensionsDir(), store, claude, mainWindow, hookManager),
       );
       mainWindow?.webContents.send('ext:changed');
       return { success: true };
@@ -1271,9 +1286,10 @@ function setupIPC(): void {
   ipcMain.handle(IPC_CHANNELS.EXT_RELOAD, async () => {
     try {
       await extensionManager.unloadAll();
+      hookManager.removeAll();
       const claude = createClaudeService(mcpManager);
       await extensionManager.loadAll((e) =>
-        createExtensionContext(e, extensionManager.getExtensionsDir(), store, claude, mainWindow),
+        createExtensionContext(e, extensionManager.getExtensionsDir(), store, claude, mainWindow, hookManager),
       );
       return { success: true };
     } catch (err: any) {
@@ -1481,7 +1497,7 @@ app.whenReady().then(() => {
   // 拡張機能の自動ロード（バックグラウンド）
   const claudeForExt = createClaudeService(mcpManager);
   extensionManager.loadAll((entry) =>
-    createExtensionContext(entry, extensionManager.getExtensionsDir(), store, claudeForExt, mainWindow),
+    createExtensionContext(entry, extensionManager.getExtensionsDir(), store, claudeForExt, mainWindow, hookManager),
   ).catch((err) => {
     console.error('[Extension] 初期ロードエラー:', err?.message);
   });
@@ -1507,6 +1523,7 @@ app.on('before-quit', () => {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   extensionManager.unloadAll().catch(() => {});
+  hookManager.removeAll();
 });
 
 app.on('window-all-closed', () => {

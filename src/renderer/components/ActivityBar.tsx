@@ -3,9 +3,11 @@ import type { LoadedExtension } from '../extension-loader';
 
 interface ActivityBarProps {
   activePanelId: string | null;
+  currentPage: string;
   extensions: LoadedExtension[];
   onNewSession: () => void;
   onSelectPanel: (id: string) => void;
+  onNavigate: (page: string) => void;
   onReloadExtensions: () => void;
   isReloading?: boolean;
 }
@@ -77,13 +79,15 @@ function SvgIcon({
 
 export default function ActivityBar({
   activePanelId,
+  currentPage,
   extensions,
   onNewSession,
   onSelectPanel,
+  onNavigate,
   onReloadExtensions,
   isReloading = false,
 }: ActivityBarProps) {
-  // sidebarPanel を持つ拡張の活動項目
+  // sidebarPanel を持つ拡張の活動項目（サイドバー内インライン表示）
   const sidebarPanelItems = extensions.flatMap((ext) =>
     (ext.info.manifest.pages ?? [])
       .filter((p) => p.sidebarPanel)
@@ -91,6 +95,19 @@ export default function ActivityBar({
         id: `${ext.info.id}:${p.id}`,
         title: p.title,
         icon: p.icon,
+        kind: 'sidebarPanel' as const,
+      })),
+  );
+
+  // sidebar: true のページ（メインタブとして開く）を持つ拡張の活動項目
+  const sidebarPageItems = extensions.flatMap((ext) =>
+    (ext.info.manifest.pages ?? [])
+      .filter((p) => p.sidebar !== false && !p.sidebarPanel && !p.rightPanel)
+      .map((p) => ({
+        pageKey: `ext:${ext.info.id}:${p.id}`,
+        title: p.title,
+        icon: p.icon,
+        kind: 'page' as const,
       })),
   );
 
@@ -131,7 +148,7 @@ export default function ActivityBar({
         <SvgIcon src="./codicons/extensions.svg" size={20} active={activePanelId === 'ext-manager'} />
       </IconButton>
 
-      {/* 拡張 sidebarPanel アイテム */}
+      {/* 拡張 sidebarPanel アイテム（サイドバー内インライン表示） */}
       {sidebarPanelItems.map((item) => (
         <IconButton
           key={item.id}
@@ -142,6 +159,24 @@ export default function ActivityBar({
           <span
             className={`text-lg leading-none transition-all ${
               activePanelId === item.id ? 'opacity-100 scale-110' : 'opacity-55'
+            }`}
+          >
+            {item.icon}
+          </span>
+        </IconButton>
+      ))}
+
+      {/* 拡張 sidebar ページアイテム（メインタブとして開く） */}
+      {sidebarPageItems.map((item) => (
+        <IconButton
+          key={item.pageKey}
+          title={item.title}
+          active={currentPage === item.pageKey}
+          onClick={() => onNavigate(item.pageKey)}
+        >
+          <span
+            className={`text-lg leading-none transition-all ${
+              currentPage === item.pageKey ? 'opacity-100 scale-110' : 'opacity-55'
             }`}
           >
             {item.icon}

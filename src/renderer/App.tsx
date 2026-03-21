@@ -547,6 +547,7 @@ export default function App() {
           >
             <ActivityBar
               activePanelId={activePanelId}
+              currentPage={currentPage}
               extensions={extensions}
               onNewSession={() => {
                 setCurrentSessionId(null);
@@ -557,6 +558,7 @@ export default function App() {
                 );
               }}
               onSelectPanel={handleSelectPanel}
+              onNavigate={stableNavigate}
               onReloadExtensions={handleReloadExtensions}
               isReloading={isReloadingExtensions}
             />

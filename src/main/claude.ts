@@ -446,6 +446,8 @@ export function createClaudeService(mcpManager?: MCPManager) {
     openFilePaths?: string[],
     userMemory?: string,
     chatMemories?: string,
+    onToolBefore?: (toolName: string, input: Record<string, unknown>) => void,
+    onToolAfter?: (toolName: string, input: Record<string, unknown>, result: string) => void,
   ): Promise<void> {
     const client = new Anthropic({ apiKey: settings.apiKey });
     const requestStartTime = Date.now();
@@ -608,6 +610,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
       for (const block of finalMsg.content) {
         if (block.type !== 'tool_use') continue;
         let result = '';
+        onToolBefore?.(block.name, block.input as Record<string, unknown>);
         if (skillContext) {
           const inp = block.input as any;
           const skillId = inp.skill_id as string;
@@ -629,6 +632,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
             result = JSON.stringify(res ?? { success: false, message: 'スキル削除機能が無効です' });
           }
         }
+        onToolAfter?.(block.name, block.input as Record<string, unknown>, result);
         toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
       }
       apiMessages.push({ role: 'user', content: toolResults });
@@ -647,7 +651,16 @@ export function createClaudeService(mcpManager?: MCPManager) {
     messages: ChatMessage[],
     onChunk: (chunk: string) => void,
     onEnd: (stats: ChatMessageStats) => void,
-    options?: { thinkMode?: boolean; skillContext?: SkillContext; fileBrowserState?: FileBrowserState; openFilePaths?: string[]; userMemory?: string; chatMemories?: string },
+    options?: {
+      thinkMode?: boolean;
+      skillContext?: SkillContext;
+      fileBrowserState?: FileBrowserState;
+      openFilePaths?: string[];
+      userMemory?: string;
+      chatMemories?: string;
+      onToolBefore?: (toolName: string, input: Record<string, unknown>) => void;
+      onToolAfter?: (toolName: string, input: Record<string, unknown>, result: string) => void;
+    },
   ): Promise<void> {
     const baseUrl = normalizeBaseUrl(settings.lmstudioBaseUrl);
     if (!baseUrl) {
@@ -823,6 +836,8 @@ export function createClaudeService(mcpManager?: MCPManager) {
           requestStartTime,
           settings,
           options?.skillContext,
+          options?.onToolBefore,
+          options?.onToolAfter,
         );
       } else {
         const response = await fetchWithFallback(
@@ -985,6 +1000,8 @@ export function createClaudeService(mcpManager?: MCPManager) {
     requestStartTime: number,
     settings: ArsChatSettings,
     skillContext?: SkillContext,
+    onToolBefore?: (toolName: string, input: Record<string, unknown>) => void,
+    onToolAfter?: (toolName: string, input: Record<string, unknown>, result: string) => void,
   ): Promise<void> {
     const MAX_ROUNDS = (settings.maxToolRounds ?? 10) === 0 ? Infinity : (settings.maxToolRounds ?? 10);
     const messages = [...initialMessages];
@@ -1039,6 +1056,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
         let args: Record<string, unknown> = {};
         try { args = JSON.parse(tc.function.arguments || '{}'); } catch { /* 無視 */ }
 
+        onToolBefore?.(tc.function.name, args);
         let toolResult: string;
         const skillId = args.skill_id as string | undefined;
 
@@ -1087,6 +1105,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
           }
         }
 
+        onToolAfter?.(tc.function.name, args, toolResult);
         messages.push({ role: 'tool', tool_call_id: tc.id || `call_0`, content: toolResult });
       }
     }
@@ -1242,7 +1261,18 @@ export function createClaudeService(mcpManager?: MCPManager) {
       messages: ChatMessage[],
       onChunk: (chunk: string) => void,
       onEnd: (stats: ChatMessageStats) => void,
-      options?: { thinkMode?: boolean; skillContext?: SkillContext; fileBrowserState?: FileBrowserState; openFilePaths?: string[]; userMemory?: string; chatMemories?: string },
+      options?: {
+        thinkMode?: boolean;
+        skillContext?: SkillContext;
+        fileBrowserState?: FileBrowserState;
+        openFilePaths?: string[];
+        userMemory?: string;
+        chatMemories?: string;
+        /** ツール実行前コールバック（HookManager の emit に使用） */
+        onToolBefore?: (toolName: string, input: Record<string, unknown>) => void;
+        /** ツール実行後コールバック（HookManager の emit に使用） */
+        onToolAfter?: (toolName: string, input: Record<string, unknown>, result: string) => void;
+      },
     ): Promise<void> {
       currentAbortController = new AbortController();
       const provider = settings.provider ?? 'anthropic';
@@ -1251,7 +1281,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
         if (provider === 'lmstudio') {
           await streamLMStudio(settings, messages, onChunk, onEnd, options);
         } else {
-          await streamAnthropic(settings, messages, onChunk, onEnd, options?.skillContext, options?.fileBrowserState, options?.openFilePaths, options?.userMemory, options?.chatMemories);
+          await streamAnthropic(settings, messages, onChunk, onEnd, options?.skillContext, options?.fileBrowserState, options?.openFilePaths, options?.userMemory, options?.chatMemories, options?.onToolBefore, options?.onToolAfter);
         }
       } catch (err: any) {
         if (err.name === 'AbortError') { onEnd({}); return; }

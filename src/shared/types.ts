@@ -399,7 +399,8 @@ export type ExtensionPermission =
   | 'clipboard:read'
   | 'clipboard:write'
   | 'notification'
-  | 'window:create';
+  | 'window:create'
+  | 'hooks:observe';
 
 /** 拡張機能のページ定義 */
 export interface ExtensionPageDef {
