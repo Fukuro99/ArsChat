@@ -67,7 +67,7 @@ function computeOffsets(runs, ppms) {
 
 // ─── Canvas 描画
 function drawTimeline(canvas, W, allRuns, ppms, viewOffPx) {
-  const H   = RULER_H + allRuns.length * RUN_H + 4;
+  const H   = RULER_H + RUN_H + 4;   // 全ランを同じ行に描画
   const dpr = window.devicePixelRatio || 1;
   canvas.width        = W * dpr;
   canvas.height       = H * dpr;
@@ -75,9 +75,11 @@ function drawTimeline(canvas, W, allRuns, ppms, viewOffPx) {
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
 
-  const offsets = computeOffsets(allRuns, ppms);
-  const vx2sx   = (vx) => LABEL_W + vx - viewOffPx;
-  const tx      = (ri, relMs) => vx2sx(offsets[ri] + relMs * ppms);
+  const offsets  = computeOffsets(allRuns, ppms);
+  const vx2sx    = (vx) => LABEL_W + vx - viewOffPx;
+  const tx       = (ri, relMs) => vx2sx(offsets[ri] + relMs * ppms);
+  const runY     = RULER_H;                                        // 全ランで共通
+  const mainBarY = runY + RUN_LABEL_H + N_LANES * LANE_H + MAIN_PAD;
 
   // 背景
   ctx.fillStyle = '#0d1117';
@@ -90,7 +92,19 @@ function drawTimeline(canvas, W, allRuns, ppms, viewOffPx) {
   ctx.beginPath(); ctx.moveTo(0, RULER_H); ctx.lineTo(W, RULER_H); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(LABEL_W, 0); ctx.lineTo(LABEL_W, H); ctx.stroke();
 
-  // 目盛り（ラン内相対時間）
+  // ── 左パネル: レーンラベル（一度だけ描画）
+  ABOVE_LANES.forEach((lane, li) => {
+    const laneY = runY + RUN_LABEL_H + li * LANE_H;
+    ctx.fillStyle = lane.color; ctx.font='9px monospace';
+    ctx.textAlign='right'; ctx.textBaseline='middle';
+    ctx.fillText(lane.label, LABEL_W-4, laneY+LANE_H/2);
+  });
+  ctx.fillStyle = '#4FC3F7'; ctx.font='9px monospace';
+  ctx.textAlign='right'; ctx.textBaseline='middle';
+  ctx.fillText('chat', LABEL_W-4, mainBarY+MAIN_BAR_H/2);
+  ctx.textBaseline='alphabetic';
+
+  // 目盛り・区切り線
   allRuns.forEach((run, ri) => {
     const dur = runDuration(run);
     const tickMs = niceIntervalMs(72 / ppms);
@@ -123,20 +137,17 @@ function drawTimeline(canvas, W, allRuns, ppms, viewOffPx) {
     }
   });
 
-  // ── ランごとのイベント描画
+  // ── ランごとのイベント描画（全ラン同じ Y に描画）
   ctx.save();
   ctx.beginPath(); ctx.rect(LABEL_W, RULER_H, W-LABEL_W, H-RULER_H); ctx.clip();
 
+  const bgCols = ['#1a2433','#1a2a1a','#2a1a2a','#2a241a'];
   allRuns.forEach((run, ri) => {
-    const runY    = RULER_H + ri * RUN_H;
-    const mainBarY = runY + RUN_LABEL_H + N_LANES * LANE_H + MAIN_PAD;
-
     const evts   = run.events || [];
     const byName = {};
     for (const ev of evts) (byName[ev.name] = byName[ev.name]||[]).push(ev);
 
     // ── ラン背景帯
-    const bgCols = ['#1a2433','#1a2a1a','#2a1a2a','#2a241a'];
     const dur     = runDuration(run);
     const sx0 = tx(ri, 0), sxEnd = tx(ri, dur);
     const c1 = Math.max(LABEL_W, sx0), c2 = Math.min(W, sxEnd);
@@ -149,7 +160,7 @@ function drawTimeline(canvas, W, allRuns, ppms, viewOffPx) {
     const lx = Math.max(LABEL_W+4, sx0+4);
     if (lx < W-10) {
       ctx.save();
-      ctx.beginPath(); ctx.rect(LABEL_W, runY, W-LABEL_W, RUN_LABEL_H+2); ctx.clip();
+      ctx.beginPath(); ctx.rect(sx0, runY, Math.max(4, sxEnd-sx0), RUN_LABEL_H+2); ctx.clip();
       ctx.fillStyle = '#58a6ff'; ctx.font='bold 10px monospace';
       ctx.textAlign='left'; ctx.textBaseline='middle';
       const bSend   = (byName['chat:beforeSend']  ||[])[0];
@@ -157,7 +168,7 @@ function drawTimeline(canvas, W, allRuns, ppms, viewOffPx) {
       const chatDur = bSend && aftResp ? fmtMs(aftResp.relTime - bSend.relTime) : fmtMs(dur);
       const lbl = 'Run '+(ri+1)+(run.incomplete?' ⚠':'')+' '+chatDur
         +(run.stats?.tokensPerSec ? '  ⚡'+run.stats.tokensPerSec+' tok/s' : '');
-      ctx.fillText(lbl, Math.min(lx, W-80), runY+RUN_LABEL_H/2);
+      ctx.fillText(lbl, lx, runY+RUN_LABEL_H/2);
       ctx.restore();
     }
 
@@ -169,21 +180,17 @@ function drawTimeline(canvas, W, allRuns, ppms, viewOffPx) {
     const msx1 = tx(ri, mainStart);
     const msx2 = tx(ri, mainEnd);
     const mw   = Math.max(4, msx2-msx1);
-    // 背景（暗めのグレー）
     ctx.fillStyle = '#21262d';
-    roundRect(ctx, Math.max(LABEL_W, msx1), mainBarY, Math.min(W,msx2)-Math.max(LABEL_W,msx1), MAIN_BAR_H, MAIN_BAR_H/2);
+    roundRect(ctx, msx1, mainBarY, mw, MAIN_BAR_H, MAIN_BAR_H/2);
     ctx.fill();
-    // 色付きの帯（chat 色）
     ctx.fillStyle = '#4FC3F7';
     ctx.globalAlpha = 0.25;
-    roundRect(ctx, Math.max(LABEL_W,msx1), mainBarY, Math.min(W,msx2)-Math.max(LABEL_W,msx1), MAIN_BAR_H, MAIN_BAR_H/2);
+    roundRect(ctx, msx1, mainBarY, mw, MAIN_BAR_H, MAIN_BAR_H/2);
     ctx.fill();
     ctx.globalAlpha = 1;
-    // 枠線
     ctx.strokeStyle = '#4FC3F7'; ctx.lineWidth=1.5;
-    roundRect(ctx, Math.max(LABEL_W,msx1), mainBarY, Math.min(W,msx2)-Math.max(LABEL_W,msx1), MAIN_BAR_H, MAIN_BAR_H/2);
+    roundRect(ctx, msx1, mainBarY, mw, MAIN_BAR_H, MAIN_BAR_H/2);
     ctx.stroke();
-    // ラベル
     if (mw > 60) {
       ctx.fillStyle = '#4FC3F7'; ctx.font='bold 9px monospace';
       ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -191,21 +198,11 @@ function drawTimeline(canvas, W, allRuns, ppms, viewOffPx) {
       ctx.textBaseline='alphabetic';
     }
 
-    // ── 上レーン（before/after ペア or ポイント）
+    // ── 上レーン（before/after ペア）
     ABOVE_LANES.forEach((lane, li) => {
       const laneY = runY + RUN_LABEL_H + li * LANE_H;
       const barY  = laneY + LANE_PAD;
       const barH  = LANE_H - LANE_PAD*2;
-
-      // レーンラベル（LABEL_W 内）
-      ctx.restore(); // 一度クリップ解除して左側に書く
-      ctx.fillStyle = lane.color; ctx.font='9px monospace';
-      ctx.textAlign='right'; ctx.textBaseline='middle';
-      ctx.fillText(lane.label, LABEL_W-4, laneY+LANE_H/2);
-      ctx.textBaseline='alphabetic';
-      // クリップ再設定
-      ctx.save();
-      ctx.beginPath(); ctx.rect(LABEL_W, RULER_H, W-LABEL_W, H-RULER_H); ctx.clip();
 
       const befEvts = byName[lane.before]||[];
       const aftEvts = byName[lane.after] ||[];
@@ -215,7 +212,6 @@ function drawTimeline(canvas, W, allRuns, ppms, viewOffPx) {
         const ex1   = tx(ri, bev.relTime);
         const ex2   = aev ? tx(ri, aev.relTime) : ex1+4;
         const ew    = Math.max(4, ex2-ex1);
-        // レンジバー
         ctx.fillStyle   = lane.color;
         ctx.globalAlpha = 0.8;
         roundRect(ctx, ex1, barY, ew, barH, 3);
@@ -224,7 +220,6 @@ function drawTimeline(canvas, W, allRuns, ppms, viewOffPx) {
         ctx.strokeStyle = lane.color; ctx.lineWidth=1;
         roundRect(ctx, ex1, barY, ew, barH, 3);
         ctx.stroke();
-        // ツール名ラベル（toolの場合のみ、幅があれば）
         if (lane.before === 'tool:beforeExecute' && bev.meta?.toolName) {
           const lbl = bev.meta.toolName.slice(0, 16);
           ctx.font='bold 8px monospace'; ctx.textAlign='center';
@@ -234,12 +229,11 @@ function drawTimeline(canvas, W, allRuns, ppms, viewOffPx) {
             ctx.textBaseline='alphabetic';
           }
         }
-        // duration ラベル
         if (aev && ew > 30 && lane.before !== 'tool:beforeExecute') {
-          const dur = fmtMs(aev.relTime - bev.relTime);
+          const d = fmtMs(aev.relTime - bev.relTime);
           ctx.font='8px monospace'; ctx.textAlign='center';
           ctx.fillStyle='#fff'; ctx.textBaseline='middle';
-          ctx.fillText(dur, ex1+ew/2, barY+barH/2);
+          ctx.fillText(d, ex1+ew/2, barY+barH/2);
           ctx.textBaseline='alphabetic';
         }
       });
@@ -312,7 +306,7 @@ function ProfilerPage({ api }) {
     }
   }, [allRuns.length, canvasW]);
 
-  const canvasH = RULER_H + allRuns.length * RUN_H + 4;
+  const canvasH = RULER_H + RUN_H + 4;
 
   // ── Canvas 描画
   useEffect(() => {
@@ -374,17 +368,23 @@ function ProfilerPage({ api }) {
     const rect   = canvas.getBoundingClientRect();
     const cx     = e.clientX - rect.left;
     const cy     = e.clientY - rect.top;
-    if (cx < LABEL_W) { setTooltip(null); return; }
+    if (cx < LABEL_W || cy < RULER_H || cy > RULER_H + RUN_H) { setTooltip(null); return; }
 
     const virtX  = viewOffPxRef.current + (cx-LABEL_W);
-    const ri     = Math.floor((cy-RULER_H)/RUN_H);
-    if (ri<0||ri>=ar.length) { setTooltip(null); return; }
-
     const offsets= computeOffsets(ar, ppmsRef.current);
+
+    // X 位置からどのランかを特定
+    let ri = -1;
+    for (let i=ar.length-1;i>=0;i--) { if (virtX>=offsets[i]){ri=i;break;} }
+    if (ri<0) { setTooltip(null); return; }
+    // ラン間のギャップ内ならヒットなし
+    const runEndPx = offsets[ri] + runDuration(ar[ri]) * ppmsRef.current;
+    if (ri < ar.length-1 && virtX > runEndPx + GAP_PX/2) { setTooltip(null); return; }
+
     const relMs  = (virtX-offsets[ri])/ppmsRef.current;
     const hitMs  = 20/ppmsRef.current;
     const run    = ar[ri];
-    const runY   = RULER_H + ri*RUN_H;
+    const runY   = RULER_H;                              // 全ラン同じ高さ
     const mainBarY = runY + RUN_LABEL_H + N_LANES*LANE_H + MAIN_PAD;
 
     let best=null, bestDist=hitMs;
