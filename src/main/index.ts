@@ -666,11 +666,13 @@ function setupIPC(): void {
       if (lastUserMsg) {
         hookManager.emit('memory:beforeSearch', { personaId, query: lastUserMsg.content });
         try {
+          const _searchStart = Date.now();
           const results = await chatMemoryManager.searchMemories(personaId, lastUserMsg.content, {
             topK: settings.chatHistoryTopK ?? 3,
             baseUrl: settings.lmstudioBaseUrl,
             embeddingModel: settings.chatHistoryEmbeddingModel,
           });
+          hookManager.emit('memory:afterSearch', { personaId, query: lastUserMsg.content, resultCount: results.length, durationMs: Date.now() - _searchStart });
           if (results.length > 0) {
             chatMemoriesText = results
               .map((r) => {
@@ -767,6 +769,7 @@ function setupIPC(): void {
             if (lastUserMsg) {
               const snippet = `ユーザー: ${lastUserMsg.content.slice(0, 500)}\nアシスタント: ${assistantBuffer.slice(0, 1000)}`;
               hookManager.emit('memory:beforeStore', { personaId, content: snippet });
+              const _storeStart = Date.now();
               chatMemoryManager
                 .storeMemory(personaId, snippet, {
                   sessionId: payload.sessionId,
@@ -774,6 +777,7 @@ function setupIPC(): void {
                   embeddingModel: settings.chatHistoryEmbeddingModel,
                 })
                 .then(() => {
+                  hookManager.emit('memory:afterStore', { personaId, content: snippet, durationMs: Date.now() - _storeStart });
                   // 件数超過時にプルーニング（非同期）
                   chatMemoryManager.pruneMemories(personaId, settings.chatHistoryMaxItems ?? 200);
                 })
@@ -829,7 +833,9 @@ function setupIPC(): void {
 
   ipcMain.handle(IPC_CHANNELS.SESSION_CREATE, (_e, session: ChatSession) => {
     hookManager.emit('session:beforeSave', { session });
+    const _saveStart = Date.now();
     store.saveSession(session);
+    hookManager.emit('session:afterSave', { session, durationMs: Date.now() - _saveStart });
     // 送信元以外のウィンドウへセッション更新を通知（リアルタイム同期）
     const sender = _e.sender;
     for (const win of [mainWindow, widgetWindow]) {

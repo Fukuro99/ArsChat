@@ -21,10 +21,16 @@ export interface HookEventMap {
   'chat:afterResponse': { messages: ChatMessage[]; response: string; stats: ChatMessageStats };
   /** searchMemories() 呼び出し前 */
   'memory:beforeSearch': { personaId: string; query: string };
+  /** searchMemories() 完了後 */
+  'memory:afterSearch': { personaId: string; query: string; resultCount: number; durationMs: number };
   /** storeMemory() 呼び出し前 */
   'memory:beforeStore': { personaId: string; content: string };
+  /** storeMemory() 完了後 */
+  'memory:afterStore': { personaId: string; content: string; durationMs: number };
   /** store.saveSession() 呼び出し前 */
   'session:beforeSave': { session: ChatSession };
+  /** store.saveSession() 完了後 */
+  'session:afterSave': { session: ChatSession; durationMs: number };
   /** ツール実行前 */
   'tool:beforeExecute': { toolName: string; input: Record<string, unknown> };
   /** ツール実行後 */

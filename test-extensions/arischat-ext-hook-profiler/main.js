@@ -10,9 +10,12 @@
 const ALL_EVENTS = [
   'chat:beforeSend',
   'memory:beforeSearch',
+  'memory:afterSearch',
   'memory:beforeStore',
+  'memory:afterStore',
   'chat:afterResponse',
   'session:beforeSave',
+  'session:afterSave',
   'tool:beforeExecute',
   'tool:afterExecute',
 ];
@@ -144,6 +147,13 @@ function activate(ctx) {
     addEvent('memory:beforeSearch', relTime, { personaId: payload.personaId });
   });
 
+  // --- memory:afterSearch ---
+  ctx.hooks.on('memory:afterSearch', (payload) => {
+    const relTime = currentRun ? now() - currentRun.startTime : null;
+    updateStats('memory:afterSearch', payload.durationMs);
+    addEvent('memory:afterSearch', relTime, { resultCount: payload.resultCount, durationMs: payload.durationMs });
+  });
+
 
   // --- chat:afterResponse ---
   ctx.hooks.on('chat:afterResponse', (payload) => {
@@ -172,11 +182,25 @@ function activate(ctx) {
     addEvent('memory:beforeStore', relTime, { personaId: payload.personaId });
   });
 
+  // --- memory:afterStore ---
+  ctx.hooks.on('memory:afterStore', (payload) => {
+    const relTime = currentRun ? now() - currentRun.startTime : null;
+    updateStats('memory:afterStore', payload.durationMs);
+    addEvent('memory:afterStore', relTime, { durationMs: payload.durationMs });
+  });
+
   // --- session:beforeSave ---
   ctx.hooks.on('session:beforeSave', () => {
     const relTime = currentRun ? now() - currentRun.startTime : null;
     updateStats('session:beforeSave', relTime);
     addEvent('session:beforeSave', relTime, null);
+  });
+
+  // --- session:afterSave ---
+  ctx.hooks.on('session:afterSave', (payload) => {
+    const relTime = currentRun ? now() - currentRun.startTime : null;
+    updateStats('session:afterSave', payload.durationMs);
+    addEvent('session:afterSave', relTime, { durationMs: payload.durationMs });
   });
 
   // --- tool:beforeExecute ---

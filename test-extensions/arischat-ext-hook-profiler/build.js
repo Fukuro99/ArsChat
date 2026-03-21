@@ -10,11 +10,14 @@ const path = require('path');
 const TIMELINE_ROWS = [
   { name: 'chat:beforeSend',    short: 'chat:beforeSend',    color: '#4FC3F7' },
   { name: 'memory:beforeSearch',short: 'mem:beforeSearch',   color: '#66BB6A' },
+  { name: 'memory:afterSearch', short: 'mem:afterSearch',    color: '#A5D6A7' },
   { name: 'tool:beforeExecute', short: 'tool:beforeExec',    color: '#CE93D8' },
   { name: 'tool:afterExecute',  short: 'tool:afterExec',     color: '#AB47BC' },
   { name: 'chat:afterResponse', short: 'chat:afterResponse', color: '#0288D1' },
   { name: 'memory:beforeStore', short: 'mem:beforeStore',    color: '#388E3C' },
+  { name: 'memory:afterStore',  short: 'mem:afterStore',     color: '#81C784' },
   { name: 'session:beforeSave', short: 'session:beforeSave', color: '#FFA726' },
+  { name: 'session:afterSave',  short: 'session:afterSave',  color: '#FFD54F' },
 ];
 
 const rendererCode = `
