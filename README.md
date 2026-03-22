@@ -1,55 +1,122 @@
-# ARIA — AI Responsive Interactive Assistant
+**English | [日本語](README.ja.md)**
 
-デスクトップ常駐型AIアシスタントアプリケーション。
+# ArsChat
 
-## セットアップ
+**ArsChat** is an extensible AI desktop assistant powered by the Claude API.
+It runs as a persistent background application and can be summoned instantly with a global hotkey.
 
-### 前提条件
+> **Note:** This project is currently in active development. Some features may change.
 
-- Node.js 18以上
-- pnpm（推奨）または npm
+---
 
-### インストール
+## Features
+
+- **Claude API integration** — Streaming responses with multi-session chat history
+- **Extension system** — Install extensions from GitHub repositories with a permission-based API
+- **Skills** — Define reusable AI prompts and tools as Markdown files with YAML frontmatter
+- **MCP support** — Connect to Model Context Protocol servers (stdio and HTTP/SSE)
+- **Memory (MemOS)** — Persistent user notes + semantic search over past conversations
+- **Interactive UI** — AI can render dynamic UI components (forms, sliders, buttons, etc.) inline in chat
+- **Terminal integration** — Embedded PTY terminal with xterm.js
+- **Multi-persona** — Multiple AI personas with independent settings and skill libraries
+- **Global hotkey** — `Ctrl+Shift+A` to show/hide the window from anywhere
+
+---
+
+## Installation
+
+### Prerequisites
+
+- Node.js 18+
+- npm
+
+### Setup
 
 ```bash
-# 依存パッケージのインストール
-pnpm install
+git clone https://github.com/your-username/ArsChat.git
+cd ArsChat
+npm install
 
-# デフォルトアイコンの生成
+# Generate default icons
 node scripts/generate-icons.js
 
-# .envファイルの作成
+# Create environment file
 cp .env.example .env
-# .env を編集してAPIキーを設定
 ```
 
-### 開発
+Edit `.env` and set your Anthropic API key:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### Development
 
 ```bash
-# 開発モードで起動（Vite + Electron）
-pnpm dev
+npm run dev
 ```
 
-### ビルド
+### Production Build
 
 ```bash
-# プロダクションビルド
-pnpm build
-
-# インストーラー作成
-pnpm dist
+npm run build
+npm run dist   # Creates installer (Windows: NSIS)
 ```
 
-## ホットキー
+---
 
-| ショートカット | 動作 |
+## Keyboard Shortcuts
+
+| Shortcut | Action |
 |---|---|
-| `Ctrl+Shift+A` | ARIAウィンドウの表示/非表示 |
+| `Ctrl+Shift+A` | Show / hide window |
 
-## 技術スタック
+---
 
-- **Electron** — デスクトップアプリフレームワーク
-- **React + TypeScript** — UIフレームワーク
-- **Tailwind CSS** — スタイリング
-- **Claude API** — AI応答エンジン
-- **SQLite** — ローカルデータ保存
+## Extension System
+
+ArsChat supports a GitHub-based extension system. Extensions can:
+
+- Add custom sidebar pages with React UI
+- Access the AI API (streaming / single messages)
+- Read/write the filesystem, execute shell commands
+- Observe lifecycle events via the Hook API
+
+To install an extension, paste a GitHub repository URL in the Extension Manager panel.
+
+See [doc/extension-development.md](doc/extension-development.md) for the full development guide.
+
+---
+
+## Documentation
+
+| Document | Description |
+|---|---|
+| [Extension Development Guide](doc/extension-development.md) | How to build and install extensions |
+| [Extension API Reference](doc/extension-api.md) | Full `ExtensionContext` API |
+| [Hook API](doc/hooks.md) | Lifecycle events for extensions |
+| [Skills](doc/skills.md) | Creating reusable AI skill templates |
+| [MCP Support](doc/mcp.md) | Connecting Model Context Protocol servers |
+| [Interactive UI](doc/interactive-ui.md) | AI-driven dynamic UI components |
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Desktop | Electron 33 |
+| UI | React 18 + TypeScript + Tailwind CSS |
+| Build | Vite 6 |
+| AI | Anthropic Claude API (`@anthropic-ai/sdk`) |
+| MCP | `@modelcontextprotocol/sdk` |
+| Storage | SQLite (`better-sqlite3`) + `electron-store` |
+| Editor | Monaco Editor |
+| Terminal | xterm.js + node-pty |
+| Math | KaTeX |
+
+---
+
+## License
+
+MIT
