@@ -28,3 +28,7 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Internal design docs (not for public repo)
+ARIA_仕様書.md
+agent/
