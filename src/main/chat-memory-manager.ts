@@ -107,6 +107,28 @@ async function fetchEmbedding(
 }
 
 // =========================================================
+// チャンク分割
+// =========================================================
+
+/**
+ * テキストを maxChars 文字以下のチャンクに分割する。
+ * チャンク間は overlap 文字分を重複させてコンテキストを維持する。
+ * maxChars のデフォルト 350 は 512 トークン制限に対して余裕を持った値。
+ */
+export function chunkText(text: string, maxChars = 350, overlap = 80): string[] {
+  if (text.length <= maxChars) return [text];
+  const chunks: string[] = [];
+  let start = 0;
+  while (start < text.length) {
+    const end = Math.min(start + maxChars, text.length);
+    chunks.push(text.slice(start, end));
+    if (end >= text.length) break;
+    start = end - overlap;
+  }
+  return chunks;
+}
+
+// =========================================================
 // ChatMemoryManager
 // =========================================================
 
