@@ -62,7 +62,8 @@
     "publish": {
       "provider": "github",
       "owner": "Fukuro99",
-      "repo": "ArsChat"
+      "repo": "ArsChat",
+      "releaseType": "release"
     }
   }
 }
