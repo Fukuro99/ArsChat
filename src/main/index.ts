@@ -37,7 +37,7 @@ import { createIconManager } from './icon-manager';
 import { createMCPManager } from './mcp-manager';
 import { createSkillManager } from './skill-manager';
 import { createMemoryManager } from './memory-manager';
-import { createChatMemoryManager } from './chat-memory-manager';
+import { createChatMemoryManager, chunkText } from './chat-memory-manager';
 import { createExtensionManager } from './extension-manager';
 import { createExtensionContext } from './extension-context';
 import { createHookManager } from './hook-manager';
@@ -767,18 +767,28 @@ function setupIPC(): void {
           if (settings.chatHistoryEnabled && personaId && assistantBuffer.trim()) {
             const lastUserMsg = [...payload.messages].reverse().find((m) => m.role === 'user');
             if (lastUserMsg) {
-              const snippet = `ユーザー: ${lastUserMsg.content.slice(0, 500)}\nアシスタント: ${assistantBuffer.slice(0, 1000)}`;
-              hookManager.emit('memory:beforeStore', { personaId, content: snippet });
-              const _storeStart = Date.now();
-              chatMemoryManager
-                .storeMemory(personaId, snippet, {
-                  sessionId: payload.sessionId,
-                  baseUrl: settings.lmstudioBaseUrl,
-                  embeddingModel: settings.chatHistoryEmbeddingModel,
-                })
+              const cleanResponse = assistantBuffer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+              // 512 トークン制限に収まるようチャンク分割して保存
+              const fullText = `ユーザー: ${lastUserMsg.content}\nアシスタント: ${cleanResponse}`;
+              const chunks = chunkText(fullText);
+              const storeOpts = {
+                sessionId: payload.sessionId,
+                baseUrl: settings.lmstudioBaseUrl,
+                embeddingModel: settings.chatHistoryEmbeddingModel,
+              };
+              Promise.all(
+                chunks.map((chunk) => {
+                  hookManager.emit('memory:beforeStore', { personaId, content: chunk });
+                  const _storeStart = Date.now();
+                  return chatMemoryManager
+                    .storeMemory(personaId, chunk, storeOpts)
+                    .then(() => {
+                      hookManager.emit('memory:afterStore', { personaId, content: chunk, durationMs: Date.now() - _storeStart });
+                    });
+                }),
+              )
                 .then(() => {
-                  hookManager.emit('memory:afterStore', { personaId, content: snippet, durationMs: Date.now() - _storeStart });
-                  // 件数超過時にプルーニング（非同期）
+                  // 全チャンク保存後に1回だけプルーニング
                   chatMemoryManager.pruneMemories(personaId, settings.chatHistoryMaxItems ?? 200);
                 })
                 .catch(() => {});
