@@ -520,6 +520,7 @@ export default function App() {
   const settingsExists = panes.some((p) => p.tabs.some((t) => t.id === 'settings'));
 
   return (
+    <>
     <div className="h-screen flex flex-col bg-aria-bg">
       <TitleBar
         onMenuClick={() => setActivityBarVisible((v) => !v)}
@@ -695,5 +696,6 @@ export default function App() {
       })()}
     </div>
     <UpdateNotification />
+    </>
   );
 }
