@@ -1,0 +1,70 @@
+name: Build & Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'          # v1.0.0, v1.2.3 など
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build on Windows
+    runs-on: windows-latest
+
+    steps:
+      # ── ソースを取得 ──────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Node.js セットアップ ──────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ── 依存関係インストール ──────────────────────────
+      - name: Install dependencies
+        run: npm ci
+
+      # ── デフォルトアイコン生成 ─────────────────────────
+      - name: Generate default icons
+        run: node scripts/generate-icons.js
+        continue-on-error: true   # アイコンがすでに存在する場合もある
+
+      # ── ビルド（Renderer + Main）──────────────────────
+      - name: Build
+        run: npm run build
+
+      # ─────────────────────────────────────────────────────
+      # PR / 通常 push: インストーラー作成のみ（公開しない）
+      # ─────────────────────────────────────────────────────
+      - name: Pack (no publish)
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: npm run dist -- --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ─────────────────────────────────────────────────────
+      # タグ push (v*): GitHub Releases に公開
+      # ─────────────────────────────────────────────────────
+      - name: Release (publish to GitHub Releases)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: npm run dist -- --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}   # Settings > Secrets に登録が必要
+
+      # ── PR / 通常 push 時: artifacts をアップロード ──
+      - name: Upload installer artifact
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ArsChat-installer-${{ github.sha }}
+          path: |
+            release/*.exe
+            release/*.zip
+          retention-days: 7

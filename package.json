@@ -22,6 +22,7 @@
     "@xterm/xterm": "^6.0.0",
     "better-sqlite3": "^11.0.0",
     "electron-store": "^8.2.0",
+    "electron-updater": "^6.8.3",
     "highlight.js": "^11.10.0",
     "katex": "^0.16.38",
     "marked": "^15.0.0",
@@ -56,6 +57,11 @@
     "win": {
       "target": "nsis",
       "icon": "assets/icons/default.png"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "YOUR_GITHUB_USERNAME",
+      "repo": "ArsChat"
     }
   }
 }

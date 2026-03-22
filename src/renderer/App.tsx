@@ -6,6 +6,7 @@ import ActivityBar from './components/ActivityBar';
 import Sidebar from './components/Sidebar';
 import RightPanel from './components/RightPanel';
 import WidgetOverlay from './components/WidgetOverlay';
+import UpdateNotification from './components/UpdateNotification';
 import PaneGroup from './components/PaneGroup';
 import TerminalPanel from './components/TerminalPanel';
 import { FileViewerPage } from './components/FileBrowser';
@@ -693,5 +694,6 @@ export default function App() {
         );
       })()}
     </div>
+    <UpdateNotification />
   );
 }
