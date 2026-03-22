@@ -41,6 +41,7 @@ import { createChatMemoryManager, chunkText } from './chat-memory-manager';
 import { createExtensionManager } from './extension-manager';
 import { createExtensionContext } from './extension-context';
 import { createHookManager } from './hook-manager';
+import { setupUpdater } from './updater';
 
 // ===== PTY セッション管理 =====
 interface PtySession {
@@ -1498,6 +1499,9 @@ app.whenReady().then(() => {
   mainWindow = createMainWindow();
   widgetWindow = createWidgetWindow();
   tray = createTray();
+
+  // アップデーター初期化
+  setupUpdater(mainWindow);
 
   const settings = store.getSettings();
   registerHotkeys(settings.hotkey);

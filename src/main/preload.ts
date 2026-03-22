@@ -326,6 +326,19 @@ contextBridge.exposeInMainWorld('arsChatAPI', {
     },
   },
 
+  // === アップデーター ===
+  updater: {
+    check: (): Promise<any> => ipcRenderer.invoke('updater:check'),
+    download: (): Promise<any> => ipcRenderer.invoke('updater:download'),
+    install: (): Promise<void> => ipcRenderer.invoke('updater:install'),
+    getStatus: (): Promise<any> => ipcRenderer.invoke('updater:get-status'),
+    onStatus: (callback: (info: any) => void) => {
+      const handler = (_: any, info: any) => callback(info);
+      ipcRenderer.on('updater:status', handler);
+      return () => ipcRenderer.removeListener('updater:status', handler);
+    },
+  },
+
   // === 拡張機能変更通知 ===
   onExtChanged: (callback: () => void) => {
     const handler = () => callback();

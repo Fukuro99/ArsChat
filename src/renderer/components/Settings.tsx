@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ArsChatSettings, DEFAULT_SETTINGS, LMStudioModelInfo, MCPConfig, MCPServerConfig, MCPServerStatus, Persona, Skill } from '../../shared/types';
 
 /** ローカルファイルパスをカスタムスキームの URL に変換する（Windows / http:localhost 対応） */
@@ -2075,10 +2075,92 @@ export default function Settings({ onBack, extensions = [] }: SettingsProps) {
           )}
         </section>
 
-        {/* バージョン情報 */}
-        <div className="text-center pb-6">
-          <p className="text-xs text-aria-text-muted">Ars v1.0.0 — AI Responsive Interactive System</p>
+        {/* バージョン情報 + アップデートチェック */}
+        <UpdateSection />
+      </div>
+    </div>
+  );
+}
+
+// ===== アップデートセクション =====
+
+type UpdaterStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'ready' | 'error';
+interface UpdaterInfo { status: UpdaterStatus; version?: string; progress?: number; error?: string; }
+
+function UpdateSection() {
+  const [info, setInfo] = useState<UpdaterInfo>({ status: 'idle' });
+
+  useEffect(() => {
+    window.arsChatAPI.updater.getStatus().then(setInfo).catch(() => {});
+    const unsub = window.arsChatAPI.updater.onStatus(setInfo);
+    return unsub;
+  }, []);
+
+  const handleCheck = () => {
+    window.arsChatAPI.updater.check().catch(() => {});
+  };
+  const handleDownload = () => {
+    window.arsChatAPI.updater.download().catch(() => {});
+  };
+  const handleInstall = () => {
+    window.arsChatAPI.updater.install().catch(() => {});
+  };
+
+  const statusLabel: Record<UpdaterStatus, string> = {
+    idle: '',
+    checking: 'チェック中...',
+    available: `v${info.version} が利用可能`,
+    'not-available': '最新版です',
+    downloading: `ダウンロード中 ${info.progress ?? 0}%`,
+    ready: `v${info.version} — 再起動で適用`,
+    error: 'エラー',
+  };
+
+  return (
+    <div className="text-center pb-6 space-y-2">
+      <p className="text-xs text-aria-text-muted">ArsChat v1.0.0 — AI Responsive Interactive System</p>
+
+      {/* ステータス表示 */}
+      {info.status !== 'idle' && (
+        <p className={`text-xs ${info.status === 'error' ? 'text-red-400' : info.status === 'available' || info.status === 'ready' ? 'text-aria-primary' : 'text-aria-text-muted'}`}>
+          {statusLabel[info.status]}
+        </p>
+      )}
+
+      {/* ダウンロード進捗バー */}
+      {info.status === 'downloading' && (
+        <div className="mx-auto w-48 h-1 rounded-full bg-white/10 overflow-hidden">
+          <div className="h-full rounded-full bg-aria-primary transition-all duration-300" style={{ width: `${info.progress ?? 0}%` }} />
         </div>
+      )}
+
+      {/* アクションボタン */}
+      <div className="flex justify-center gap-2">
+        {(info.status === 'idle' || info.status === 'not-available' || info.status === 'error') && (
+          <button
+            onClick={handleCheck}
+            disabled={info.status === 'checking'}
+            className="text-xs px-3 py-1 rounded bg-white/5 text-aria-text-muted hover:bg-white/10 hover:text-aria-text transition-colors"
+          >
+            アップデートを確認
+          </button>
+        )}
+        {info.status === 'available' && (
+          <button
+            onClick={handleDownload}
+            className="text-xs px-3 py-1 rounded bg-aria-primary/10 text-aria-primary hover:bg-aria-primary/20 transition-colors"
+          >
+            ダウンロード
+          </button>
+        )}
+        {info.status === 'ready' && (
+          <button
+            onClick={handleInstall}
+            className="text-xs px-3 py-1 rounded bg-aria-primary text-white hover:bg-aria-primary/80 transition-colors"
+          >
+            再起動してインストール
+          </button>
+        )}
       </div>
     </div>
   );
