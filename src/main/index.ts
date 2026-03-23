@@ -807,6 +807,27 @@ function setupIPC(): void {
             hookManager.emit('tool:beforeExecute', { toolName, input }),
           onToolAfter: (toolName, input, result) =>
             hookManager.emit('tool:afterExecute', { toolName, input, result }),
+          onCommandApprovalRequired: async (command: string, cwd?: string): Promise<boolean> => {
+            const currentSettings = store.getSettings();
+            if (currentSettings.shellCommandPermission === 'allow-all') return true;
+            // コマンド種別（先頭トークン）を取得
+            const cmdToken = command.trim().split(/\s+/)[0] ?? command;
+            if ((currentSettings.allowedShellCommands ?? []).includes(cmdToken)) return true;
+            const { response } = await dialog.showMessageBox(mainWindow!, {
+              type: 'question',
+              title: 'コマンド実行の確認',
+              message: 'AIが次のコマンドを実行しようとしています:',
+              detail: `$ ${command}${cwd ? `\n作業ディレクトリ: ${cwd}` : ''}`,
+              buttons: ['許可', `今後も許可 (${cmdToken})`, '拒否'],
+              defaultId: 0,
+              cancelId: 2,
+            });
+            if (response === 1) {
+              const allowed = [...(currentSettings.allowedShellCommands ?? []), cmdToken];
+              store.saveSettings({ ...currentSettings, allowedShellCommands: allowed });
+            }
+            return response !== 2;
+          },
         },
       );
     } catch (err: any) {
