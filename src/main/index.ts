@@ -868,10 +868,9 @@ function setupIPC(): void {
     const _saveStart = Date.now();
     store.saveSession(session);
     hookManager.emit('session:afterSave', { session, durationMs: Date.now() - _saveStart });
-    // 送信元以外のウィンドウへセッション更新を通知（リアルタイム同期）
-    const sender = _e.sender;
+    // 全ウィンドウへセッション更新を通知（リアルタイム同期）
     for (const win of [mainWindow, widgetWindow]) {
-      if (win && !win.isDestroyed() && win.webContents !== sender) {
+      if (win && !win.isDestroyed()) {
         win.webContents.send(IPC_CHANNELS.SESSION_UPDATED, session.id);
       }
     }
