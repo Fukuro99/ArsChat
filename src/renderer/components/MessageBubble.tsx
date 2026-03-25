@@ -76,7 +76,7 @@ function UserMessageContent({ message }: { message: ChatMessage }) {
     const rest = match[2].trimStart();
     return (
       <p className="whitespace-pre-wrap">
-        <span className="inline-flex items-center px-1.5 py-0.5 mr-1.5 rounded-md bg-aria-primary/25 text-aria-primary text-xs font-mono align-middle leading-tight">
+        <span className="inline-flex items-center px-2 py-0.5 mr-2 rounded bg-aria-primary text-white text-xs font-mono font-semibold align-middle shadow-sm">
           {trigger}
         </span>
         {rest}
