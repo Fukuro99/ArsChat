@@ -154,11 +154,19 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
 
   // スキル読み込み（アクティブなペルソナが変わるたびに再取得）
   useEffect(() => {
-    if (settings.activePersonaId) {
-      window.arsChatAPI.listSkills(settings.activePersonaId).then(setSkills);
-    } else {
-      setSkills([]);
-    }
+    const personaId = settings.activePersonaId ?? '';
+    window.arsChatAPI.listSkills(personaId).then(setSkills).catch(() => setSkills([]));
+  }, [settings.activePersonaId]);
+
+  // スキル更新通知を受けて再読み込み
+  useEffect(() => {
+    const cleanup = window.arsChatAPI.onSkillsUpdated((updatedPersonaId) => {
+      const currentPersonaId = settings.activePersonaId ?? '';
+      if (updatedPersonaId === currentPersonaId) {
+        window.arsChatAPI.listSkills(currentPersonaId).then(setSkills).catch(() => {});
+      }
+    });
+    return cleanup;
   }, [settings.activePersonaId]);
 
   useEffect(() => {
@@ -1017,9 +1025,12 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
           </div>
         )}
 
-        {/* スラッシュコマンド候補ドロップダウン */}
+        {/* 入力カード + 候補ドロップダウンのラッパー（relative で浮かせる） */}
+        <div className="relative">
+
+        {/* スラッシュコマンド候補ドロップダウン（入力欄の真上に絶対配置） */}
         {slashSuggestions.length > 0 && (
-          <div className="mb-1 bg-aria-surface border border-aria-border rounded-xl overflow-hidden shadow-lg">
+          <div className="absolute bottom-full left-0 right-0 mb-1 bg-aria-surface border border-aria-border rounded-xl overflow-hidden shadow-xl z-50">
             {slashSuggestions.map((skill, idx) => (
               <button
                 key={skill.id}
@@ -1034,7 +1045,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
                     : 'hover:bg-aria-border/40 text-aria-text'
                 }`}
               >
-                <span className="shrink-0 text-xs font-mono text-aria-primary mt-0.5">
+                <span className="shrink-0 text-xs font-mono text-aria-primary mt-0.5 pt-px">
                   {skill.trigger || `/${skill.id}`}
                 </span>
                 <span className="flex-1 min-w-0">
@@ -1167,6 +1178,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
             )}
           </div>
         </div>
+        </div>{/* relative ラッパー end */}
         </div>{/* max-w container end */}
       </div>
     </div>
