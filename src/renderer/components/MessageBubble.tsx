@@ -76,7 +76,18 @@ function UserMessageContent({ message }: { message: ChatMessage }) {
     const rest = match[2].trimStart();
     return (
       <p className="whitespace-pre-wrap">
-        <span className="inline-flex items-center px-2 py-0.5 mr-2 rounded bg-aria-primary text-white text-xs font-mono font-semibold align-middle shadow-sm">
+        <span
+          className="inline-flex items-center gap-0.5 px-2.5 py-0.5 mr-2 rounded-full text-xs font-mono font-bold align-middle"
+          style={{
+            background: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
+            color: '#fff',
+            boxShadow: '0 0 8px rgba(6,182,212,0.55)',
+            letterSpacing: '0.02em',
+          }}
+        >
+          <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.85 }}>
+            <path d="M2 8L8 2M5 2h3v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
           {trigger}
         </span>
         {rest}
