@@ -67,8 +67,8 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
   const [skills, setSkills] = useState<Skill[]>([]);
   const [slashSuggestions, setSlashSuggestions] = useState<Skill[]>([]);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
-  // 確定したスキルチップ（/trigger がチップ化された状態）
-  const [activeSkillChip, setActiveSkillChip] = useState<{ skill: Skill; trigger: string } | null>(null);
+  // バックドロップ用 ref（textarea のスクロール同期）
+  const backdropRef = useRef<HTMLDivElement>(null);
 
   // ===== ライブUI状態管理 =====
   // uiId → 現在のstate
@@ -607,13 +607,8 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
 
   // メッセージ送信
   const handleSend = useCallback(async () => {
-    // チップ + テキストを合わせた表示用テキスト（UIに表示する内容）
-    const restText = input.trim();
-    const displayText = activeSkillChip
-      ? [activeSkillChip.trigger, restText].filter(Boolean).join(' ')
-      : restText;
-
-    if ((!displayText && !pendingImageBase64) || isStreaming) return;
+    const text = input.trim();
+    if ((!text && !pendingImageBase64) || isStreaming) return;
 
     setError(null);
 
@@ -627,15 +622,21 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
       }
     }
 
-    // スキルチップが確定済みならそのスキルのコンテンツを注入
-    let messageContent = displayText;
+    // スラッシュコマンドによるスキル注入
+    let messageContent = text;
     let displayContent: string | undefined;
-    if (activeSkillChip) {
-      const personaId = settings.activePersonaId ?? '';
-      const skillContent = await window.arsChatAPI.getSkillContent(personaId, activeSkillChip.skill.id);
-      if (skillContent) {
-        messageContent = skillContent + (restText ? `\n\n---\n\n${restText}` : '');
-        displayContent = displayText;
+    if (text.startsWith('/')) {
+      const spaceIdx = text.indexOf(' ');
+      const trigger = spaceIdx > 0 ? text.slice(0, spaceIdx) : text;
+      const restText = spaceIdx > 0 ? text.slice(spaceIdx + 1).trim() : '';
+      const matchedSkill = skills.find((s) => s.trigger === trigger || `/${s.id}` === trigger);
+      if (matchedSkill) {
+        const personaId = settings.activePersonaId ?? '';
+        const skillContent = await window.arsChatAPI.getSkillContent(personaId, matchedSkill.id);
+        if (skillContent) {
+          messageContent = skillContent + (restText ? `\n\n---\n\n${restText}` : '');
+          displayContent = text;
+        }
       }
     }
 
@@ -651,7 +652,6 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInput('');
-    setActiveSkillChip(null);
     setPendingImageBase64(null);
     setSlashSuggestions([]);
     setIsStreaming(true);
@@ -659,7 +659,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
 
     // API送信
     window.arsChatAPI.sendMessage(newMessages, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
-  }, [activeSkillChip, input, isStreaming, messages, pendingImageBase64, screenWatchMode, settings.activePersonaId, thinkMode]);
+  }, [input, isStreaming, messages, pendingImageBase64, screenWatchMode, settings.activePersonaId, skills, thinkMode]);
 
   const handleCaptureScreen = useCallback(async () => {
     if (isStreaming) return;
@@ -749,13 +749,6 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
 
   // キー入力
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    // チップ確定済み & 入力欄が空の状態でBackspace → チップを解除してトリガーをテキストに戻す
-    if (activeSkillChip && e.key === 'Backspace' && input === '') {
-      e.preventDefault();
-      setInput(activeSkillChip.trigger);
-      setActiveSkillChip(null);
-      return;
-    }
     // スラッシュコマンド候補のキーボードナビゲーション
     if (slashSuggestions.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -785,11 +778,10 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     }
   };
 
-  // スキルをチップとして確定する
-  const commitSkillChip = useCallback((skill: Skill, restText = '') => {
+  // スラッシュコマンド候補の選択 → input に /trigger<space> をセット
+  const selectSuggestion = useCallback((skill: Skill) => {
     const trigger = skill.trigger || `/${skill.id}`;
-    setActiveSkillChip({ skill, trigger });
-    setInput(restText);
+    setInput(trigger + ' ');
     setSlashSuggestions([]);
     setSuggestionIndex(0);
     requestAnimationFrame(() => {
@@ -801,20 +793,15 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     });
   }, []);
 
-  // スラッシュコマンド候補の選択 → 即チップ化
-  const selectSuggestion = useCallback((skill: Skill) => {
-    commitSkillChip(skill, '');
-  }, [commitSkillChip]);
-
-  // テキストエリア自動リサイズ
+  // テキストエリア自動リサイズ + スラッシュコマンド候補
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
+    setInput(value);
 
-    // チップが未確定の場合のみスラッシュコマンドを処理
-    if (!activeSkillChip && value.startsWith('/') && !value.includes('\n')) {
+    if (value.startsWith('/') && !value.includes('\n')) {
       const spaceIdx = value.indexOf(' ');
       if (spaceIdx < 0) {
-        // スペース前 → 候補ドロップダウン表示
+        // スペース前 → 候補ドロップダウン
         const query = value.slice(1).toLowerCase();
         const filtered = skills.filter((s) => {
           const t = (s.trigger || `/${s.id}`).slice(1).toLowerCase();
@@ -822,21 +809,11 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
         });
         setSlashSuggestions(filtered);
         setSuggestionIndex(0);
-        setInput(value);
       } else {
-        // スペース入力 → 完全一致するスキルがあればチップ化
-        const trigger = value.slice(0, spaceIdx);
-        const matched = skills.find((s) => s.trigger === trigger || `/${s.id}` === trigger);
-        if (matched) {
-          commitSkillChip(matched, value.slice(spaceIdx + 1));
-          return;
-        }
         setSlashSuggestions([]);
-        setInput(value);
       }
     } else {
       setSlashSuggestions([]);
-      setInput(value);
     }
 
     const textarea = e.target;
@@ -1094,42 +1071,55 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
 
         {/* カード型入力コンテナ */}
         <div className="flex flex-col bg-aria-surface border border-aria-border rounded-2xl focus-within:border-aria-primary transition-colors overflow-hidden">
-          {/* スキルチップ行（確定済みのスラッシュコマンド） */}
-          {activeSkillChip && (
-            <div className="flex items-center gap-2 px-3 pt-2.5 pb-0">
-              <span
-                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-bold text-white"
-                style={{
-                  background: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
-                  boxShadow: '0 0 8px rgba(6,182,212,0.45)',
-                }}
-              >
-                {activeSkillChip.trigger}
-              </span>
-              <span className="text-xs text-aria-text-muted truncate flex-1">{activeSkillChip.skill.name}</span>
-              <button
-                type="button"
-                onClick={() => { setInput(activeSkillChip.trigger); setActiveSkillChip(null); }}
-                className="text-aria-text-muted hover:text-aria-text text-xs leading-none px-1"
-                title="スキルを解除"
-              >
-                ✕
-              </button>
+          {/* テキストエリア + バックドロップハイライト */}
+          <div className="relative">
+            {/* バックドロップ（/trigger をシアン色でハイライト） */}
+            <div
+              ref={backdropRef}
+              aria-hidden="true"
+              className="absolute inset-0 px-4 pt-3 pb-1 text-sm pointer-events-none select-none overflow-hidden"
+              style={{
+                fontFamily: 'inherit',
+                lineHeight: '1.5',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                overflowWrap: 'break-word',
+              }}
+            >
+              {(() => {
+                const m = input.match(/^(\/\S*)([\s\S]*)$/);
+                if (!m || m[1] === '/') return <span style={{ color: 'transparent' }}>{input}</span>;
+                return (
+                  <>
+                    <span style={{ color: '#38bdf8', fontWeight: 600 }}>{m[1]}</span>
+                    <span style={{ color: 'transparent' }}>{m[2]}</span>
+                  </>
+                );
+              })()}
             </div>
-          )}
-          {/* テキストエリア（上段・全幅） */}
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            placeholder={screenWatchMode ? "メッセージを入力... (画面監視ON)" : "メッセージを入力..."}
-            rows={3}
-            className="w-full bg-transparent px-4 pt-3 pb-1 text-sm text-aria-text placeholder:text-aria-text-muted resize-none focus:outline-none"
-            style={{ maxHeight: '200px' }}
-            disabled={isStreaming}
-          />
+            {/* 実際の textarea（/trigger がある時だけテキストを透明に） */}
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              onScroll={() => {
+                if (backdropRef.current && inputRef.current) {
+                  backdropRef.current.scrollTop = inputRef.current.scrollTop;
+                }
+              }}
+              placeholder={screenWatchMode ? "メッセージを入力... (画面監視ON)" : "メッセージを入力..."}
+              rows={3}
+              className="relative w-full bg-transparent px-4 pt-3 pb-1 text-sm placeholder:text-aria-text-muted resize-none focus:outline-none"
+              style={{
+                maxHeight: '200px',
+                color: /^\/\S/.test(input) ? 'transparent' : undefined,
+                caretColor: 'currentColor',
+              }}
+              disabled={isStreaming}
+            />
+          </div>
 
           {/* ツールバー（下段） */}
           <div className="flex items-center gap-1 px-2 pb-2 pt-1">
@@ -1225,7 +1215,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
             ) : (
               <button
                 onClick={() => { void handleSend(); }}
-                disabled={!input.trim() && !activeSkillChip && !pendingImageBase64}
+                disabled={!input.trim() && !pendingImageBase64}
                 className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl bg-aria-primary text-white hover:bg-aria-primary-dark disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 title="送信 (Enter)"
               >
