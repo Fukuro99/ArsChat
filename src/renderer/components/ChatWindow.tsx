@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { marked } from 'marked';
-import { ChatMessage, ChatMessageStats, ArsChatSettings, DEFAULT_SETTINGS, getEffectiveAvatarPath } from '../../shared/types';
+import { ChatMessage, ChatMessageStats, ArsChatSettings, DEFAULT_SETTINGS, getEffectiveAvatarPath, Skill } from '../../shared/types';
 import MessageBubble from './MessageBubble';
 import { parseInteractiveUI, parseUIUpdate } from './interactive-ui/parser';
 import { BlockRenderer } from './interactive-ui/UIRenderer';
@@ -62,6 +62,11 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
   const rafIdRef = useRef<number | null>(null);
   // 編集中のメッセージID
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+
+  // スキル & スラッシュコマンド候補
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [slashSuggestions, setSlashSuggestions] = useState<Skill[]>([]);
+  const [suggestionIndex, setSuggestionIndex] = useState(0);
 
   // ===== ライブUI状態管理 =====
   // uiId → 現在のstate
@@ -146,6 +151,15 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
   useEffect(() => {
     window.arsChatAPI.getSettings().then(setSettings);
   }, [settingsVersion]);
+
+  // スキル読み込み（アクティブなペルソナが変わるたびに再取得）
+  useEffect(() => {
+    if (settings.activePersonaId) {
+      window.arsChatAPI.listSkills(settings.activePersonaId).then(setSkills);
+    } else {
+      setSkills([]);
+    }
+  }, [settings.activePersonaId]);
 
   useEffect(() => {
     // メインプロセスからのナビゲーション時も再取得
@@ -580,10 +594,32 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
       }
     }
 
+    // スラッシュコマンドによるスキル注入
+    let messageContent = text;
+    if (text.startsWith('/') && settings.activePersonaId) {
+      const spaceIdx = text.indexOf(' ');
+      const trigger = spaceIdx > 0 ? text.slice(0, spaceIdx) : text;
+      const restText = spaceIdx > 0 ? text.slice(spaceIdx + 1).trim() : '';
+
+      const matchedSkill = skills.find(
+        (s) => s.trigger === trigger || `/${s.id}` === trigger,
+      );
+      if (matchedSkill) {
+        const skillContent = await window.arsChatAPI.getSkillContent(
+          settings.activePersonaId,
+          matchedSkill.id,
+        );
+        if (skillContent) {
+          // スキル本文をメッセージ先頭に注入し、ユーザーの追加テキストを末尾に付加
+          messageContent = skillContent + (restText ? `\n\n---\n\n${restText}` : '');
+        }
+      }
+    }
+
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
-      content: text,
+      content: messageContent,
       imageBase64,
       timestamp: Date.now(),
     };
@@ -592,12 +628,13 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     setMessages(newMessages);
     setInput('');
     setPendingImageBase64(null);
+    setSlashSuggestions([]);
     setIsStreaming(true);
     setStreamingContent('');
 
     // API送信
     window.arsChatAPI.sendMessage(newMessages, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
-  }, [input, isStreaming, messages, pendingImageBase64, screenWatchMode, thinkMode]);
+  }, [input, isStreaming, messages, pendingImageBase64, screenWatchMode, settings.activePersonaId, skills, thinkMode]);
 
   const handleCaptureScreen = useCallback(async () => {
     if (isStreaming) return;
@@ -687,15 +724,78 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
 
   // キー入力
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // スラッシュコマンド候補のキーボードナビゲーション
+    if (slashSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSuggestionIndex((i) => Math.min(i + 1, slashSuggestions.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSuggestionIndex((i) => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+        e.preventDefault();
+        selectSuggestion(slashSuggestions[suggestionIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setSlashSuggestions([]);
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void handleSend();
     }
   };
 
+  // スラッシュコマンド候補の選択
+  const selectSuggestion = useCallback((skill: Skill) => {
+    const trigger = skill.trigger || `/${skill.id}`;
+    setInput(trigger + ' ');
+    setSlashSuggestions([]);
+    setSuggestionIndex(0);
+    // 次フレームでフォーカス＋カーソルを末尾へ
+    requestAnimationFrame(() => {
+      const ta = inputRef.current;
+      if (ta) {
+        ta.focus();
+        const len = ta.value.length;
+        ta.setSelectionRange(len, len);
+      }
+    });
+  }, []);
+
   // テキストエリア自動リサイズ
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
+    const value = e.target.value;
+    setInput(value);
+
+    // スラッシュコマンド候補フィルタリング
+    if (value.startsWith('/') && !value.includes('\n')) {
+      // スペースが入る前の部分だけを検索クエリとして使う
+      const spaceIdx = value.indexOf(' ');
+      const query = (spaceIdx > 0 ? value.slice(1, spaceIdx) : value.slice(1)).toLowerCase();
+      if (spaceIdx < 0) {
+        // まだスペースを入力していない → 候補を表示
+        const filtered = skills.filter((s) => {
+          const trigger = (s.trigger || `/${s.id}`).slice(1).toLowerCase();
+          return trigger.startsWith(query) || s.name.toLowerCase().includes(query);
+        });
+        setSlashSuggestions(filtered);
+        setSuggestionIndex(0);
+      } else {
+        // スペースを入れたら候補を閉じる
+        setSlashSuggestions([]);
+      }
+    } else {
+      setSlashSuggestions([]);
+    }
+
     const textarea = e.target;
     textarea.style.height = 'auto';
     textarea.style.height = Math.min(textarea.scrollHeight, 160) + 'px';
@@ -914,6 +1014,35 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
                 </svg>
               </button>
             </div>
+          </div>
+        )}
+
+        {/* スラッシュコマンド候補ドロップダウン */}
+        {slashSuggestions.length > 0 && (
+          <div className="mb-1 bg-aria-surface border border-aria-border rounded-xl overflow-hidden shadow-lg">
+            {slashSuggestions.map((skill, idx) => (
+              <button
+                key={skill.id}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  selectSuggestion(skill);
+                }}
+                className={`w-full flex items-start gap-3 px-3 py-2 text-left transition-colors ${
+                  idx === suggestionIndex
+                    ? 'bg-aria-primary/20 text-aria-text'
+                    : 'hover:bg-aria-border/40 text-aria-text'
+                }`}
+              >
+                <span className="shrink-0 text-xs font-mono text-aria-primary mt-0.5">
+                  {skill.trigger || `/${skill.id}`}
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-xs font-medium truncate">{skill.name}</span>
+                  <span className="block text-xs text-aria-text-muted truncate">{skill.description}</span>
+                </span>
+              </button>
+            ))}
           </div>
         )}
 
