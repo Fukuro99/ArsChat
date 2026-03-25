@@ -69,6 +69,15 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
   const [suggestionIndex, setSuggestionIndex] = useState(0);
   // バックドロップ用 ref（textarea のスクロール同期）
   const backdropRef = useRef<HTMLDivElement>(null);
+  // /trigger<space> + スキル一致時のハイライト情報
+  const activeHighlight = useMemo(() => {
+    if (!input.startsWith('/')) return null;
+    const spaceIdx = input.indexOf(' ');
+    if (spaceIdx < 0) return null;
+    const trigger = input.slice(0, spaceIdx);
+    const matched = skills.find((s) => s.trigger === trigger || `/${s.id}` === trigger);
+    return matched ? { trigger, rest: input.slice(spaceIdx) } : null;
+  }, [input, skills]);
 
   // ===== ライブUI状態管理 =====
   // uiId → 現在のstate
@@ -1086,16 +1095,14 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
                 overflowWrap: 'break-word',
               }}
             >
-              {(() => {
-                const m = input.match(/^(\/\S*)([\s\S]*)$/);
-                if (!m || m[1] === '/') return <span style={{ color: 'transparent' }}>{input}</span>;
-                return (
-                  <>
-                    <span style={{ color: '#38bdf8', fontWeight: 600 }}>{m[1]}</span>
-                    <span style={{ color: 'transparent' }}>{m[2]}</span>
-                  </>
-                );
-              })()}
+              {activeHighlight ? (
+                <>
+                  <span style={{ color: '#38bdf8', fontWeight: 600 }}>{activeHighlight.trigger}</span>
+                  <span style={{ color: 'inherit' }}>{activeHighlight.rest}</span>
+                </>
+              ) : (
+                <span style={{ color: 'transparent' }}>{input}</span>
+              )}
             </div>
             {/* 実際の textarea（/trigger がある時だけテキストを透明に） */}
             <textarea
@@ -1114,7 +1121,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
               className="relative w-full bg-transparent px-4 pt-3 pb-1 text-sm placeholder:text-aria-text-muted resize-none focus:outline-none"
               style={{
                 maxHeight: '200px',
-                color: /^\/\S/.test(input) ? 'transparent' : undefined,
+                color: activeHighlight ? 'transparent' : undefined,
                 caretColor: 'currentColor',
               }}
               disabled={isStreaming}
