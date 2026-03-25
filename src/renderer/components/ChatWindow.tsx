@@ -622,7 +622,8 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
 
     // スラッシュコマンドによるスキル注入
     let messageContent = text;
-    if (text.startsWith('/') && settings.activePersonaId) {
+    let displayContent: string | undefined;
+    if (text.startsWith('/')) {
       const spaceIdx = text.indexOf(' ');
       const trigger = spaceIdx > 0 ? text.slice(0, spaceIdx) : text;
       const restText = spaceIdx > 0 ? text.slice(spaceIdx + 1).trim() : '';
@@ -631,13 +632,13 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
         (s) => s.trigger === trigger || `/${s.id}` === trigger,
       );
       if (matchedSkill) {
-        const skillContent = await window.arsChatAPI.getSkillContent(
-          settings.activePersonaId,
-          matchedSkill.id,
-        );
+        const personaId = settings.activePersonaId ?? '';
+        const skillContent = await window.arsChatAPI.getSkillContent(personaId, matchedSkill.id);
         if (skillContent) {
-          // スキル本文をメッセージ先頭に注入し、ユーザーの追加テキストを末尾に付加
+          // AI には スキル本文 + ユーザーの追加テキストを渡す
           messageContent = skillContent + (restText ? `\n\n---\n\n${restText}` : '');
+          // UI には元の入力（トリガー + 追加テキスト）のみ表示
+          displayContent = text;
         }
       }
     }
@@ -646,6 +647,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
       id: crypto.randomUUID(),
       role: 'user',
       content: messageContent,
+      displayContent,
       imageBase64,
       timestamp: Date.now(),
     };
