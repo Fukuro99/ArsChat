@@ -757,7 +757,22 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
   }, [attachImageFromClipboardData, attachImageFromSystemClipboard, isStreaming]);
 
   // キー入力
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // ハイライト中のトリガー内にカーソルがある場合、Backspace/Delete でトリガー丸ごと削除
+    if (activeHighlight && (e.key === 'Backspace' || e.key === 'Delete')) {
+      const pos = e.currentTarget.selectionStart ?? 0;
+      const triggerLen = activeHighlight.trigger.length;
+      if (pos <= triggerLen) {
+        e.preventDefault();
+        // トリガー部分を削除し、後続テキスト（スペース含む）は残す
+        const rest = input.slice(triggerLen + 1); // スペースもスキップ
+        setInput(rest);
+        requestAnimationFrame(() => {
+          inputRef.current?.setSelectionRange(0, 0);
+        });
+        return;
+      }
+    }
     // スラッシュコマンド候補のキーボードナビゲーション
     if (slashSuggestions.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -1122,7 +1137,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
               style={{
                 maxHeight: '200px',
                 color: activeHighlight ? 'transparent' : undefined,
-                caretColor: 'currentColor',
+                caretColor: 'var(--aria-text, #e2e8f0)',
               }}
               disabled={isStreaming}
             />
