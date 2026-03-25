@@ -63,6 +63,29 @@ interface MessageBubbleProps {
   onSandboxIframeReady?: (uiId: string, iframe: HTMLIFrameElement | null) => void;
 }
 
+/**
+ * ユーザーメッセージのテキスト表示
+ * displayContent がある場合はそちらを使い、先頭の /trigger をバッジとして強調する
+ */
+function UserMessageContent({ message }: { message: ChatMessage }) {
+  const display = message.displayContent ?? message.content;
+  // 先頭の /trigger（空白なし英数字）を検出
+  const match = display.match(/^(\/\S+)([\s\S]*)$/);
+  if (match) {
+    const trigger = match[1];
+    const rest = match[2].trimStart();
+    return (
+      <p className="whitespace-pre-wrap">
+        <span className="inline-flex items-center px-1.5 py-0.5 mr-1.5 rounded-md bg-aria-primary/25 text-aria-primary text-xs font-mono align-middle leading-tight">
+          {trigger}
+        </span>
+        {rest}
+      </p>
+    );
+  }
+  return <p className="whitespace-pre-wrap">{display}</p>;
+}
+
 /** <think>...</think> ブロックを分離する（ストリーミング途中・タグ欠け対応） */
 function parseThinkBlocks(content: string): {
   thinking: string;
@@ -286,7 +309,7 @@ export default function MessageBubble({
               </div>
             </div>
           ) : isUser ? (
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            <UserMessageContent message={message} />
           ) : (
             <>
               {/* 思考中（ストリーミング中・未完結） */}

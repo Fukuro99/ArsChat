@@ -12,6 +12,7 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  displayContent?: string;    // UI表示用テキスト（スキル注入時に元の入力を保持）
   imageBase64?: string;       // 添付画像（Base64）
   timestamp: number;
   stats?: ChatMessageStats;   // トークン統計（アシスタントメッセージのみ）
