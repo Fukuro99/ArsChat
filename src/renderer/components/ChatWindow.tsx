@@ -152,22 +152,40 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     window.arsChatAPI.getSettings().then(setSettings);
   }, [settingsVersion]);
 
-  // スキル読み込み（アクティブなペルソナが変わるたびに再取得）
+  // スキル読み込みユーティリティ
+  const reloadSkills = useCallback(async (personaId: string | null) => {
+    const pid = personaId ?? '';
+    try {
+      const list = await window.arsChatAPI.listSkills(pid);
+      setSkills(list);
+    } catch {
+      setSkills([]);
+    }
+  }, []);
+
+  // settingsVersion（設定保存のたびに変化）に連動してスキルを再取得
+  // settings の非同期ロードを待つため、getSettings() を改めて呼び出す
   useEffect(() => {
-    const personaId = settings.activePersonaId ?? '';
-    window.arsChatAPI.listSkills(personaId).then(setSkills).catch(() => setSkills([]));
-  }, [settings.activePersonaId]);
+    window.arsChatAPI.getSettings().then((fresh) => {
+      void reloadSkills(fresh.activePersonaId);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsVersion]);
+
+  // activePersonaId が変わったときも再取得
+  useEffect(() => {
+    void reloadSkills(settings.activePersonaId);
+  }, [settings.activePersonaId, reloadSkills]);
 
   // スキル更新通知を受けて再読み込み
   useEffect(() => {
     const cleanup = window.arsChatAPI.onSkillsUpdated((updatedPersonaId) => {
-      const currentPersonaId = settings.activePersonaId ?? '';
-      if (updatedPersonaId === currentPersonaId) {
-        window.arsChatAPI.listSkills(currentPersonaId).then(setSkills).catch(() => {});
+      if (updatedPersonaId === (settings.activePersonaId ?? '')) {
+        void reloadSkills(settings.activePersonaId);
       }
     });
     return cleanup;
-  }, [settings.activePersonaId]);
+  }, [settings.activePersonaId, reloadSkills]);
 
   useEffect(() => {
     // メインプロセスからのナビゲーション時も再取得
