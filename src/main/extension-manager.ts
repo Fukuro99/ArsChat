@@ -222,16 +222,26 @@ export function createExtensionManager(dataDir: string): ExtensionManager {
     extId: string,
     onProgress: (p: InstallProgress) => void,
   ): Promise<void> {
-    const extDir = path.join(extensionsDir, extId);
+    const entry = readRegistry().find((e) => e.id === extId);
+    if (!entry) throw new Error(`拡張 "${extId}" が見つかりません`);
 
-    onProgress({ step: 'clone', message: '最新版を取得中...' });
-    await gitPull(extDir);
+    // loadOne / readRendererCode と同じロジックでディレクトリを解決
+    const isLocalPath = path.isAbsolute(entry.source) && fs.existsSync(entry.source);
+    const extDir = isLocalPath ? entry.source : path.join(extensionsDir, extId);
+
+    if (isLocalPath) {
+      // ローカルパス拡張は git pull 不要（ファイルは既に最新）
+      onProgress({ step: 'clone', message: 'ローカル拡張機能を更新中...' });
+    } else {
+      onProgress({ step: 'clone', message: '最新版を取得中...' });
+      await gitPull(extDir);
+    }
 
     onProgress({ step: 'install', message: '依存パッケージを更新中...' });
     onProgress({ step: 'build', message: 'ビルド中...' });
     await npmInstallAndBuild(extDir);
 
-    // manifest 更新
+    // manifest 更新（権限変更も反映）
     const { version, manifest } = readManifest(extDir);
     const entries = readRegistry().map((e) =>
       e.id === extId ? { ...e, version, manifest, permissions: manifest.permissions ?? [] } : e,
