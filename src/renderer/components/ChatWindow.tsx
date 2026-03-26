@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { marked } from 'marked';
-import { ChatMessage, ChatMessageStats, ArsChatSettings, DEFAULT_SETTINGS, getEffectiveAvatarPath } from '../../shared/types';
+import { ChatMessage, ChatMessageStats, ArsChatSettings, DEFAULT_SETTINGS, getEffectiveAvatarPath, Skill } from '../../shared/types';
 import MessageBubble from './MessageBubble';
 import { parseInteractiveUI, parseUIUpdate } from './interactive-ui/parser';
 import { BlockRenderer } from './interactive-ui/UIRenderer';
@@ -62,6 +62,22 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
   const rafIdRef = useRef<number | null>(null);
   // 編集中のメッセージID
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+
+  // スキル & スラッシュコマンド候補
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [slashSuggestions, setSlashSuggestions] = useState<Skill[]>([]);
+  const [suggestionIndex, setSuggestionIndex] = useState(0);
+  // バックドロップ用 ref（textarea のスクロール同期）
+  const backdropRef = useRef<HTMLDivElement>(null);
+  // /trigger<space> + スキル一致時のハイライト情報
+  const activeHighlight = useMemo(() => {
+    if (!input.startsWith('/')) return null;
+    const spaceIdx = input.indexOf(' ');
+    if (spaceIdx < 0) return null;
+    const trigger = input.slice(0, spaceIdx);
+    const matched = skills.find((s) => s.trigger === trigger || `/${s.id}` === trigger);
+    return matched ? { trigger, rest: input.slice(spaceIdx) } : null;
+  }, [input, skills]);
 
   // ===== ライブUI状態管理 =====
   // uiId → 現在のstate
@@ -146,6 +162,41 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
   useEffect(() => {
     window.arsChatAPI.getSettings().then(setSettings);
   }, [settingsVersion]);
+
+  // スキル読み込みユーティリティ
+  const reloadSkills = useCallback(async (personaId: string | null) => {
+    const pid = personaId ?? '';
+    try {
+      const list = await window.arsChatAPI.listSkills(pid);
+      setSkills(list);
+    } catch {
+      setSkills([]);
+    }
+  }, []);
+
+  // settingsVersion（設定保存のたびに変化）に連動してスキルを再取得
+  // settings の非同期ロードを待つため、getSettings() を改めて呼び出す
+  useEffect(() => {
+    window.arsChatAPI.getSettings().then((fresh) => {
+      void reloadSkills(fresh.activePersonaId);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsVersion]);
+
+  // activePersonaId が変わったときも再取得
+  useEffect(() => {
+    void reloadSkills(settings.activePersonaId);
+  }, [settings.activePersonaId, reloadSkills]);
+
+  // スキル更新通知を受けて再読み込み
+  useEffect(() => {
+    const cleanup = window.arsChatAPI.onSkillsUpdated((updatedPersonaId) => {
+      if (updatedPersonaId === (settings.activePersonaId ?? '')) {
+        void reloadSkills(settings.activePersonaId);
+      }
+    });
+    return cleanup;
+  }, [settings.activePersonaId, reloadSkills]);
 
   useEffect(() => {
     // メインプロセスからのナビゲーション時も再取得
@@ -580,10 +631,29 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
       }
     }
 
+    // スラッシュコマンドによるスキル注入
+    let messageContent = text;
+    let displayContent: string | undefined;
+    if (text.startsWith('/')) {
+      const spaceIdx = text.indexOf(' ');
+      const trigger = spaceIdx > 0 ? text.slice(0, spaceIdx) : text;
+      const restText = spaceIdx > 0 ? text.slice(spaceIdx + 1).trim() : '';
+      const matchedSkill = skills.find((s) => s.trigger === trigger || `/${s.id}` === trigger);
+      if (matchedSkill) {
+        const personaId = settings.activePersonaId ?? '';
+        const skillContent = await window.arsChatAPI.getSkillContent(personaId, matchedSkill.id);
+        if (skillContent) {
+          messageContent = skillContent + (restText ? `\n\n---\n\n${restText}` : '');
+          displayContent = text;
+        }
+      }
+    }
+
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
-      content: text,
+      content: messageContent,
+      displayContent,
       imageBase64,
       timestamp: Date.now(),
     };
@@ -592,12 +662,13 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     setMessages(newMessages);
     setInput('');
     setPendingImageBase64(null);
+    setSlashSuggestions([]);
     setIsStreaming(true);
     setStreamingContent('');
 
     // API送信
     window.arsChatAPI.sendMessage(newMessages, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
-  }, [input, isStreaming, messages, pendingImageBase64, screenWatchMode, thinkMode]);
+  }, [input, isStreaming, messages, pendingImageBase64, screenWatchMode, settings.activePersonaId, skills, thinkMode]);
 
   const handleCaptureScreen = useCallback(async () => {
     if (isStreaming) return;
@@ -686,16 +757,89 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
   }, [attachImageFromClipboardData, attachImageFromSystemClipboard, isStreaming]);
 
   // キー入力
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // ハイライト中のトリガー内にカーソルがある場合、Backspace/Delete でトリガー丸ごと削除
+    if (activeHighlight && (e.key === 'Backspace' || e.key === 'Delete')) {
+      const pos = e.currentTarget.selectionStart ?? 0;
+      const triggerLen = activeHighlight.trigger.length;
+      if (pos <= triggerLen) {
+        e.preventDefault();
+        // トリガー部分を削除し、後続テキスト（スペース含む）は残す
+        const rest = input.slice(triggerLen + 1); // スペースもスキップ
+        setInput(rest);
+        requestAnimationFrame(() => {
+          inputRef.current?.setSelectionRange(0, 0);
+        });
+        return;
+      }
+    }
+    // スラッシュコマンド候補のキーボードナビゲーション
+    if (slashSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSuggestionIndex((i) => Math.min(i + 1, slashSuggestions.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSuggestionIndex((i) => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+        e.preventDefault();
+        selectSuggestion(slashSuggestions[suggestionIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setSlashSuggestions([]);
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void handleSend();
     }
   };
 
-  // テキストエリア自動リサイズ
+  // スラッシュコマンド候補の選択 → input に /trigger<space> をセット
+  const selectSuggestion = useCallback((skill: Skill) => {
+    const trigger = skill.trigger || `/${skill.id}`;
+    setInput(trigger + ' ');
+    setSlashSuggestions([]);
+    setSuggestionIndex(0);
+    requestAnimationFrame(() => {
+      const ta = inputRef.current;
+      if (ta) {
+        ta.focus();
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+      }
+    });
+  }, []);
+
+  // テキストエリア自動リサイズ + スラッシュコマンド候補
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
+    const value = e.target.value;
+    setInput(value);
+
+    if (value.startsWith('/') && !value.includes('\n')) {
+      const spaceIdx = value.indexOf(' ');
+      if (spaceIdx < 0) {
+        // スペース前 → 候補ドロップダウン
+        const query = value.slice(1).toLowerCase();
+        const filtered = skills.filter((s) => {
+          const t = (s.trigger || `/${s.id}`).slice(1).toLowerCase();
+          return t.startsWith(query) || s.name.toLowerCase().includes(query);
+        });
+        setSlashSuggestions(filtered);
+        setSuggestionIndex(0);
+      } else {
+        setSlashSuggestions([]);
+      }
+    } else {
+      setSlashSuggestions([]);
+    }
+
     const textarea = e.target;
     textarea.style.height = 'auto';
     textarea.style.height = Math.min(textarea.scrollHeight, 160) + 'px';
@@ -917,21 +1061,87 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
           </div>
         )}
 
+        {/* 入力カード + 候補ドロップダウンのラッパー（relative で浮かせる） */}
+        <div className="relative">
+
+        {/* スラッシュコマンド候補ドロップダウン（入力欄の真上に絶対配置） */}
+        {slashSuggestions.length > 0 && (
+          <div className="absolute bottom-full left-0 right-0 mb-1 bg-aria-surface border border-aria-border rounded-xl overflow-hidden shadow-xl z-50">
+            {slashSuggestions.map((skill, idx) => (
+              <button
+                key={skill.id}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  selectSuggestion(skill);
+                }}
+                className={`w-full flex items-start gap-3 px-3 py-2 text-left transition-colors ${
+                  idx === suggestionIndex
+                    ? 'bg-aria-primary/20 text-aria-text'
+                    : 'hover:bg-aria-border/40 text-aria-text'
+                }`}
+              >
+                <span className="shrink-0 text-xs font-mono text-aria-primary mt-0.5 pt-px">
+                  {skill.trigger || `/${skill.id}`}
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-xs font-medium truncate">{skill.name}</span>
+                  <span className="block text-xs text-aria-text-muted truncate">{skill.description}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* カード型入力コンテナ */}
         <div className="flex flex-col bg-aria-surface border border-aria-border rounded-2xl focus-within:border-aria-primary transition-colors overflow-hidden">
-          {/* テキストエリア（上段・全幅） */}
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            placeholder={screenWatchMode ? "メッセージを入力... (画面監視ON)" : "メッセージを入力..."}
-            rows={3}
-            className="w-full bg-transparent px-4 pt-3 pb-1 text-sm text-aria-text placeholder:text-aria-text-muted resize-none focus:outline-none"
-            style={{ maxHeight: '200px' }}
-            disabled={isStreaming}
-          />
+          {/* テキストエリア + バックドロップハイライト */}
+          <div className="relative">
+            {/* バックドロップ（/trigger をシアン色でハイライト） */}
+            <div
+              ref={backdropRef}
+              aria-hidden="true"
+              className="absolute inset-0 px-4 pt-3 pb-1 text-sm pointer-events-none select-none overflow-hidden"
+              style={{
+                fontFamily: 'inherit',
+                lineHeight: '1.5',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                overflowWrap: 'break-word',
+              }}
+            >
+              {activeHighlight ? (
+                <>
+                  <span style={{ color: '#38bdf8', fontWeight: 600 }}>{activeHighlight.trigger}</span>
+                  <span style={{ color: 'inherit' }}>{activeHighlight.rest}</span>
+                </>
+              ) : (
+                <span style={{ color: 'transparent' }}>{input}</span>
+              )}
+            </div>
+            {/* 実際の textarea（/trigger がある時だけテキストを透明に） */}
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              onScroll={() => {
+                if (backdropRef.current && inputRef.current) {
+                  backdropRef.current.scrollTop = inputRef.current.scrollTop;
+                }
+              }}
+              placeholder={screenWatchMode ? "メッセージを入力... (画面監視ON)" : "メッセージを入力..."}
+              rows={3}
+              className="relative w-full bg-transparent px-4 pt-3 pb-1 text-sm placeholder:text-aria-text-muted resize-none focus:outline-none"
+              style={{
+                maxHeight: '200px',
+                color: activeHighlight ? 'transparent' : undefined,
+                caretColor: 'var(--aria-text, #e2e8f0)',
+              }}
+              disabled={isStreaming}
+            />
+          </div>
 
           {/* ツールバー（下段） */}
           <div className="flex items-center gap-1 px-2 pb-2 pt-1">
@@ -1038,6 +1248,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
             )}
           </div>
         </div>
+        </div>{/* relative ラッパー end */}
         </div>{/* max-w container end */}
       </div>
     </div>

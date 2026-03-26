@@ -63,6 +63,40 @@ interface MessageBubbleProps {
   onSandboxIframeReady?: (uiId: string, iframe: HTMLIFrameElement | null) => void;
 }
 
+/**
+ * ユーザーメッセージのテキスト表示
+ * displayContent がある場合はそちらを使い、先頭の /trigger をバッジとして強調する
+ */
+function UserMessageContent({ message }: { message: ChatMessage }) {
+  const display = message.displayContent ?? message.content;
+  // 先頭の /trigger（空白なし英数字）を検出
+  const match = display.match(/^(\/\S+)([\s\S]*)$/);
+  if (match) {
+    const trigger = match[1];
+    const rest = match[2].trimStart();
+    return (
+      <p className="whitespace-pre-wrap">
+        <span
+          className="inline-flex items-center gap-0.5 px-2.5 py-0.5 mr-2 rounded-full text-xs font-mono font-bold align-middle"
+          style={{
+            background: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
+            color: '#fff',
+            boxShadow: '0 0 8px rgba(6,182,212,0.55)',
+            letterSpacing: '0.02em',
+          }}
+        >
+          <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.85 }}>
+            <path d="M2 8L8 2M5 2h3v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          {trigger}
+        </span>
+        {rest}
+      </p>
+    );
+  }
+  return <p className="whitespace-pre-wrap">{display}</p>;
+}
+
 /** <think>...</think> ブロックを分離する（ストリーミング途中・タグ欠け対応） */
 function parseThinkBlocks(content: string): {
   thinking: string;
@@ -286,7 +320,7 @@ export default function MessageBubble({
               </div>
             </div>
           ) : isUser ? (
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            <UserMessageContent message={message} />
           ) : (
             <>
               {/* 思考中（ストリーミング中・未完結） */}
