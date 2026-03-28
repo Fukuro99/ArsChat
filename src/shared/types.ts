@@ -12,6 +12,7 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  displayContent?: string;    // UI表示用テキスト（スキル注入時に元の入力を保持）
   imageBase64?: string;       // 添付画像（Base64）
   timestamp: number;
   stats?: ChatMessageStats;   // トークン統計（アシスタントメッセージのみ）
@@ -49,6 +50,8 @@ export interface Persona {
   allowAIEditUserSkills: boolean; // AI がユーザースキルを編集できるか（デフォルト: false）
 }
 
+export type ShellCommandPermission = 'disabled' | 'ask' | 'allow-all';
+
 export interface ArsChatSettings {
   // AI プロバイダー
   provider: AIProvider;
@@ -85,6 +88,8 @@ export interface ArsChatSettings {
   enableInteractiveUI: boolean; // インタラクティブAI機能
   mcpTokenSaving: boolean;      // MCPツール省トークン化（サーバー選択→ツール取得の2段階方式）
   maxToolRounds: number;        // 最大ツール呼び出しラウンド数（0 = 無制限）
+  shellCommandPermission: ShellCommandPermission; // AIシェルコマンド実行の許可モード
+  allowedShellCommands: string[];                 // 今後も許可したコマンド種別リスト（先頭トークン）
   chatIconSize: number;         // チャットアイコンサイズ（px、デフォルト 32）
   autoExtractMemory: boolean;   // 会話後にメモリを自動更新するか（デフォルト: false）
 
@@ -195,6 +200,8 @@ export const DEFAULT_SETTINGS: ArsChatSettings = {
   enableInteractiveUI: true,
   mcpTokenSaving: false,
   maxToolRounds: 10,
+  shellCommandPermission: 'disabled',
+  allowedShellCommands: [],
   chatIconSize: 32,
   autoExtractMemory: false,
 

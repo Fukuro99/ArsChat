@@ -29,7 +29,10 @@ function HistoryPanel({
 }) {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
 
-  useEffect(() => { loadSessions(); }, []);
+  useEffect(() => {
+    loadSessions();
+    return window.arsChatAPI.onSessionUpdated(() => loadSessions());
+  }, []);
 
   const loadSessions = async () => {
     const list = await window.arsChatAPI.listSessions();

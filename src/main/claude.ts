@@ -1272,6 +1272,8 @@ export function createClaudeService(mcpManager?: MCPManager) {
         onToolBefore?: (toolName: string, input: Record<string, unknown>) => void;
         /** ツール実行後コールバック（HookManager の emit に使用） */
         onToolAfter?: (toolName: string, input: Record<string, unknown>, result: string) => void;
+        /** シェルコマンド実行前の承認コールバック（true で許可、false で拒否） */
+        onCommandApprovalRequired?: (command: string, cwd?: string) => Promise<boolean>;
       },
     ): Promise<void> {
       currentAbortController = new AbortController();
