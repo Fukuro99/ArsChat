@@ -12,7 +12,7 @@ process.stdin.on('end', () => {
       'biome.json',
       'tsconfig.json',
       'tsconfig.main.json',
-      '.claude/settings.local.json'
+      '.claude/settings.json'
     ];
 
     const isProtected = protectedFiles.some((p) => file.replace(/\\/g, '/').endsWith(p));
