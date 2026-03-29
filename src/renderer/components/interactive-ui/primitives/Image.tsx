@@ -1,20 +1,12 @@
-import React from 'react';
-import { PrimitiveProps } from '../types';
-import { resolveRounded, resolveSpacing, ALLOWED_PADDING } from '../design-tokens';
+import type React from 'react';
+import { ALLOWED_PADDING, resolveRounded, resolveSpacing } from '../design-tokens';
+import type { PrimitiveProps } from '../types';
 
 export default function Image({ props, value }: PrimitiveProps) {
-  const {
-    src: propSrc,
-    alt = '',
-    width,
-    height,
-    rounded,
-    fit = 'cover',
-    padding,
-  } = props || {};
+  const { src: propSrc, alt = '', width, height, rounded, fit = 'cover', padding } = props || {};
 
   // bind で動的 src を受け取れる（value が優先）
-  const src = (value !== undefined && value !== null && value !== '') ? String(value) : propSrc;
+  const src = value !== undefined && value !== null && value !== '' ? String(value) : propSrc;
 
   if (!src) {
     return (
@@ -57,7 +49,8 @@ export default function Image({ props, value }: PrimitiveProps) {
   }
 
   // 外部URLは許可しない（data:image または blob: のみ許可）
-  const isSafe = src.startsWith('data:image/') || src.startsWith('blob:') || src.startsWith('./') || src.startsWith('/');
+  const isSafe =
+    src.startsWith('data:image/') || src.startsWith('blob:') || src.startsWith('./') || src.startsWith('/');
   if (!isSafe) {
     return (
       <div
@@ -78,12 +71,5 @@ export default function Image({ props, value }: PrimitiveProps) {
     );
   }
 
-  return (
-    <img
-      src={src}
-      alt={alt}
-      style={style}
-      draggable={false}
-    />
-  );
+  return <img src={src} alt={alt} style={style} draggable={false} />;
 }

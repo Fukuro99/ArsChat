@@ -1,12 +1,19 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { marked } from 'marked';
-import { ChatMessage, ChatMessageStats, ArsChatSettings, DEFAULT_SETTINGS, getEffectiveAvatarPath, Skill } from '../../shared/types';
-import MessageBubble from './MessageBubble';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type ArsChatSettings,
+  type ChatMessage,
+  type ChatMessageStats,
+  DEFAULT_SETTINGS,
+  getEffectiveAvatarPath,
+  type Skill,
+} from '../../shared/types';
 import { parseInteractiveUI, parseUIUpdate } from './interactive-ui/parser';
-import { BlockRenderer } from './interactive-ui/UIRenderer';
 import { SandboxRenderer } from './interactive-ui/SandboxRenderer';
-import { SandboxHTMLBlock } from './interactive-ui/types';
-import { mergePatch, LiveUIAction } from './interactive-ui/state-manager';
+import { type LiveUIAction, mergePatch } from './interactive-ui/state-manager';
+import type { SandboxHTMLBlock } from './interactive-ui/types';
+import { BlockRenderer } from './interactive-ui/UIRenderer';
+import MessageBubble from './MessageBubble';
 import './interactive-ui/styles.css';
 
 interface ChatWindowProps {
@@ -44,7 +51,12 @@ function getClipboardImageFile(clipboardData: DataTransfer | null): File | null 
   return file || null;
 }
 
-export default function ChatWindow({ sessionId, onSessionCreated, settingsVersion = 0, openFilePaths }: ChatWindowProps) {
+export default function ChatWindow({
+  sessionId,
+  onSessionCreated,
+  settingsVersion = 0,
+  openFilePaths,
+}: ChatWindowProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [pendingImageBase64, setPendingImageBase64] = useState<string | null>(null);
@@ -94,7 +106,10 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
   const [liveResponseText, setLiveResponseText] = useState<string | null>(null);
 
   // アクティブなライブUIブロック（プリミティブ or サンドボックス、未終了のもの）を検出
-  const activeLiveUI = useMemo((): { type: 'primitive'; block: any } | { type: 'sandbox'; block: SandboxHTMLBlock } | null => {
+  const activeLiveUI = useMemo(():
+    | { type: 'primitive'; block: any }
+    | { type: 'sandbox'; block: SandboxHTMLBlock }
+    | null => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
       if (msg.role !== 'assistant') continue;
@@ -180,7 +195,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     window.arsChatAPI.getSettings().then((fresh) => {
       void reloadSkills(fresh.activePersonaId);
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingsVersion]);
 
   // activePersonaId が変わったときも再取得
@@ -327,23 +342,26 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
   }, []);
 
   // セッション保存
-  const saveSession = useCallback(async (msgs: ChatMessage[]) => {
-    let sid = currentSessionIdRef.current;
-    if (!sid) {
-      sid = crypto.randomUUID();
-      currentSessionIdRef.current = sid;
-      onSessionCreated(sid);
-    }
+  const saveSession = useCallback(
+    async (msgs: ChatMessage[]) => {
+      let sid = currentSessionIdRef.current;
+      if (!sid) {
+        sid = crypto.randomUUID();
+        currentSessionIdRef.current = sid;
+        onSessionCreated(sid);
+      }
 
-    const title = msgs[0]?.content.slice(0, 50) || '新しい会話';
-    await window.arsChatAPI.createSession({
-      id: sid,
-      title,
-      messages: msgs,
-      createdAt: msgs[0]?.timestamp || Date.now(),
-      updatedAt: Date.now(),
-    });
-  }, [onSessionCreated]);
+      const title = msgs[0]?.content.slice(0, 50) || '新しい会話';
+      await window.arsChatAPI.createSession({
+        id: sid,
+        title,
+        messages: msgs,
+        createdAt: msgs[0]?.timestamp || Date.now(),
+        updatedAt: Date.now(),
+      });
+    },
+    [onSessionCreated],
+  );
 
   // ===== メッセージアクション =====
 
@@ -353,62 +371,74 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
   }, []);
 
   /** 削除 */
-  const handleDeleteMessage = useCallback((messageId: string) => {
-    setMessages((prev) => {
-      const newMsgs = prev.filter((m) => m.id !== messageId);
-      saveSession(newMsgs);
-      return newMsgs;
-    });
-  }, [saveSession]);
+  const handleDeleteMessage = useCallback(
+    (messageId: string) => {
+      setMessages((prev) => {
+        const newMsgs = prev.filter((m) => m.id !== messageId);
+        saveSession(newMsgs);
+        return newMsgs;
+      });
+    },
+    [saveSession],
+  );
 
   /** 再生成（このアシスタントメッセージ以降を削除して再送） */
-  const handleRegenerateMessage = useCallback((messageId: string) => {
-    setMessages((prev) => {
-      const idx = prev.findIndex((m) => m.id === messageId);
-      if (idx === -1) return prev;
-      const truncated = prev.slice(0, idx); // このメッセージを除いたそれ以前
-      setIsStreaming(true);
-      setStreamingContent('');
-      window.arsChatAPI.sendMessage(truncated, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
-      return truncated;
-    });
-  }, [thinkMode]);
+  const handleRegenerateMessage = useCallback(
+    (messageId: string) => {
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === messageId);
+        if (idx === -1) return prev;
+        const truncated = prev.slice(0, idx); // このメッセージを除いたそれ以前
+        setIsStreaming(true);
+        setStreamingContent('');
+        window.arsChatAPI.sendMessage(truncated, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
+        return truncated;
+      });
+    },
+    [thinkMode],
+  );
 
   /** 続きを生成 */
-  const handleContinueMessage = useCallback((messageId: string) => {
-    setMessages((prev) => {
-      const idx = prev.findIndex((m) => m.id === messageId);
-      if (idx === -1) return prev;
-      const continueMsg: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: 'user',
-        content: '続けてください',
-        timestamp: Date.now(),
-      };
-      const newMsgs = [...prev.slice(0, idx + 1), continueMsg];
-      setIsStreaming(true);
-      setStreamingContent('');
-      window.arsChatAPI.sendMessage(newMsgs, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
-      return newMsgs;
-    });
-  }, [thinkMode]);
+  const handleContinueMessage = useCallback(
+    (messageId: string) => {
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === messageId);
+        if (idx === -1) return prev;
+        const continueMsg: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: 'user',
+          content: '続けてください',
+          timestamp: Date.now(),
+        };
+        const newMsgs = [...prev.slice(0, idx + 1), continueMsg];
+        setIsStreaming(true);
+        setStreamingContent('');
+        window.arsChatAPI.sendMessage(newMsgs, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
+        return newMsgs;
+      });
+    },
+    [thinkMode],
+  );
 
   /** ブランチ（この時点までで新セッションを作成） */
-  const handleBranchMessage = useCallback(async (messageId: string) => {
-    const idx = messages.findIndex((m) => m.id === messageId);
-    if (idx === -1) return;
-    const branchedMsgs = messages.slice(0, idx + 1);
-    const newSessionId = crypto.randomUUID();
-    const title = branchedMsgs[0]?.content.slice(0, 50) || '分岐した会話';
-    await window.arsChatAPI.createSession({
-      id: newSessionId,
-      title: `[分岐] ${title}`,
-      messages: branchedMsgs,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-    onSessionCreated(newSessionId);
-  }, [messages, onSessionCreated]);
+  const handleBranchMessage = useCallback(
+    async (messageId: string) => {
+      const idx = messages.findIndex((m) => m.id === messageId);
+      if (idx === -1) return;
+      const branchedMsgs = messages.slice(0, idx + 1);
+      const newSessionId = crypto.randomUUID();
+      const title = branchedMsgs[0]?.content.slice(0, 50) || '分岐した会話';
+      await window.arsChatAPI.createSession({
+        id: newSessionId,
+        title: `[分岐] ${title}`,
+        messages: branchedMsgs,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      onSessionCreated(newSessionId);
+    },
+    [messages, onSessionCreated],
+  );
 
   /** 編集開始 */
   const handleEditStart = useCallback((messageId: string) => {
@@ -416,14 +446,17 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
   }, []);
 
   /** 編集保存 */
-  const handleEditSave = useCallback((messageId: string, newContent: string) => {
-    setEditingMessageId(null);
-    setMessages((prev) => {
-      const newMsgs = prev.map((m) => m.id === messageId ? { ...m, content: newContent } : m);
-      saveSession(newMsgs);
-      return newMsgs;
-    });
-  }, [saveSession]);
+  const handleEditSave = useCallback(
+    (messageId: string, newContent: string) => {
+      setEditingMessageId(null);
+      setMessages((prev) => {
+        const newMsgs = prev.map((m) => (m.id === messageId ? { ...m, content: newContent } : m));
+        saveSession(newMsgs);
+        return newMsgs;
+      });
+    },
+    [saveSession],
+  );
 
   /** 編集キャンセル */
   const handleEditCancel = useCallback(() => {
@@ -431,25 +464,28 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
   }, []);
 
   /** Interactive UIアクションハンドラ（defaultモード） */
-  const handleInteractiveUIAction = useCallback((uiId: string, action: string, data: Record<string, any>) => {
-    // 送信済みとして記録
-    submittedUIBlockIdsRef.current.add(uiId);
+  const handleInteractiveUIAction = useCallback(
+    (uiId: string, action: string, data: Record<string, any>) => {
+      // 送信済みとして記録
+      submittedUIBlockIdsRef.current.add(uiId);
 
-    // 構造化データをユーザーメッセージとして整形（チャットには表示しないが文脈として保持）
-    const responseContent = `[interactive-ui-response]\n${JSON.stringify({ ui_id: uiId, action, data })}`;
-    const hiddenUserMsg: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: responseContent,
-      timestamp: Date.now(),
-    };
-    // messagesに追加（AIへの文脈のため）、ただし描画はフィルタして非表示にする
-    const newMessages = [...messages, hiddenUserMsg];
-    setMessages(newMessages);
-    setIsStreaming(true);
-    setStreamingContent('');
-    window.arsChatAPI.sendMessage(newMessages, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
-  }, [messages, thinkMode]);
+      // 構造化データをユーザーメッセージとして整形（チャットには表示しないが文脈として保持）
+      const responseContent = `[interactive-ui-response]\n${JSON.stringify({ ui_id: uiId, action, data })}`;
+      const hiddenUserMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: responseContent,
+        timestamp: Date.now(),
+      };
+      // messagesに追加（AIへの文脈のため）、ただし描画はフィルタして非表示にする
+      const newMessages = [...messages, hiddenUserMsg];
+      setMessages(newMessages);
+      setIsStreaming(true);
+      setStreamingContent('');
+      window.arsChatAPI.sendMessage(newMessages, currentSessionIdRef.current || '', { thinkMode, openFilePaths });
+    },
+    [messages, thinkMode],
+  );
 
   /** ライブUIのローカルstate更新（local: true アクション用・AI送信なし） */
   const handleLiveLocalStateChange = useCallback((uiId: string, keyPath: string, value: any) => {
@@ -491,128 +527,119 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
    * ローリングコンテキストを構築する。
    * 元の会話コンテキスト（最初のメッセージまで）＋現在のstate＋直近の操作履歴。
    */
-  const buildLiveUIContext = useCallback((
-    uiId: string,
-    action: string,
-    data: Record<string, any>,
-    currentState: Record<string, any>,
-  ): ChatMessage[] => {
-    const contextMessages: ChatMessage[] = [];
+  const buildLiveUIContext = useCallback(
+    (uiId: string, action: string, data: Record<string, any>, currentState: Record<string, any>): ChatMessage[] => {
+      const contextMessages: ChatMessage[] = [];
 
-    // 元の会話から最初のユーザーメッセージとAI応答（UIブロックを含む）を取り込む
-    // interactive-ui-response は含めない（サイレントなので）
-    const baseMessages = messages.filter(
-      (m) => !m.content.startsWith('[interactive-ui-response]')
-    );
-    // 最大6メッセージ（システムプロンプトが長くならないように）
-    const recentBaseMessages = baseMessages.slice(-6);
-    for (const m of recentBaseMessages) {
-      contextMessages.push({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        timestamp: m.timestamp,
-      });
-    }
+      // 元の会話から最初のユーザーメッセージとAI応答（UIブロックを含む）を取り込む
+      // interactive-ui-response は含めない（サイレントなので）
+      const baseMessages = messages.filter((m) => !m.content.startsWith('[interactive-ui-response]'));
+      // 最大6メッセージ（システムプロンプトが長くならないように）
+      const recentBaseMessages = baseMessages.slice(-6);
+      for (const m of recentBaseMessages) {
+        contextMessages.push({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp,
+        });
+      }
 
-    // 現在のstate（サマリ）を追加
-    contextMessages.push({
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: `[Live UI State]\n${JSON.stringify({ ui_id: uiId, current_state: currentState })}`,
-      timestamp: Date.now(),
-    });
-
-    // 直近の操作履歴（最新6手）を追加
-    const actions = liveUIActionsRef.current.get(uiId) || [];
-    const recentActions = actions.slice(-6);
-    for (const a of recentActions) {
+      // 現在のstate（サマリ）を追加
       contextMessages.push({
         id: crypto.randomUUID(),
         role: 'user',
-        content: JSON.stringify({ _type: 'live_ui_action', ui_id: a.uiId, action: a.action, data: a.data }),
-        timestamp: a.timestamp,
+        content: `[Live UI State]\n${JSON.stringify({ ui_id: uiId, current_state: currentState })}`,
+        timestamp: Date.now(),
       });
-    }
 
-    // 今回のアクション
-    contextMessages.push({
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: JSON.stringify({ _type: 'live_ui_action', ui_id: uiId, action, data }),
-      timestamp: Date.now(),
-    });
+      // 直近の操作履歴（最新6手）を追加
+      const actions = liveUIActionsRef.current.get(uiId) || [];
+      const recentActions = actions.slice(-6);
+      for (const a of recentActions) {
+        contextMessages.push({
+          id: crypto.randomUUID(),
+          role: 'user',
+          content: JSON.stringify({ _type: 'live_ui_action', ui_id: a.uiId, action: a.action, data: a.data }),
+          timestamp: a.timestamp,
+        });
+      }
 
-    return contextMessages;
-  }, [messages]);
+      // 今回のアクション
+      contextMessages.push({
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: JSON.stringify({ _type: 'live_ui_action', ui_id: uiId, action, data }),
+        timestamp: Date.now(),
+      });
+
+      return contextMessages;
+    },
+    [messages],
+  );
 
   /** ライブUIアクションハンドラ（liveモード） */
-  const handleLiveUIAction = useCallback(async (
-    uiId: string,
-    action: string,
-    data: Record<string, any>,
-    currentState: Record<string, any>,
-  ) => {
-    // 1. 楽観的更新（UIのstateを即座に更新）
-    // アクション情報をstateに反映（例: buttonクリック等）
-    const optimisticState = { ...currentState };
-    setLiveUIState(uiId, optimisticState);
+  const handleLiveUIAction = useCallback(
+    async (uiId: string, action: string, data: Record<string, any>, currentState: Record<string, any>) => {
+      // 1. 楽観的更新（UIのstateを即座に更新）
+      // アクション情報をstateに反映（例: buttonクリック等）
+      const optimisticState = { ...currentState };
+      setLiveUIState(uiId, optimisticState);
 
-    // 操作履歴を記録
-    const newAction: LiveUIAction = { uiId, action, data, timestamp: Date.now() };
-    const prevActions = liveUIActionsRef.current.get(uiId) || [];
-    liveUIActionsRef.current.set(uiId, [...prevActions, newAction]);
+      // 操作履歴を記録
+      const newAction: LiveUIAction = { uiId, action, data, timestamp: Date.now() };
+      const prevActions = liveUIActionsRef.current.get(uiId) || [];
+      liveUIActionsRef.current.set(uiId, [...prevActions, newAction]);
 
-    // 2. サイレントメッセージを構築
-    const contextMessages = buildLiveUIContext(uiId, action, data, currentState);
+      // 2. サイレントメッセージを構築
+      const contextMessages = buildLiveUIContext(uiId, action, data, currentState);
 
-    setIsLiveProcessing(true);
-    try {
-      // 3. AIにサイレント送信
-      const response = await window.arsChatAPI.sendSilentMessage(
-        contextMessages,
-        currentSessionIdRef.current || '',
-      );
+      setIsLiveProcessing(true);
+      try {
+        // 3. AIにサイレント送信
+        const response = await window.arsChatAPI.sendSilentMessage(contextMessages, currentSessionIdRef.current || '');
 
-      if (response.error) {
-        console.error('[LiveUI] サイレント送信エラー:', response.error);
-        return;
-      }
-
-      const responseContent = response.content || '';
-
-      // 4. interactive-ui-update を抽出してstate更新
-      const updatePatch = parseUIUpdate(responseContent);
-      if (updatePatch && updatePatch.id === uiId) {
-        const latestState = liveUIStates.get(uiId) ?? currentState;
-        const newState = mergePatch(latestState, updatePatch.patch);
-        setLiveUIState(uiId, newState);
-
-        // サンドボックスiframeにもパッチを転送（サンドボックスブロックの場合）
-        const sandboxIframe = sandboxIframeRefs.current.get(uiId);
-        if (sandboxIframe?.contentWindow) {
-          sandboxIframe.contentWindow.postMessage(
-            { type: 'interactive-ui-update', uiId, patch: updatePatch.patch },
-            '*',
-          );
+        if (response.error) {
+          console.error('[LiveUI] サイレント送信エラー:', response.error);
+          return;
         }
-      }
 
-      // 5. 通常テキスト部分があれば固定ゾーンにインプレース表示（チャットに追加しない）
-      const textContent = responseContent
-        .replace(/<think>[\s\S]*?<\/think>/g, '')
-        .replace(/```interactive-ui-update[\s\S]*?```/g, '')
-        .trim();
+        const responseContent = response.content || '';
 
-      if (textContent) {
-        setLiveResponseText(textContent);
+        // 4. interactive-ui-update を抽出してstate更新
+        const updatePatch = parseUIUpdate(responseContent);
+        if (updatePatch && updatePatch.id === uiId) {
+          const latestState = liveUIStates.get(uiId) ?? currentState;
+          const newState = mergePatch(latestState, updatePatch.patch);
+          setLiveUIState(uiId, newState);
+
+          // サンドボックスiframeにもパッチを転送（サンドボックスブロックの場合）
+          const sandboxIframe = sandboxIframeRefs.current.get(uiId);
+          if (sandboxIframe?.contentWindow) {
+            sandboxIframe.contentWindow.postMessage(
+              { type: 'interactive-ui-update', uiId, patch: updatePatch.patch },
+              '*',
+            );
+          }
+        }
+
+        // 5. 通常テキスト部分があれば固定ゾーンにインプレース表示（チャットに追加しない）
+        const textContent = responseContent
+          .replace(/<think>[\s\S]*?<\/think>/g, '')
+          .replace(/```interactive-ui-update[\s\S]*?```/g, '')
+          .trim();
+
+        if (textContent) {
+          setLiveResponseText(textContent);
+        }
+      } catch (err: any) {
+        console.error('[LiveUI] サイレント送信に失敗しました:', err?.message);
+      } finally {
+        setIsLiveProcessing(false);
       }
-    } catch (err: any) {
-      console.error('[LiveUI] サイレント送信に失敗しました:', err?.message);
-    } finally {
-      setIsLiveProcessing(false);
-    }
-  }, [buildLiveUIContext, liveUIStates, saveSession, setLiveUIState]);
+    },
+    [buildLiveUIContext, liveUIStates, saveSession, setLiveUIState],
+  );
 
   // メッセージ送信
   const handleSend = useCallback(async () => {
@@ -723,22 +750,28 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
     }
   }, []);
 
-  const attachImageFromClipboardData = useCallback((clipboardData: DataTransfer | null): boolean => {
-    const file = getClipboardImageFile(clipboardData);
-    if (!file) return false;
-    void handleAttachImageFromFile(file);
-    return true;
-  }, [handleAttachImageFromFile]);
+  const attachImageFromClipboardData = useCallback(
+    (clipboardData: DataTransfer | null): boolean => {
+      const file = getClipboardImageFile(clipboardData);
+      if (!file) return false;
+      void handleAttachImageFromFile(file);
+      return true;
+    },
+    [handleAttachImageFromFile],
+  );
 
-  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    if (isStreaming) return;
-    if (attachImageFromClipboardData(e.clipboardData)) {
-      e.preventDefault();
-      e.stopPropagation();
-      return;
-    }
-    void attachImageFromSystemClipboard(false);
-  }, [attachImageFromClipboardData, attachImageFromSystemClipboard, isStreaming]);
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      if (isStreaming) return;
+      if (attachImageFromClipboardData(e.clipboardData)) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      void attachImageFromSystemClipboard(false);
+    },
+    [attachImageFromClipboardData, attachImageFromSystemClipboard, isStreaming],
+  );
 
   useEffect(() => {
     const onWindowPaste = (e: ClipboardEvent) => {
@@ -847,141 +880,145 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden relative">
-
       {/* ===== チャット履歴（通常モード・ライブモード共通） ===== */}
       <div className="flex-1 overflow-y-auto py-4">
         <div className="max-w-3xl mx-auto px-4 space-y-4">
-        {messages.length === 0 && !isStreaming && (
-          <div className="flex flex-col items-center justify-center text-center py-20">
-            <div className="w-16 h-16 rounded-2xl bg-aria-primary/20 flex items-center justify-center mb-4">
-              <span className="text-2xl font-bold text-aria-primary">A</span>
+          {messages.length === 0 && !isStreaming && (
+            <div className="flex flex-col items-center justify-center text-center py-20">
+              <div className="w-16 h-16 rounded-2xl bg-aria-primary/20 flex items-center justify-center mb-4">
+                <span className="text-2xl font-bold text-aria-primary">A</span>
+              </div>
+              <h2 className="text-lg font-semibold text-aria-text mb-2">Ars へようこそ</h2>
+              <p className="text-sm text-aria-text-muted max-w-xs">
+                何でも聞いてください。テキストで質問するか、画面キャプチャを添付して質問できます。
+              </p>
             </div>
-            <h2 className="text-lg font-semibold text-aria-text mb-2">Ars へようこそ</h2>
-            <p className="text-sm text-aria-text-muted max-w-xs">
-              何でも聞いてください。テキストで質問するか、画面キャプチャを添付して質問できます。
-            </p>
-          </div>
-        )}
+          )}
 
-        {messages.map((msg) => {
-          // [interactive-ui-response]メッセージはAIへの文脈用のため描画しない
-          if (msg.content.startsWith('[interactive-ui-response]')) return null;
+          {messages.map((msg) => {
+            // [interactive-ui-response]メッセージはAIへの文脈用のため描画しない
+            if (msg.content.startsWith('[interactive-ui-response]')) return null;
 
-          if (msg.role === 'assistant') {
-            // アシスタントメッセージ本体 + ユーザー側インタラクティブUIブロック
-            const parsed = parseInteractiveUI(msg.content);
-            const userSideBlocks = parsed.blocks.filter((b) => b.mode !== 'live');
-            const userSideSandboxBlocks = parsed.sandboxBlocks.filter((b) => b.mode !== 'live');
+            if (msg.role === 'assistant') {
+              // アシスタントメッセージ本体 + ユーザー側インタラクティブUIブロック
+              const parsed = parseInteractiveUI(msg.content);
+              const userSideBlocks = parsed.blocks.filter((b) => b.mode !== 'live');
+              const userSideSandboxBlocks = parsed.sandboxBlocks.filter((b) => b.mode !== 'live');
 
+              return (
+                <React.Fragment key={msg.id}>
+                  {/* アシスタントメッセージ（interactive-uiブロックは非表示） */}
+                  <MessageBubble
+                    message={msg}
+                    showThinking={thinkMode}
+                    isEditing={editingMessageId === msg.id}
+                    avatarSrc={getEffectiveAvatarPath(settings)}
+                    iconSize={settings.chatIconSize ?? 32}
+                    onCopy={() => handleCopyMessage(msg.content)}
+                    onDelete={() => handleDeleteMessage(msg.id)}
+                    onRegenerate={() => handleRegenerateMessage(msg.id)}
+                    onContinue={() => handleContinueMessage(msg.id)}
+                    onBranch={() => {
+                      void handleBranchMessage(msg.id);
+                    }}
+                    onEditStart={() => handleEditStart(msg.id)}
+                    onEditSave={(newContent) => handleEditSave(msg.id, newContent)}
+                    onEditCancel={handleEditCancel}
+                    onLiveUIAction={handleLiveUIAction}
+                    liveUIStates={liveUIStates}
+                    hideLiveUIBlocks={isLiveMode}
+                    hideInteractiveUIBlocks={true}
+                    onSandboxIframeReady={handleSandboxIframeReady}
+                  />
+
+                  {/* ユーザー側: defaultモードのインタラクティブUIブロック */}
+                  {userSideBlocks.map((block) => (
+                    <div key={block.id} className="flex gap-2.5 flex-row-reverse">
+                      <div className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold bg-emerald-500/20 text-emerald-400">
+                        U
+                      </div>
+                      <div className="max-w-[85%]">
+                        <div className="rounded-2xl px-2 py-2 bg-aria-primary/15 text-aria-text rounded-br-md">
+                          <BlockRenderer
+                            key={block.id}
+                            block={block}
+                            onSubmit={(uiId, action, data) => handleInteractiveUIAction(uiId, action, data)}
+                            onAction={(uiId, actionId, data) => handleInteractiveUIAction(uiId, actionId, data || {})}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* ユーザー側: defaultモードのサンドボックスHTMLブロック */}
+                  {userSideSandboxBlocks.map((sandboxBlock) => (
+                    <div key={sandboxBlock.id} className="flex gap-2.5 flex-row-reverse">
+                      <div className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold bg-emerald-500/20 text-emerald-400">
+                        U
+                      </div>
+                      <div className="max-w-[85%] w-full">
+                        <div className="rounded-2xl overflow-hidden bg-aria-primary/15 rounded-br-md">
+                          <SandboxRenderer
+                            block={sandboxBlock}
+                            onAction={(uiId, action, data) => handleInteractiveUIAction(uiId, action, data)}
+                            onIframeReady={handleSandboxIframeReady}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </React.Fragment>
+              );
+            }
+
+            // ユーザーメッセージ
             return (
-              <React.Fragment key={msg.id}>
-                {/* アシスタントメッセージ（interactive-uiブロックは非表示） */}
-                <MessageBubble
-                  message={msg}
-                  showThinking={thinkMode}
-                  isEditing={editingMessageId === msg.id}
-                  avatarSrc={getEffectiveAvatarPath(settings)}
-                  iconSize={settings.chatIconSize ?? 32}
-                  onCopy={() => handleCopyMessage(msg.content)}
-                  onDelete={() => handleDeleteMessage(msg.id)}
-                  onRegenerate={() => handleRegenerateMessage(msg.id)}
-                  onContinue={() => handleContinueMessage(msg.id)}
-                  onBranch={() => { void handleBranchMessage(msg.id); }}
-                  onEditStart={() => handleEditStart(msg.id)}
-                  onEditSave={(newContent) => handleEditSave(msg.id, newContent)}
-                  onEditCancel={handleEditCancel}
-                  onLiveUIAction={handleLiveUIAction}
-                  liveUIStates={liveUIStates}
-                  hideLiveUIBlocks={isLiveMode}
-                  hideInteractiveUIBlocks={true}
-                  onSandboxIframeReady={handleSandboxIframeReady}
-                />
-
-                {/* ユーザー側: defaultモードのインタラクティブUIブロック */}
-                {userSideBlocks.map((block) => (
-                  <div key={block.id} className="flex gap-2.5 flex-row-reverse">
-                    <div className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold bg-emerald-500/20 text-emerald-400">
-                      U
-                    </div>
-                    <div className="max-w-[85%]">
-                      <div className="rounded-2xl px-2 py-2 bg-aria-primary/15 text-aria-text rounded-br-md">
-                        <BlockRenderer
-                          key={block.id}
-                          block={block}
-                          onSubmit={(uiId, action, data) => handleInteractiveUIAction(uiId, action, data)}
-                          onAction={(uiId, actionId, data) => handleInteractiveUIAction(uiId, actionId, data || {})}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-                {/* ユーザー側: defaultモードのサンドボックスHTMLブロック */}
-                {userSideSandboxBlocks.map((sandboxBlock) => (
-                  <div key={sandboxBlock.id} className="flex gap-2.5 flex-row-reverse">
-                    <div className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold bg-emerald-500/20 text-emerald-400">
-                      U
-                    </div>
-                    <div className="max-w-[85%] w-full">
-                      <div className="rounded-2xl overflow-hidden bg-aria-primary/15 rounded-br-md">
-                        <SandboxRenderer
-                          block={sandboxBlock}
-                          onAction={(uiId, action, data) => handleInteractiveUIAction(uiId, action, data)}
-                          onIframeReady={handleSandboxIframeReady}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </React.Fragment>
+              <MessageBubble
+                key={msg.id}
+                message={msg}
+                showThinking={thinkMode}
+                isEditing={editingMessageId === msg.id}
+                avatarSrc={getEffectiveAvatarPath(settings)}
+                iconSize={settings.chatIconSize ?? 32}
+                onCopy={() => handleCopyMessage(msg.content)}
+                onDelete={() => handleDeleteMessage(msg.id)}
+                onBranch={() => {
+                  void handleBranchMessage(msg.id);
+                }}
+                onEditStart={() => handleEditStart(msg.id)}
+                onEditSave={(newContent) => handleEditSave(msg.id, newContent)}
+                onEditCancel={handleEditCancel}
+              />
             );
-          }
+          })}
 
-          // ユーザーメッセージ
-          return (
+          {/* ストリーミング中の表示 */}
+          {isStreaming && (
             <MessageBubble
-              key={msg.id}
-              message={msg}
+              message={{
+                id: 'streaming',
+                role: 'assistant',
+                content: streamingContent,
+                timestamp: Date.now(),
+              }}
+              isStreaming
               showThinking={thinkMode}
-              isEditing={editingMessageId === msg.id}
               avatarSrc={getEffectiveAvatarPath(settings)}
               iconSize={settings.chatIconSize ?? 32}
-              onCopy={() => handleCopyMessage(msg.content)}
-              onDelete={() => handleDeleteMessage(msg.id)}
-              onBranch={() => { void handleBranchMessage(msg.id); }}
-              onEditStart={() => handleEditStart(msg.id)}
-              onEditSave={(newContent) => handleEditSave(msg.id, newContent)}
-              onEditCancel={handleEditCancel}
+              onSandboxIframeReady={handleSandboxIframeReady}
             />
-          );
-        })}
+          )}
 
-        {/* ストリーミング中の表示 */}
-        {isStreaming && (
-          <MessageBubble
-            message={{
-              id: 'streaming',
-              role: 'assistant',
-              content: streamingContent,
-              timestamp: Date.now(),
-            }}
-            isStreaming
-            showThinking={thinkMode}
-            avatarSrc={getEffectiveAvatarPath(settings)}
-            iconSize={settings.chatIconSize ?? 32}
-            onSandboxIframeReady={handleSandboxIframeReady}
-          />
-        )}
+          {/* エラー表示 */}
+          {error && (
+            <div className="mx-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
+              {error}
+            </div>
+          )}
 
-        {/* エラー表示 */}
-        {error && (
-          <div className="mx-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
-            {error}
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
-        </div>{/* max-w container end */}
+          <div ref={messagesEndRef} />
+        </div>
+        {/* max-w container end */}
       </div>
 
       {/* ===== ライブモード: 固定UIゾーン（入力欄の上に固定） ===== */}
@@ -1020,9 +1057,18 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
             <div className="mt-2 min-h-[1.5rem]">
               {isLiveProcessing ? (
                 <div className="flex items-center gap-1.5 py-1">
-                  <div className="w-1.5 h-1.5 rounded-full bg-aria-primary animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="w-1.5 h-1.5 rounded-full bg-aria-primary animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-1.5 h-1.5 rounded-full bg-aria-primary animate-bounce" style={{ animationDelay: '300ms' }} />
+                  <div
+                    className="w-1.5 h-1.5 rounded-full bg-aria-primary animate-bounce"
+                    style={{ animationDelay: '0ms' }}
+                  />
+                  <div
+                    className="w-1.5 h-1.5 rounded-full bg-aria-primary animate-bounce"
+                    style={{ animationDelay: '150ms' }}
+                  />
+                  <div
+                    className="w-1.5 h-1.5 rounded-full bg-aria-primary animate-bounce"
+                    style={{ animationDelay: '300ms' }}
+                  />
                 </div>
               ) : liveResponseHtml ? (
                 <div
@@ -1038,218 +1084,249 @@ export default function ChatWindow({ sessionId, onSessionCreated, settingsVersio
       {/* 入力エリア（常に下部・全幅） */}
       <div className="shrink-0 border-t border-aria-border bg-aria-bg-light p-3">
         <div className="max-w-3xl mx-auto">
-        {/* 添付画像プレビュー */}
-        {pendingImageBase64 && (
-          <div className="mb-2 p-2 bg-aria-surface rounded-xl border border-aria-border">
-            <div className="flex items-start justify-between gap-2">
-              <img
-                src={`data:image/png;base64,${pendingImageBase64}`}
-                alt="キャプチャ画像"
-                className="rounded-lg max-w-full max-h-36 object-contain"
-              />
-              <button
-                onClick={() => setPendingImageBase64(null)}
-                className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-500/20 text-aria-text-muted hover:text-red-400 transition-colors"
-                title="添付を削除"
-                disabled={isStreaming}
-              >
-                <svg width="12" height="12" viewBox="0 0 12 12">
-                  <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-              </button>
+          {/* 添付画像プレビュー */}
+          {pendingImageBase64 && (
+            <div className="mb-2 p-2 bg-aria-surface rounded-xl border border-aria-border">
+              <div className="flex items-start justify-between gap-2">
+                <img
+                  src={`data:image/png;base64,${pendingImageBase64}`}
+                  alt="キャプチャ画像"
+                  className="rounded-lg max-w-full max-h-36 object-contain"
+                />
+                <button
+                  onClick={() => setPendingImageBase64(null)}
+                  className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-500/20 text-aria-text-muted hover:text-red-400 transition-colors"
+                  title="添付を削除"
+                  disabled={isStreaming}
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12">
+                    <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* 入力カード + 候補ドロップダウンのラッパー（relative で浮かせる） */}
-        <div className="relative">
-
-        {/* スラッシュコマンド候補ドロップダウン（入力欄の真上に絶対配置） */}
-        {slashSuggestions.length > 0 && (
-          <div className="absolute bottom-full left-0 right-0 mb-1 bg-aria-surface border border-aria-border rounded-xl overflow-hidden shadow-xl z-50">
-            {slashSuggestions.map((skill, idx) => (
-              <button
-                key={skill.id}
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  selectSuggestion(skill);
-                }}
-                className={`w-full flex items-start gap-3 px-3 py-2 text-left transition-colors ${
-                  idx === suggestionIndex
-                    ? 'bg-aria-primary/20 text-aria-text'
-                    : 'hover:bg-aria-border/40 text-aria-text'
-                }`}
-              >
-                <span className="shrink-0 text-xs font-mono text-aria-primary mt-0.5 pt-px">
-                  {skill.trigger || `/${skill.id}`}
-                </span>
-                <span className="flex-1 min-w-0">
-                  <span className="block text-xs font-medium truncate">{skill.name}</span>
-                  <span className="block text-xs text-aria-text-muted truncate">{skill.description}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* カード型入力コンテナ */}
-        <div className="flex flex-col bg-aria-surface border border-aria-border rounded-2xl focus-within:border-aria-primary transition-colors overflow-hidden">
-          {/* テキストエリア + バックドロップハイライト */}
+          {/* 入力カード + 候補ドロップダウンのラッパー（relative で浮かせる） */}
           <div className="relative">
-            {/* バックドロップ（/trigger をシアン色でハイライト） */}
-            <div
-              ref={backdropRef}
-              aria-hidden="true"
-              className="absolute inset-0 px-4 pt-3 pb-1 text-sm pointer-events-none select-none overflow-hidden"
-              style={{
-                fontFamily: 'inherit',
-                lineHeight: '1.5',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-                overflowWrap: 'break-word',
-              }}
-            >
-              {activeHighlight ? (
-                <>
-                  <span style={{ color: '#38bdf8', fontWeight: 600 }}>{activeHighlight.trigger}</span>
-                  <span style={{ color: 'inherit' }}>{activeHighlight.rest}</span>
-                </>
-              ) : (
-                <span style={{ color: 'transparent' }}>{input}</span>
-              )}
-            </div>
-            {/* 実際の textarea（/trigger がある時だけテキストを透明に） */}
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              onScroll={() => {
-                if (backdropRef.current && inputRef.current) {
-                  backdropRef.current.scrollTop = inputRef.current.scrollTop;
-                }
-              }}
-              placeholder={screenWatchMode ? "メッセージを入力... (画面監視ON)" : "メッセージを入力..."}
-              rows={3}
-              className="relative w-full bg-transparent px-4 pt-3 pb-1 text-sm placeholder:text-aria-text-muted resize-none focus:outline-none"
-              style={{
-                maxHeight: '200px',
-                color: activeHighlight ? 'transparent' : undefined,
-                caretColor: 'var(--aria-text, #e2e8f0)',
-              }}
-              disabled={isStreaming}
-            />
-          </div>
-
-          {/* ツールバー（下段） */}
-          <div className="flex items-center gap-1 px-2 pb-2 pt-1">
-            {/* 左側：モードトグル・キャプチャ系 */}
-            <div className="flex items-center gap-1 flex-1">
-              {/* 画面監視モードトグル */}
-              <button
-                onClick={() => setScreenWatchMode(!screenWatchMode)}
-                className={`toolbar-btn ${screenWatchMode ? 'toolbar-btn-active-blue' : ''}`}
-                title={screenWatchMode ? '画面監視モード ON' : '画面監視モード OFF'}
-                disabled={isStreaming}
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                  <rect x="2" y="3" width="12" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
-                  <path d="M5 14h6M8 11v3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                  {screenWatchMode && <circle cx="12" cy="5" r="2" fill="currentColor" />}
-                </svg>
-                <span>Watch</span>
-              </button>
-
-              {/* Thinkモードトグル */}
-              <button
-                onClick={() => setThinkMode(!thinkMode)}
-                className={`toolbar-btn ${thinkMode ? 'toolbar-btn-active-amber' : ''}`}
-                title={thinkMode ? 'Thinkモード ON' : 'Thinkモード OFF'}
-                disabled={isStreaming}
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                  <circle cx="8" cy="6.5" r="4" stroke="currentColor" strokeWidth="1.2"/>
-                  <path d="M6 10.5c0 1.5 0.5 2.5 2 3M10 10.5c0 1.5-0.5 2.5-2 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                  <path d="M6.5 14h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                  {thinkMode && <circle cx="8" cy="6" r="1.5" fill="currentColor" />}
-                </svg>
-                <span>Think</span>
-              </button>
-
-              {/* 区切り */}
-              <div className="w-px h-4 bg-aria-border mx-1" />
-
-              {/* 全画面キャプチャ */}
-              <button
-                onClick={handleCaptureScreen}
-                className="toolbar-icon-btn"
-                title="全画面キャプチャを添付"
-                disabled={isStreaming}
-              >
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                  <rect x="2" y="4" width="12" height="9" rx="2" stroke="currentColor" strokeWidth="1.2" />
-                  <path d="M6 4.2l.7-1.2h2.6L10 4.2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                  <circle cx="8" cy="8.5" r="2.1" stroke="currentColor" strokeWidth="1.2" />
-                </svg>
-              </button>
-
-              {/* 範囲キャプチャ */}
-              <button
-                onClick={() => { void handleRegionCapture(); }}
-                className="toolbar-icon-btn"
-                title="範囲キャプチャを添付"
-                disabled={isStreaming}
-              >
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                  <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2" strokeDasharray="2 2" />
-                  <rect x="5" y="5" width="6" height="6" rx="1" fill="currentColor" opacity="0.25" />
-                </svg>
-              </button>
-
-              {/* クリップボード画像 */}
-              <button
-                onClick={() => { void attachImageFromSystemClipboard(true); }}
-                className="toolbar-icon-btn"
-                title="クリップボード画像を添付"
-                disabled={isStreaming}
-              >
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                  <rect x="4" y="3" width="8" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
-                  <path d="M6 3.2V2.6c0-.6.5-1.1 1.1-1.1h1.8c.6 0 1.1.5 1.1 1.1v.6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                  <path d="M6 7h4M6 9.5h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                </svg>
-              </button>
-            </div>
-
-            {/* 右側：送信・停止ボタン */}
-            {isStreaming ? (
-              <button
-                onClick={() => window.arsChatAPI.abortChat()}
-                className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
-                title="停止"
-              >
-                <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
-                  <rect x="3" y="3" width="10" height="10" rx="2"/>
-                </svg>
-              </button>
-            ) : (
-              <button
-                onClick={() => { void handleSend(); }}
-                disabled={!input.trim() && !pendingImageBase64}
-                className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl bg-aria-primary text-white hover:bg-aria-primary-dark disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                title="送信 (Enter)"
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                  <path d="M14 8L2 2l2 6-2 6z" fill="currentColor"/>
-                </svg>
-              </button>
+            {/* スラッシュコマンド候補ドロップダウン（入力欄の真上に絶対配置） */}
+            {slashSuggestions.length > 0 && (
+              <div className="absolute bottom-full left-0 right-0 mb-1 bg-aria-surface border border-aria-border rounded-xl overflow-hidden shadow-xl z-50">
+                {slashSuggestions.map((skill, idx) => (
+                  <button
+                    key={skill.id}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      selectSuggestion(skill);
+                    }}
+                    className={`w-full flex items-start gap-3 px-3 py-2 text-left transition-colors ${
+                      idx === suggestionIndex
+                        ? 'bg-aria-primary/20 text-aria-text'
+                        : 'hover:bg-aria-border/40 text-aria-text'
+                    }`}
+                  >
+                    <span className="shrink-0 text-xs font-mono text-aria-primary mt-0.5 pt-px">
+                      {skill.trigger || `/${skill.id}`}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-xs font-medium truncate">{skill.name}</span>
+                      <span className="block text-xs text-aria-text-muted truncate">{skill.description}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
             )}
+
+            {/* カード型入力コンテナ */}
+            <div className="flex flex-col bg-aria-surface border border-aria-border rounded-2xl focus-within:border-aria-primary transition-colors overflow-hidden">
+              {/* テキストエリア + バックドロップハイライト */}
+              <div className="relative">
+                {/* バックドロップ（/trigger をシアン色でハイライト） */}
+                <div
+                  ref={backdropRef}
+                  aria-hidden="true"
+                  className="absolute inset-0 px-4 pt-3 pb-1 text-sm pointer-events-none select-none overflow-hidden"
+                  style={{
+                    fontFamily: 'inherit',
+                    lineHeight: '1.5',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    overflowWrap: 'break-word',
+                  }}
+                >
+                  {activeHighlight ? (
+                    <>
+                      <span style={{ color: '#38bdf8', fontWeight: 600 }}>{activeHighlight.trigger}</span>
+                      <span style={{ color: 'inherit' }}>{activeHighlight.rest}</span>
+                    </>
+                  ) : (
+                    <span style={{ color: 'transparent' }}>{input}</span>
+                  )}
+                </div>
+                {/* 実際の textarea（/trigger がある時だけテキストを透明に） */}
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={handleInputChange}
+                  onKeyDown={handleKeyDown}
+                  onPaste={handlePaste}
+                  onScroll={() => {
+                    if (backdropRef.current && inputRef.current) {
+                      backdropRef.current.scrollTop = inputRef.current.scrollTop;
+                    }
+                  }}
+                  placeholder={screenWatchMode ? 'メッセージを入力... (画面監視ON)' : 'メッセージを入力...'}
+                  rows={3}
+                  className="relative w-full bg-transparent px-4 pt-3 pb-1 text-sm placeholder:text-aria-text-muted resize-none focus:outline-none"
+                  style={{
+                    maxHeight: '200px',
+                    color: activeHighlight ? 'transparent' : undefined,
+                    caretColor: 'var(--aria-text, #e2e8f0)',
+                  }}
+                  disabled={isStreaming}
+                />
+              </div>
+
+              {/* ツールバー（下段） */}
+              <div className="flex items-center gap-1 px-2 pb-2 pt-1">
+                {/* 左側：モードトグル・キャプチャ系 */}
+                <div className="flex items-center gap-1 flex-1">
+                  {/* 画面監視モードトグル */}
+                  <button
+                    onClick={() => setScreenWatchMode(!screenWatchMode)}
+                    className={`toolbar-btn ${screenWatchMode ? 'toolbar-btn-active-blue' : ''}`}
+                    title={screenWatchMode ? '画面監視モード ON' : '画面監視モード OFF'}
+                    disabled={isStreaming}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                      <rect x="2" y="3" width="12" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+                      <path d="M5 14h6M8 11v3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                      {screenWatchMode && <circle cx="12" cy="5" r="2" fill="currentColor" />}
+                    </svg>
+                    <span>Watch</span>
+                  </button>
+
+                  {/* Thinkモードトグル */}
+                  <button
+                    onClick={() => setThinkMode(!thinkMode)}
+                    className={`toolbar-btn ${thinkMode ? 'toolbar-btn-active-amber' : ''}`}
+                    title={thinkMode ? 'Thinkモード ON' : 'Thinkモード OFF'}
+                    disabled={isStreaming}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                      <circle cx="8" cy="6.5" r="4" stroke="currentColor" strokeWidth="1.2" />
+                      <path
+                        d="M6 10.5c0 1.5 0.5 2.5 2 3M10 10.5c0 1.5-0.5 2.5-2 3"
+                        stroke="currentColor"
+                        strokeWidth="1.2"
+                        strokeLinecap="round"
+                      />
+                      <path d="M6.5 14h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                      {thinkMode && <circle cx="8" cy="6" r="1.5" fill="currentColor" />}
+                    </svg>
+                    <span>Think</span>
+                  </button>
+
+                  {/* 区切り */}
+                  <div className="w-px h-4 bg-aria-border mx-1" />
+
+                  {/* 全画面キャプチャ */}
+                  <button
+                    onClick={handleCaptureScreen}
+                    className="toolbar-icon-btn"
+                    title="全画面キャプチャを添付"
+                    disabled={isStreaming}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                      <rect x="2" y="4" width="12" height="9" rx="2" stroke="currentColor" strokeWidth="1.2" />
+                      <path
+                        d="M6 4.2l.7-1.2h2.6L10 4.2"
+                        stroke="currentColor"
+                        strokeWidth="1.2"
+                        strokeLinecap="round"
+                      />
+                      <circle cx="8" cy="8.5" r="2.1" stroke="currentColor" strokeWidth="1.2" />
+                    </svg>
+                  </button>
+
+                  {/* 範囲キャプチャ */}
+                  <button
+                    onClick={() => {
+                      void handleRegionCapture();
+                    }}
+                    className="toolbar-icon-btn"
+                    title="範囲キャプチャを添付"
+                    disabled={isStreaming}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                      <rect
+                        x="2.5"
+                        y="2.5"
+                        width="11"
+                        height="11"
+                        rx="1.5"
+                        stroke="currentColor"
+                        strokeWidth="1.2"
+                        strokeDasharray="2 2"
+                      />
+                      <rect x="5" y="5" width="6" height="6" rx="1" fill="currentColor" opacity="0.25" />
+                    </svg>
+                  </button>
+
+                  {/* クリップボード画像 */}
+                  <button
+                    onClick={() => {
+                      void attachImageFromSystemClipboard(true);
+                    }}
+                    className="toolbar-icon-btn"
+                    title="クリップボード画像を添付"
+                    disabled={isStreaming}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                      <rect x="4" y="3" width="8" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+                      <path
+                        d="M6 3.2V2.6c0-.6.5-1.1 1.1-1.1h1.8c.6 0 1.1.5 1.1 1.1v.6"
+                        stroke="currentColor"
+                        strokeWidth="1.2"
+                        strokeLinecap="round"
+                      />
+                      <path d="M6 7h4M6 9.5h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* 右側：送信・停止ボタン */}
+                {isStreaming ? (
+                  <button
+                    onClick={() => window.arsChatAPI.abortChat()}
+                    className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
+                    title="停止"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+                      <rect x="3" y="3" width="10" height="10" rx="2" />
+                    </svg>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      void handleSend();
+                    }}
+                    disabled={!input.trim() && !pendingImageBase64}
+                    className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl bg-aria-primary text-white hover:bg-aria-primary-dark disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    title="送信 (Enter)"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                      <path d="M14 8L2 2l2 6-2 6z" fill="currentColor" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
+          {/* relative ラッパー end */}
         </div>
-        </div>{/* relative ラッパー end */}
-        </div>{/* max-w container end */}
+        {/* max-w container end */}
       </div>
     </div>
   );

@@ -1,12 +1,12 @@
+import { exec, execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync, exec } from 'child_process';
 import { promisify } from 'util';
 import {
-  ExtensionRegistryEntry,
-  ExtensionManifest,
-  ExtensionInfo,
+  type ExtensionInfo,
+  type ExtensionManifest,
   ExtensionPermission,
+  type ExtensionRegistryEntry,
 } from '../shared/types';
 
 const execAsync = promisify(exec);
@@ -22,10 +22,7 @@ export interface ExtensionManager {
   getExtensionsDir(): string;
   list(): ExtensionRegistryEntry[];
   listForRenderer(): ExtensionInfo[];
-  install(
-    url: string,
-    onProgress: (p: InstallProgress) => void,
-  ): Promise<ExtensionRegistryEntry>;
+  install(url: string, onProgress: (p: InstallProgress) => void): Promise<ExtensionRegistryEntry>;
   uninstall(extId: string): Promise<void>;
   toggle(extId: string, enabled: boolean): Promise<void>;
   update(extId: string, onProgress: (p: InstallProgress) => void): Promise<void>;
@@ -84,7 +81,12 @@ export function createExtensionManager(dataDir: string): ExtensionManager {
 
   /** URL → リポジトリ名（ディレクトリ名）を返す */
   function repoNameFromUrl(url: string): string {
-    return url.replace(/\.git$/, '').split('/').pop() ?? 'unknown-ext';
+    return (
+      url
+        .replace(/\.git$/, '')
+        .split('/')
+        .pop() ?? 'unknown-ext'
+    );
   }
 
   async function gitClone(url: string, destDir: string): Promise<void> {
@@ -113,9 +115,10 @@ export function createExtensionManager(dataDir: string): ExtensionManager {
   function listForRenderer(): ExtensionInfo[] {
     return readRegistry().map((entry) => {
       // source がローカル絶対パスの場合はそのまま使用、そうでなければ extensionsDir/id
-      const extDir = path.isAbsolute(entry.source) && fs.existsSync(entry.source)
-        ? entry.source
-        : path.join(extensionsDir, entry.id);
+      const extDir =
+        path.isAbsolute(entry.source) && fs.existsSync(entry.source)
+          ? entry.source
+          : path.join(extensionsDir, entry.id);
       const rendererPath = path.join(extDir, entry.manifest.renderer);
       return {
         id: entry.id,
@@ -128,10 +131,7 @@ export function createExtensionManager(dataDir: string): ExtensionManager {
     });
   }
 
-  async function install(
-    url: string,
-    onProgress: (p: InstallProgress) => void,
-  ): Promise<ExtensionRegistryEntry> {
+  async function install(url: string, onProgress: (p: InstallProgress) => void): Promise<ExtensionRegistryEntry> {
     // ローカルパス対応 (file:// または絶対パス)
     const isLocalPath = url.startsWith('file://') || path.isAbsolute(url);
     const localPath = url.startsWith('file://') ? url.slice(7) : url;
@@ -164,9 +164,7 @@ export function createExtensionManager(dataDir: string): ExtensionManager {
     const { version, manifest } = readManifest(extDir);
 
     // ローカルパスの場合は manifest の name または ディレクトリ名を id にする
-    const resolvedId = isLocalPath
-      ? (path.basename(extDir))
-      : id;
+    const resolvedId = isLocalPath ? path.basename(extDir) : id;
 
     // ローカルパスの場合は listForRenderer でも extDir を使う
     if (isLocalPath) {
@@ -196,7 +194,9 @@ export function createExtensionManager(dataDir: string): ExtensionManager {
     // deactivate
     const loaded = loadedModules.get(extId);
     if (loaded?.deactivate) {
-      try { await loaded.deactivate(); } catch {}
+      try {
+        await loaded.deactivate();
+      } catch {}
     }
     loadedModules.delete(extId);
 
@@ -212,16 +212,11 @@ export function createExtensionManager(dataDir: string): ExtensionManager {
   }
 
   async function toggle(extId: string, enabled: boolean): Promise<void> {
-    const entries = readRegistry().map((e) =>
-      e.id === extId ? { ...e, enabled } : e,
-    );
+    const entries = readRegistry().map((e) => (e.id === extId ? { ...e, enabled } : e));
     writeRegistry(entries);
   }
 
-  async function update(
-    extId: string,
-    onProgress: (p: InstallProgress) => void,
-  ): Promise<void> {
+  async function update(extId: string, onProgress: (p: InstallProgress) => void): Promise<void> {
     const entry = readRegistry().find((e) => e.id === extId);
     if (!entry) throw new Error(`拡張 "${extId}" が見つかりません`);
 
@@ -255,9 +250,8 @@ export function createExtensionManager(dataDir: string): ExtensionManager {
     const entry = readRegistry().find((e) => e.id === extId);
     if (!entry) throw new Error(`拡張 "${extId}" が見つかりません`);
 
-    const extDir = path.isAbsolute(entry.source) && fs.existsSync(entry.source)
-      ? entry.source
-      : path.join(extensionsDir, extId);
+    const extDir =
+      path.isAbsolute(entry.source) && fs.existsSync(entry.source) ? entry.source : path.join(extensionsDir, extId);
     const rendererPath = path.join(extDir, entry.manifest.renderer);
 
     if (!fs.existsSync(rendererPath)) {
@@ -284,9 +278,8 @@ export function createExtensionManager(dataDir: string): ExtensionManager {
   ): Promise<void> {
     if (!entry.manifest.main) return; // Main Entry なし（Renderer Only）
 
-    const extDir = path.isAbsolute(entry.source) && fs.existsSync(entry.source)
-      ? entry.source
-      : path.join(extensionsDir, entry.id);
+    const extDir =
+      path.isAbsolute(entry.source) && fs.existsSync(entry.source) ? entry.source : path.join(extensionsDir, entry.id);
     const mainPath = path.join(extDir, entry.manifest.main);
 
     if (!fs.existsSync(mainPath)) {

@@ -1,12 +1,8 @@
 import React from 'react';
-import { PrimitiveProps } from '../types';
+import type { PrimitiveProps } from '../types';
 
 export default function Checkbox({ props, value, onChange }: PrimitiveProps) {
-  const {
-    inputId,
-    label = '',
-    checked,
-  } = props || {};
+  const { inputId, label = '', checked } = props || {};
 
   // value が bind から来る場合は boolean として使う
   const isChecked = value !== undefined ? Boolean(value) : Boolean(checked);

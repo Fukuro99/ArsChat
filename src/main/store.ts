@@ -1,7 +1,14 @@
+import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
-import { app } from 'electron';
-import { ArsChatSettings, DEFAULT_SETTINGS, ChatSession, MCPConfig, DEFAULT_MCP_CONFIG, FileBrowserState } from '../shared/types';
+import {
+  type ArsChatSettings,
+  type ChatSession,
+  DEFAULT_MCP_CONFIG,
+  DEFAULT_SETTINGS,
+  type FileBrowserState,
+  type MCPConfig,
+} from '../shared/types';
 
 const DATA_DIR = path.join(app.getPath('userData'), 'arschat-data');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');

@@ -1,19 +1,12 @@
+import { type BrowserWindow, ipcMain } from 'electron';
 import { autoUpdater } from 'electron-updater';
-import { ipcMain, BrowserWindow } from 'electron';
 
-export type UpdaterStatus =
-  | 'idle'
-  | 'checking'
-  | 'available'
-  | 'not-available'
-  | 'downloading'
-  | 'ready'
-  | 'error';
+export type UpdaterStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'ready' | 'error';
 
 export interface UpdaterInfo {
   status: UpdaterStatus;
-  version?: string;      // 利用可能なバージョン
-  progress?: number;     // ダウンロード進捗 0–100
+  version?: string; // 利用可能なバージョン
+  progress?: number; // ダウンロード進捗 0–100
   error?: string;
 }
 
@@ -33,7 +26,7 @@ export function setupUpdater(win: BrowserWindow): void {
     // 本番環境のみ
   }
 
-  autoUpdater.autoDownload = false;        // ユーザー確認後にダウンロード
+  autoUpdater.autoDownload = false; // ユーザー確認後にダウンロード
   autoUpdater.autoInstallOnAppQuit = true; // 終了時に自動インストール
 
   // ===== イベントリスナー =====

@@ -1,12 +1,9 @@
-import React, { useState } from 'react';
-import { PrimitiveProps } from '../types';
+import type React from 'react';
+import { useState } from 'react';
+import type { PrimitiveProps } from '../types';
 
 export default function Input({ props, value, onChange }: PrimitiveProps) {
-  const {
-    inputId,
-    placeholder = '',
-    multiline = false,
-  } = props || {};
+  const { inputId, placeholder = '', multiline = false } = props || {};
 
   // bind が設定されていない場合（value=undefined）のローカル状態管理
   const [localValue, setLocalValue] = useState<string>('');

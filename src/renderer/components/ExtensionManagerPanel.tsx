@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { marked } from 'marked';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 interface ExtInfo {
   id: string;
@@ -40,7 +40,10 @@ function GearMenu({
 
   const item = (label: string, danger = false, action?: () => void) => (
     <button
-      onClick={() => { action?.(); onClose(); }}
+      onClick={() => {
+        action?.();
+        onClose();
+      }}
       className={`w-full text-left px-3 py-1.5 text-xs hover:bg-aria-surface/80 transition-colors ${
         danger ? 'text-red-400 hover:text-red-300' : 'text-aria-text'
       }`}
@@ -113,22 +116,23 @@ function ExtCard({
         )}
         <p className="text-[10px] text-aria-text-muted mt-1 truncate">
           {publisher}
-          {!ext.enabled && (
-            <span className="ml-2 px-1 py-0.5 rounded bg-aria-border/60 text-[9px]">無効</span>
-          )}
+          {!ext.enabled && <span className="ml-2 px-1 py-0.5 rounded bg-aria-border/60 text-[9px]">無効</span>}
         </p>
       </div>
 
       {/* ギアボタン */}
       <div className="absolute right-2 top-2">
         <button
-          onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setMenuOpen((v) => !v);
+          }}
           className="w-6 h-6 flex items-center justify-center rounded text-aria-text-muted hover:text-aria-text hover:bg-aria-surface opacity-0 group-hover:opacity-100 transition-all"
           title="オプション"
         >
           {/* gear icon — inline SVG（外部ファイル不要） */}
           <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-            <path d="M9.1 1.5a1.1 1.1 0 0 0-2.2 0l-.1.6a5.5 5.5 0 0 0-1.1.6l-.6-.2a1.1 1.1 0 0 0-1.4.8l-.3 1a1.1 1.1 0 0 0 .5 1.3l.5.3a5.5 5.5 0 0 0 0 1.2l-.5.3a1.1 1.1 0 0 0-.5 1.3l.3 1a1.1 1.1 0 0 0 1.4.8l.6-.2c.3.2.7.4 1.1.6l.1.6a1.1 1.1 0 0 0 2.2 0l.1-.6a5.5 5.5 0 0 0 1.1-.6l.6.2a1.1 1.1 0 0 0 1.4-.8l.3-1a1.1 1.1 0 0 0-.5-1.3l-.5-.3a5.5 5.5 0 0 0 0-1.2l.5-.3a1.1 1.1 0 0 0 .5-1.3l-.3-1a1.1 1.1 0 0 0-1.4-.8l-.6.2a5.5 5.5 0 0 0-1.1-.6l-.1-.6zM8 10a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"/>
+            <path d="M9.1 1.5a1.1 1.1 0 0 0-2.2 0l-.1.6a5.5 5.5 0 0 0-1.1.6l-.6-.2a1.1 1.1 0 0 0-1.4.8l-.3 1a1.1 1.1 0 0 0 .5 1.3l.5.3a5.5 5.5 0 0 0 0 1.2l-.5.3a1.1 1.1 0 0 0-.5 1.3l.3 1a1.1 1.1 0 0 0 1.4.8l.6-.2c.3.2.7.4 1.1.6l.1.6a1.1 1.1 0 0 0 2.2 0l.1-.6a5.5 5.5 0 0 0 1.1-.6l.6.2a1.1 1.1 0 0 0 1.4-.8l.3-1a1.1 1.1 0 0 0-.5-1.3l-.5-.3a5.5 5.5 0 0 0 0-1.2l.5-.3a1.1 1.1 0 0 0 .5-1.3l-.3-1a1.1 1.1 0 0 0-1.4-.8l-.6.2a5.5 5.5 0 0 0-1.1-.6l-.1-.6zM8 10a2 2 0 1 1 0-4 2 2 0 0 1 0 4z" />
           </svg>
         </button>
         {menuOpen && (
@@ -214,7 +218,13 @@ function DetailView({
           className="flex items-center gap-1.5 text-xs text-aria-text-muted hover:text-aria-text transition-colors px-1 py-1 rounded hover:bg-aria-surface"
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path
+              d="M9 2L4 7l5 5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
           拡張機能
         </button>
@@ -229,9 +239,7 @@ function DetailView({
               {ext.manifest.icon ?? '🧩'}
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="text-base font-bold text-aria-text leading-tight">
-                {ext.manifest.displayName ?? ext.id}
-              </h2>
+              <h2 className="text-base font-bold text-aria-text leading-tight">{ext.manifest.displayName ?? ext.id}</h2>
               <p className="text-xs text-aria-text-muted mt-0.5">{publisher}</p>
               <p className="text-[11px] text-aria-text-muted mt-0.5">v{ext.version}</p>
               {ext.manifest.description && (
@@ -299,9 +307,7 @@ function DetailView({
               dangerouslySetInnerHTML={{ __html: readmeHtml }}
             />
           ) : (
-            <p className="text-xs text-aria-text-muted">
-              {readmeError ?? 'README が見つかりませんでした'}
-            </p>
+            <p className="text-xs text-aria-text-muted">{readmeError ?? 'README が見つかりませんでした'}</p>
           )}
         </div>
       </div>
@@ -310,13 +316,7 @@ function DetailView({
 }
 
 // ── インストールパネル ─────────────────────────────────────────
-function InstallPanel({
-  onInstalled,
-  onClose,
-}: {
-  onInstalled: () => void;
-  onClose: () => void;
-}) {
+function InstallPanel({ onInstalled, onClose }: { onInstalled: () => void; onClose: () => void }) {
   const [url, setUrl] = useState('');
   const [installing, setInstalling] = useState(false);
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
@@ -351,15 +351,13 @@ function InstallPanel({
   return (
     <div className="border-b border-aria-border bg-aria-surface/20 px-3 py-3 space-y-2.5 shrink-0">
       <div className="flex items-center justify-between">
-        <p className="text-[11px] font-semibold text-aria-text-muted uppercase tracking-wider">
-          URL からインストール
-        </p>
+        <p className="text-[11px] font-semibold text-aria-text-muted uppercase tracking-wider">URL からインストール</p>
         <button
           onClick={onClose}
           className="w-4 h-4 flex items-center justify-center text-aria-text-muted hover:text-aria-text"
         >
           <svg width="10" height="10" viewBox="0 0 10 10">
-            <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
         </button>
       </div>
@@ -382,14 +380,8 @@ function InstallPanel({
           {installing ? '...' : '追加'}
         </button>
       </div>
-      {progress && (
-        <p className="text-[11px] text-aria-text-muted animate-pulse">{progress}</p>
-      )}
-      {msg && (
-        <p className={`text-[11px] ${msg.type === 'ok' ? 'text-emerald-400' : 'text-red-400'}`}>
-          {msg.text}
-        </p>
-      )}
+      {progress && <p className="text-[11px] text-aria-text-muted animate-pulse">{progress}</p>}
+      {msg && <p className={`text-[11px] ${msg.type === 'ok' ? 'text-emerald-400' : 'text-red-400'}`}>{msg.text}</p>}
     </div>
   );
 }
@@ -404,7 +396,7 @@ export default function ExtensionManagerPanel() {
     const list = await window.arsChatAPI.extensions.list();
     setExtList(list);
     // 詳細表示中の拡張を最新データで更新
-    setSelectedExt((prev) => (prev ? list.find((e: ExtInfo) => e.id === prev.id) ?? null : null));
+    setSelectedExt((prev) => (prev ? (list.find((e: ExtInfo) => e.id === prev.id) ?? null) : null));
   }, []);
 
   useEffect(() => {
@@ -463,34 +455,32 @@ export default function ExtensionManagerPanel() {
         >
           {showInstall ? (
             <svg width="10" height="10" viewBox="0 0 10 10">
-              <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           ) : (
             <svg width="12" height="12" viewBox="0 0 12 12">
-              <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           )}
         </button>
       </div>
 
       {/* インストールパネル */}
-      {showInstall && (
-        <InstallPanel
-          onInstalled={loadList}
-          onClose={() => setShowInstall(false)}
-        />
-      )}
+      {showInstall && <InstallPanel onInstalled={loadList} onClose={() => setShowInstall(false)} />}
 
       {/* 一覧 */}
       <div className="flex-1 overflow-y-auto">
         {extList.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 gap-2 text-aria-text-muted">
-            <img src="./codicons/extensions.svg" width={28} height={28} alt="" style={{ filter: 'invert(1) opacity(0.25)' }} />
+            <img
+              src="./codicons/extensions.svg"
+              width={28}
+              height={28}
+              alt=""
+              style={{ filter: 'invert(1) opacity(0.25)' }}
+            />
             <p className="text-xs">拡張機能がありません</p>
-            <button
-              onClick={() => setShowInstall(true)}
-              className="text-xs text-aria-primary hover:underline"
-            >
+            <button onClick={() => setShowInstall(true)} className="text-xs text-aria-primary hover:underline">
               インストールする
             </button>
           </div>

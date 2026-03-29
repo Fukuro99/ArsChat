@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useMemo } from 'react';
-import { SandboxHTMLBlock } from './types';
+import React, { useEffect, useMemo, useRef } from 'react';
+import type { SandboxHTMLBlock } from './types';
 
 interface SandboxRendererProps {
   block: SandboxHTMLBlock;

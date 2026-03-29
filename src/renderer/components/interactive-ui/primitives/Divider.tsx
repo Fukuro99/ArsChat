@@ -1,12 +1,9 @@
 import React from 'react';
-import { PrimitiveProps } from '../types';
 import { resolveColor } from '../design-tokens';
+import type { PrimitiveProps } from '../types';
 
 export default function Divider({ props }: PrimitiveProps) {
-  const {
-    direction = 'horizontal',
-    color = 'border',
-  } = props || {};
+  const { direction = 'horizontal', color = 'border' } = props || {};
 
   const resolvedColor = resolveColor(color) || 'var(--aria-border)';
 

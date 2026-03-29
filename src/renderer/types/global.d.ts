@@ -1,4 +1,16 @@
-import { ArsChatSettings, ChatMessage, ChatMessageStats, ChatSession, LMStudioModelInfo, MCPConfig, MCPServerConfig, MCPServerStatus, MCPToolInfo, Skill, ExtensionInfo } from '../../shared/types';
+import {
+  ArsChatSettings,
+  ChatMessage,
+  ChatMessageStats,
+  ChatSession,
+  LMStudioModelInfo,
+  MCPConfig,
+  MCPServerConfig,
+  MCPServerStatus,
+  MCPToolInfo,
+  Skill,
+  ExtensionInfo,
+} from '../../shared/types';
 
 interface FileBrowserItem {
   name: string;
@@ -14,12 +26,19 @@ declare global {
   interface Window {
     arsChatAPI: {
       // チャット
-      sendMessage: (messages: ChatMessage[], sessionId: string, options?: { thinkMode?: boolean; openFilePaths?: string[] }) => void;
+      sendMessage: (
+        messages: ChatMessage[],
+        sessionId: string,
+        options?: { thinkMode?: boolean; openFilePaths?: string[] },
+      ) => void;
       onStreamChunk: (callback: (chunk: string) => void) => () => void;
       onStreamEnd: (callback: (stats: ChatMessageStats) => void) => () => void;
       onStreamError: (callback: (error: string) => void) => () => void;
       abortChat: () => void;
-      sendSilentMessage: (messages: ChatMessage[], sessionId: string) => Promise<{ content: string; stats?: ChatMessageStats; error?: string }>;
+      sendSilentMessage: (
+        messages: ChatMessage[],
+        sessionId: string,
+      ) => Promise<{ content: string; stats?: ChatMessageStats; error?: string }>;
 
       // セッション
       listSessions: () => Promise<ChatSession[]>;
@@ -87,7 +106,18 @@ declare global {
       // スキル
       listSkills: (personaId: string) => Promise<Skill[]>;
       getSkillContent: (personaId: string, skillId: string) => Promise<string | null>;
-      saveSkill: (personaId: string, skillId: string, fields: { name: string; description: string; trigger?: string; scriptType?: string; scriptValue?: string; body: string }) => Promise<Skill | null>;
+      saveSkill: (
+        personaId: string,
+        skillId: string,
+        fields: {
+          name: string;
+          description: string;
+          trigger?: string;
+          scriptType?: string;
+          scriptValue?: string;
+          body: string;
+        },
+      ) => Promise<Skill | null>;
       createSkill: (personaId: string) => Promise<string>;
       deleteSkill: (personaId: string, skillId: string) => Promise<void>;
       openSkillInEditor: (filePath: string) => Promise<void>;
@@ -114,8 +144,12 @@ declare global {
         getHome: () => Promise<{ path: string }>;
         getDrives: () => Promise<{ path: string; name: string }[]>;
         openFolderDialog: () => Promise<{ success: boolean; path: string | null }>;
-        listDir: (dirPath: string) => Promise<{ success: boolean; items: FileBrowserItem[]; dirPath: string; error?: string }>;
-        openFile: (filePath: string) => Promise<{ success: boolean; path?: string; content?: string; size?: number; error?: string }>;
+        listDir: (
+          dirPath: string,
+        ) => Promise<{ success: boolean; items: FileBrowserItem[]; dirPath: string; error?: string }>;
+        openFile: (
+          filePath: string,
+        ) => Promise<{ success: boolean; path?: string; content?: string; size?: number; error?: string }>;
         saveFile: (filePath: string, content: string) => Promise<{ success: boolean; error?: string }>;
         openExternal: (targetPath: string) => Promise<{ success: boolean; error?: string }>;
         getState: () => Promise<{ rootPath: string; expandedPaths: string[] }>;
@@ -141,5 +175,3 @@ declare global {
     };
   }
 }
-
-export {};

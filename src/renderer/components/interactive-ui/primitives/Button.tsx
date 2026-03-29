@@ -1,6 +1,6 @@
-import React from 'react';
-import { PrimitiveProps } from '../types';
+import type React from 'react';
 import { resolveColor } from '../design-tokens';
+import type { PrimitiveProps } from '../types';
 
 export default function Button({ props, onAction, onChange }: PrimitiveProps) {
   const {
@@ -9,8 +9,8 @@ export default function Button({ props, onAction, onChange }: PrimitiveProps) {
     variant = 'secondary',
     disabled = false,
     color,
-    local = false,   // true: AIに送信せずローカルstateのみ更新
-    value,           // local: true のとき bind で指定したキーに設定する値
+    local = false, // true: AIに送信せずローカルstateのみ更新
+    value, // local: true のとき bind で指定したキーに設定する値
   } = props || {};
 
   const handleClick = () => {
@@ -57,12 +57,7 @@ export default function Button({ props, onAction, onChange }: PrimitiveProps) {
   }
 
   return (
-    <button
-      onClick={handleClick}
-      disabled={disabled as boolean}
-      className={className}
-      style={buttonStyle}
-    >
+    <button onClick={handleClick} disabled={disabled as boolean} className={className} style={buttonStyle}>
       {label}
     </button>
   );

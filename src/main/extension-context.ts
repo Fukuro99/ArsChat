@@ -5,22 +5,21 @@
  * 権限に基づいてアクセスできる API を制御する。
  */
 
+import { exec, spawn as spawnChild } from 'child_process';
+import { type BrowserWindow, clipboard, dialog, ipcMain, Notification } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
-import { exec, spawn as spawnChild } from 'child_process';
 import { promisify } from 'util';
-import { dialog, BrowserWindow, Notification, clipboard } from 'electron';
-import { ipcMain } from 'electron';
 import type {
-  ExtensionRegistryEntry,
-  ExtensionPermission,
   ChatMessage,
   ChatMessageStats,
   ChatSession,
+  ExtensionPermission,
+  ExtensionRegistryEntry,
 } from '../shared/types';
-import type { createStore } from './store';
 import type { createClaudeService } from './claude';
 import type { HookEventName, HookListener, HookManager } from './hook-manager';
+import type { createStore } from './store';
 
 const execAsync = promisify(exec);
 
@@ -72,7 +71,10 @@ export interface ExtensionContext {
   };
   ai: {
     stream(params: AIStreamParams): AbortController;
-    send(params: { messages: ChatMessage[]; systemPrompt?: string }): Promise<{ content: string; stats: ChatMessageStats }>;
+    send(params: {
+      messages: ChatMessage[];
+      systemPrompt?: string;
+    }): Promise<{ content: string; stats: ChatMessageStats }>;
     getProviderInfo(): Promise<{ provider: string; model: string }>;
   };
   shell: {
@@ -132,11 +134,7 @@ function permissionError(permission: string): never {
   throw new Error(`Permission denied: "${permission}" が必要です`);
 }
 
-function guarded<T extends object>(
-  permission: ExtensionPermission,
-  granted: Set<ExtensionPermission>,
-  api: T,
-): T {
+function guarded<T extends object>(permission: ExtensionPermission, granted: Set<ExtensionPermission>, api: T): T {
   if (granted.has(permission)) return api;
   // Proxy ですべてのプロパティアクセスをブロック
   return new Proxy(api, {
@@ -201,22 +199,27 @@ export function createExtensionContext(
           ]
         : params.messages;
 
-      claudeService.streamChat(
-        settings,
-        effectiveMessages,
-        (chunk: string) => params.onChunk(chunk),
-        (stats: ChatMessageStats) => params.onEnd(stats),
-        {},
-      ).catch((err: any) => {
-        if (!abortController.signal.aborted) {
-          params.onError(err?.message ?? 'Unknown error');
-        }
-      });
+      claudeService
+        .streamChat(
+          settings,
+          effectiveMessages,
+          (chunk: string) => params.onChunk(chunk),
+          (stats: ChatMessageStats) => params.onEnd(stats),
+          {},
+        )
+        .catch((err: any) => {
+          if (!abortController.signal.aborted) {
+            params.onError(err?.message ?? 'Unknown error');
+          }
+        });
 
       return abortController;
     },
 
-    async send(params: { messages: ChatMessage[]; systemPrompt?: string }): Promise<{ content: string; stats: ChatMessageStats }> {
+    async send(params: {
+      messages: ChatMessage[];
+      systemPrompt?: string;
+    }): Promise<{ content: string; stats: ChatMessageStats }> {
       const settings = store.getSettings();
       const effectiveMessages: ChatMessage[] = params.systemPrompt
         ? [
@@ -262,11 +265,7 @@ export function createExtensionContext(
       }
     },
 
-    spawn(
-      command: string,
-      args: string[],
-      options: { cwd?: string; env?: Record<string, string> } = {},
-    ): SpawnHandle {
+    spawn(command: string, args: string[], options: { cwd?: string; env?: Record<string, string> } = {}): SpawnHandle {
       const stdoutCallbacks: ((data: string) => void)[] = [];
       const stderrCallbacks: ((data: string) => void)[] = [];
 
@@ -345,7 +344,7 @@ export function createExtensionContext(
     async showSaveDialog(options: Electron.SaveDialogOptions): Promise<string | null> {
       const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
       const result = await dialog.showSaveDialog(win!, options);
-      return result.canceled ? null : result.filePath ?? null;
+      return result.canceled ? null : (result.filePath ?? null);
     },
   };
 
@@ -446,8 +445,7 @@ export function createExtensionContext(
   // ===== Hooks API =====
 
   const hooksAPI = {
-    on: <K extends HookEventName>(event: K, listener: HookListener<K>) =>
-      hookManager.on(extId, event, listener),
+    on: <K extends HookEventName>(event: K, listener: HookListener<K>) => hookManager.on(extId, event, listener),
   };
 
   // ===== Log =====
@@ -466,29 +464,21 @@ export function createExtensionContext(
       version: entry.version,
       dataDir: extDataDir,
     },
-    ai: (granted.has('ai:stream') || granted.has('ai:send'))
-      ? aiAPI
-      : guarded('ai:stream', granted, aiAPI),
-    shell: granted.has('shell:execute')
-      ? shellAPI
-      : guarded('shell:execute', granted, shellAPI),
-    fs: (granted.has('fs:read') || granted.has('fs:write'))
-      ? fsAPI
-      : guarded('fs:read', granted, fsAPI),
-    sessions: (granted.has('session:read') || granted.has('session:write'))
-      ? sessionsAPI
-      : guarded('session:read', granted, sessionsAPI),
-    settings: granted.has('settings:read')
-      ? settingsAPI
-      : guarded('settings:read', granted, settingsAPI),
-    store: storeAPI,  // KV ストアは常に利用可能
-    clipboard: (granted.has('clipboard:read') || granted.has('clipboard:write'))
-      ? clipboardAPI
-      : guarded('clipboard:read', granted, clipboardAPI),
+    ai: granted.has('ai:stream') || granted.has('ai:send') ? aiAPI : guarded('ai:stream', granted, aiAPI),
+    shell: granted.has('shell:execute') ? shellAPI : guarded('shell:execute', granted, shellAPI),
+    fs: granted.has('fs:read') || granted.has('fs:write') ? fsAPI : guarded('fs:read', granted, fsAPI),
+    sessions:
+      granted.has('session:read') || granted.has('session:write')
+        ? sessionsAPI
+        : guarded('session:read', granted, sessionsAPI),
+    settings: granted.has('settings:read') ? settingsAPI : guarded('settings:read', granted, settingsAPI),
+    store: storeAPI, // KV ストアは常に利用可能
+    clipboard:
+      granted.has('clipboard:read') || granted.has('clipboard:write')
+        ? clipboardAPI
+        : guarded('clipboard:read', granted, clipboardAPI),
     ipc: ipcAPI,
-    hooks: granted.has('hooks:observe')
-      ? hooksAPI
-      : guarded('hooks:observe', granted, hooksAPI),
+    hooks: granted.has('hooks:observe') ? hooksAPI : guarded('hooks:observe', granted, hooksAPI),
     log,
   };
 }

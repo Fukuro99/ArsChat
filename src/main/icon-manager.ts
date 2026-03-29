@@ -1,7 +1,7 @@
-import { nativeImage, NativeImage, app } from 'electron';
-import * as path from 'path';
+import { app, type NativeImage, nativeImage } from 'electron';
 import * as fs from 'fs';
-import { ArsChatSettings } from '../shared/types';
+import * as path from 'path';
+import type { ArsChatSettings } from '../shared/types';
 
 const ICONS_DIR = path.join(app.getPath('userData'), 'arschat-data', 'custom-icons');
 const ASSETS_DIR = path.join(__dirname, '../../assets');

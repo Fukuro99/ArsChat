@@ -1,6 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron';
 // 型のみのインポート（コンパイル後に require を生成しない）
-import type { ArsChatSettings, ChatMessage, ChatMessageStats, ChatSession, LMStudioModelInfo, MCPConfig, MCPServerStatus, MCPToolInfo, Skill } from '../shared/types';
+import type {
+  ArsChatSettings,
+  ChatMessage,
+  ChatMessageStats,
+  ChatSession,
+  LMStudioModelInfo,
+  MCPConfig,
+  MCPServerStatus,
+  MCPToolInfo,
+  Skill,
+} from '../shared/types';
 
 // sandbox preload 環境では require('../shared/types') が使えないため直接定義
 const IPC_CHANNELS = {
@@ -69,8 +79,17 @@ const IPC_CAPTURE_IMAGE_READY = 'capture:image-ready';
 // レンダラープロセスに公開するAPI
 contextBridge.exposeInMainWorld('arsChatAPI', {
   // === チャット ===
-  sendMessage: (messages: ChatMessage[], sessionId: string, options?: { thinkMode?: boolean; openFilePaths?: string[] }) => {
-    ipcRenderer.send(IPC_CHANNELS.CHAT_SEND, { messages, sessionId, thinkMode: options?.thinkMode ?? false, openFilePaths: options?.openFilePaths ?? [] });
+  sendMessage: (
+    messages: ChatMessage[],
+    sessionId: string,
+    options?: { thinkMode?: boolean; openFilePaths?: string[] },
+  ) => {
+    ipcRenderer.send(IPC_CHANNELS.CHAT_SEND, {
+      messages,
+      sessionId,
+      thinkMode: options?.thinkMode ?? false,
+      openFilePaths: options?.openFilePaths ?? [],
+    });
   },
   onStreamChunk: (callback: (chunk: string) => void) => {
     const handler = (_: any, chunk: string) => callback(chunk);
@@ -90,7 +109,10 @@ contextBridge.exposeInMainWorld('arsChatAPI', {
   abortChat: () => {
     ipcRenderer.send(IPC_CHANNELS.CHAT_ABORT);
   },
-  sendSilentMessage: (messages: ChatMessage[], sessionId: string): Promise<{ content: string; stats?: ChatMessageStats; error?: string }> => {
+  sendSilentMessage: (
+    messages: ChatMessage[],
+    sessionId: string,
+  ): Promise<{ content: string; stats?: ChatMessageStats; error?: string }> => {
     return ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND_SILENT, messages, sessionId);
   },
 
@@ -196,10 +218,8 @@ contextBridge.exposeInMainWorld('arsChatAPI', {
   chatMemory: {
     list: (personaId: string, limit?: number): Promise<any[]> =>
       ipcRenderer.invoke(IPC_CHANNELS.CHAT_MEMORY_LIST, personaId, limit),
-    count: (personaId: string): Promise<number> =>
-      ipcRenderer.invoke(IPC_CHANNELS.CHAT_MEMORY_COUNT, personaId),
-    clear: (personaId: string): Promise<void> =>
-      ipcRenderer.invoke(IPC_CHANNELS.CHAT_MEMORY_CLEAR, personaId),
+    count: (personaId: string): Promise<number> => ipcRenderer.invoke(IPC_CHANNELS.CHAT_MEMORY_COUNT, personaId),
+    clear: (personaId: string): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.CHAT_MEMORY_CLEAR, personaId),
   },
 
   // === スキル ===
@@ -209,7 +229,18 @@ contextBridge.exposeInMainWorld('arsChatAPI', {
   getSkillContent: (personaId: string, skillId: string): Promise<string | null> => {
     return ipcRenderer.invoke(IPC_CHANNELS.SKILL_GET_CONTENT, personaId, skillId);
   },
-  saveSkill: (personaId: string, skillId: string, fields: { name: string; description: string; trigger?: string; scriptType?: string; scriptValue?: string; body: string }): Promise<Skill | null> => {
+  saveSkill: (
+    personaId: string,
+    skillId: string,
+    fields: {
+      name: string;
+      description: string;
+      trigger?: string;
+      scriptType?: string;
+      scriptValue?: string;
+      body: string;
+    },
+  ): Promise<Skill | null> => {
     return ipcRenderer.invoke(IPC_CHANNELS.SKILL_SAVE, personaId, skillId, fields);
   },
   createSkill: (personaId: string): Promise<string> => {
@@ -251,14 +282,11 @@ contextBridge.exposeInMainWorld('arsChatAPI', {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.EXT_LIST),
     install: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.EXT_INSTALL, url),
     uninstall: (extId: string) => ipcRenderer.invoke(IPC_CHANNELS.EXT_UNINSTALL, extId),
-    toggle: (extId: string, enabled: boolean) =>
-      ipcRenderer.invoke(IPC_CHANNELS.EXT_TOGGLE, extId, enabled),
+    toggle: (extId: string, enabled: boolean) => ipcRenderer.invoke(IPC_CHANNELS.EXT_TOGGLE, extId, enabled),
     update: (extId: string) => ipcRenderer.invoke(IPC_CHANNELS.EXT_UPDATE, extId),
     reload: () => ipcRenderer.invoke(IPC_CHANNELS.EXT_RELOAD),
-    readRendererCode: (extId: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.EXT_READ_RENDERER, extId),
-    readReadme: (extId: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.EXT_READ_README, extId),
+    readRendererCode: (extId: string) => ipcRenderer.invoke(IPC_CHANNELS.EXT_READ_RENDERER, extId),
+    readReadme: (extId: string) => ipcRenderer.invoke(IPC_CHANNELS.EXT_READ_README, extId),
     /** インストール進捗リスナー */
     onInstallProgress: (callback: (progress: { step: string; message: string }) => void) => {
       const handler = (_: any, progress: any) => callback(progress);
@@ -273,31 +301,28 @@ contextBridge.exposeInMainWorld('arsChatAPI', {
       return () => ipcRenderer.removeListener(fullChannel, handler);
     },
     /** Renderer → Main Entry invoke */
-    invoke: (extId: string, channel: string, data?: any) =>
-      ipcRenderer.invoke(`ext:${extId}:${channel}`, data),
+    invoke: (extId: string, channel: string, data?: any) => ipcRenderer.invoke(`ext:${extId}:${channel}`, data),
     /** Renderer → Main Entry 送信（fire-and-forget） */
-    send: (extId: string, channel: string, data?: any) =>
-      ipcRenderer.send(`ext:${extId}:${channel}`, data),
+    send: (extId: string, channel: string, data?: any) => ipcRenderer.send(`ext:${extId}:${channel}`, data),
   },
 
   // === ファイルブラウザ ===
   fileBrowser: {
-    getHome: (): Promise<{ path: string }> =>
-      ipcRenderer.invoke('filebrowser:get-home'),
-    getDrives: (): Promise<{ path: string; name: string }[]> =>
-      ipcRenderer.invoke('filebrowser:get-drives'),
+    getHome: (): Promise<{ path: string }> => ipcRenderer.invoke('filebrowser:get-home'),
+    getDrives: (): Promise<{ path: string; name: string }[]> => ipcRenderer.invoke('filebrowser:get-drives'),
     openFolderDialog: (): Promise<{ success: boolean; path: string | null }> =>
       ipcRenderer.invoke('filebrowser:open-folder-dialog'),
     listDir: (dirPath: string): Promise<{ success: boolean; items: any[]; dirPath: string; error?: string }> =>
       ipcRenderer.invoke('filebrowser:list-dir', { dirPath }),
-    openFile: (filePath: string): Promise<{ success: boolean; path?: string; content?: string; size?: number; error?: string }> =>
+    openFile: (
+      filePath: string,
+    ): Promise<{ success: boolean; path?: string; content?: string; size?: number; error?: string }> =>
       ipcRenderer.invoke('filebrowser:open-file', { filePath }),
     saveFile: (filePath: string, content: string): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke('filebrowser:save-file', { filePath, content }),
     openExternal: (targetPath: string): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke('filebrowser:open-external', { targetPath }),
-    getState: (): Promise<{ rootPath: string; expandedPaths: string[] }> =>
-      ipcRenderer.invoke('filebrowser:get-state'),
+    getState: (): Promise<{ rootPath: string; expandedPaths: string[] }> => ipcRenderer.invoke('filebrowser:get-state'),
     saveState: (state: { rootPath: string; expandedPaths: string[] }): Promise<void> =>
       ipcRenderer.invoke('filebrowser:save-state', state),
   },
@@ -306,12 +331,9 @@ contextBridge.exposeInMainWorld('arsChatAPI', {
   terminal: {
     create: (id: string, cols: number, rows: number, cwd?: string, shell?: string): Promise<void> =>
       ipcRenderer.invoke('terminal:create', { id, cols, rows, cwd, shell }),
-    write: (id: string, data: string): void =>
-      ipcRenderer.send('terminal:write', { id, data }),
-    resize: (id: string, cols: number, rows: number): void =>
-      ipcRenderer.send('terminal:resize', { id, cols, rows }),
-    destroy: (id: string): Promise<void> =>
-      ipcRenderer.invoke('terminal:destroy', { id }),
+    write: (id: string, data: string): void => ipcRenderer.send('terminal:write', { id, data }),
+    resize: (id: string, cols: number, rows: number): void => ipcRenderer.send('terminal:resize', { id, cols, rows }),
+    destroy: (id: string): Promise<void> => ipcRenderer.invoke('terminal:destroy', { id }),
     onData: (id: string, callback: (data: string) => void) => {
       const channel = `terminal:data:${id}`;
       const handler = (_: any, data: string) => callback(data);

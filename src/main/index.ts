@@ -1,24 +1,24 @@
+import { exec, execSync } from 'child_process';
+import type { Display, Rectangle } from 'electron';
 import {
   app,
   BrowserWindow,
   clipboard,
   desktopCapturer,
+  dialog,
   globalShortcut,
   ipcMain,
-  Tray,
   Menu,
   nativeImage,
-  dialog,
+  protocol,
   screen,
   shell,
-  protocol,
+  Tray,
 } from 'electron';
-import type { Rectangle, Display } from 'electron';
-import * as path from 'path';
 import * as fs from 'fs';
-import * as os from 'os';
-import { execSync, exec } from 'child_process';
 import * as pty from 'node-pty';
+import * as os from 'os';
+import * as path from 'path';
 
 // ローカル画像ファイルを http://localhost から安全に読み込むためのカスタムスキーム
 // ※ app.ready より前に呼び出す必要がある
@@ -28,19 +28,30 @@ protocol.registerSchemesAsPrivileged([
 
 // Windows コンソールを UTF-8 に設定
 if (process.platform === 'win32') {
-  try { execSync('chcp 65001', { stdio: 'ignore' }); } catch {}
+  try {
+    execSync('chcp 65001', { stdio: 'ignore' });
+  } catch {}
 }
-import { ArsChatSettings, DEFAULT_SETTINGS, IPC_CHANNELS, ChatMessage, ChatMessageStats, ChatSession, MCPServerConfig } from '../shared/types';
-import { createStore } from './store';
+
+import {
+  type ArsChatSettings,
+  type ChatMessage,
+  type ChatMessageStats,
+  type ChatSession,
+  DEFAULT_SETTINGS,
+  IPC_CHANNELS,
+  type MCPServerConfig,
+} from '../shared/types';
+import { chunkText, createChatMemoryManager } from './chat-memory-manager';
 import { createClaudeService } from './claude';
+import { createExtensionContext } from './extension-context';
+import { createExtensionManager } from './extension-manager';
+import { createHookManager } from './hook-manager';
 import { createIconManager } from './icon-manager';
 import { createMCPManager } from './mcp-manager';
-import { createSkillManager } from './skill-manager';
 import { createMemoryManager } from './memory-manager';
-import { createChatMemoryManager, chunkText } from './chat-memory-manager';
-import { createExtensionManager } from './extension-manager';
-import { createExtensionContext } from './extension-context';
-import { createHookManager } from './hook-manager';
+import { createSkillManager } from './skill-manager';
+import { createStore } from './store';
 import { setupUpdater } from './updater';
 
 // ===== PTY セッション管理 =====
@@ -307,9 +318,15 @@ async function startRegionCaptureWorkflow(): Promise<string | null> {
 
     // 3. タイトル変更を監視して選択座標を取得
     const coordsJson = await new Promise<string | null>((resolve) => {
-      if (!regionCaptureWindow) { resolve(null); return; }
+      if (!regionCaptureWindow) {
+        resolve(null);
+        return;
+      }
       const checkTitle = () => {
-        if (!regionCaptureWindow) { resolve(null); return; }
+        if (!regionCaptureWindow) {
+          resolve(null);
+          return;
+        }
         const title = regionCaptureWindow.getTitle();
         if (title === 'CANCEL') {
           resolve(null);
@@ -387,7 +404,7 @@ function createMainWindow(): BrowserWindow {
     height: settings.windowHeight,
     minWidth: 380,
     minHeight: 500,
-    frame: false,           // カスタムタイトルバー
+    frame: false, // カスタムタイトルバー
     transparent: false,
     resizable: true,
     alwaysOnTop: settings.alwaysOnTop,
@@ -635,205 +652,225 @@ function setupIPC(): void {
   const claude = createClaudeService(mcpManager);
 
   // --- チャット送信（ストリーミング） ---
-  ipcMain.on(IPC_CHANNELS.CHAT_SEND, async (event, payload: {
-    messages: ChatMessage[];
-    sessionId: string;
-    thinkMode?: boolean;
-    openFilePaths?: string[];
-  }) => {
-    const settings = store.getSettings();
-    if (settings.provider === 'anthropic' && !settings.apiKey) {
-      event.sender.send(IPC_CHANNELS.CHAT_STREAM_ERROR, 'APIキーが設定されていません。設定画面からAPIキーを入力してください。');
-      return;
-    }
+  ipcMain.on(
+    IPC_CHANNELS.CHAT_SEND,
+    async (
+      event,
+      payload: {
+        messages: ChatMessage[];
+        sessionId: string;
+        thinkMode?: boolean;
+        openFilePaths?: string[];
+      },
+    ) => {
+      const settings = store.getSettings();
+      if (settings.provider === 'anthropic' && !settings.apiKey) {
+        event.sender.send(
+          IPC_CHANNELS.CHAT_STREAM_ERROR,
+          'APIキーが設定されていません。設定画面からAPIキーを入力してください。',
+        );
+        return;
+      }
 
-    // ビルトインスキル（Interactive UI）＋ アクティブペルソナのスキルを結合
-    const builtinSkills = settings.enableInteractiveUI !== false
-      ? skillManager.getBuiltinSkills()
-      : [];
-    const personaId = settings.activePersonaId ?? '';
-    const personaSkills = personaId
-      ? skillManager.listAllSkills(personaId)
-      : [];
-    const skills = [...builtinSkills, ...personaSkills];
+      // ビルトインスキル（Interactive UI）＋ アクティブペルソナのスキルを結合
+      const builtinSkills = settings.enableInteractiveUI !== false ? skillManager.getBuiltinSkills() : [];
+      const personaId = settings.activePersonaId ?? '';
+      const personaSkills = personaId ? skillManager.listAllSkills(personaId) : [];
+      const skills = [...builtinSkills, ...personaSkills];
 
-    // アクティブペルソナのユーザーメモリ
-    const userMemory = personaId ? memoryManager.getMemory(personaId) : null;
+      // アクティブペルソナのユーザーメモリ
+      const userMemory = personaId ? memoryManager.getMemory(personaId) : null;
 
-    // チャット履歴メモリ（MemOS）: 直近のユーザーメッセージで関連履歴を検索して注入
-    let chatMemoriesText: string | undefined;
-    if (settings.chatHistoryEnabled && personaId && settings.chatHistoryEmbeddingModel) {
-      const lastUserMsg = [...payload.messages].reverse().find((m) => m.role === 'user');
-      if (lastUserMsg) {
-        hookManager.emit('memory:beforeSearch', { personaId, query: lastUserMsg.content });
-        try {
-          const _searchStart = Date.now();
-          const results = await chatMemoryManager.searchMemories(personaId, lastUserMsg.content, {
-            topK: settings.chatHistoryTopK ?? 3,
-            baseUrl: settings.lmstudioBaseUrl,
-            embeddingModel: settings.chatHistoryEmbeddingModel,
-          });
-          hookManager.emit('memory:afterSearch', { personaId, query: lastUserMsg.content, resultCount: results.length, durationMs: Date.now() - _searchStart });
-          if (results.length > 0) {
-            chatMemoriesText = results
-              .map((r) => {
-                const date = new Date(r.item.createdAt).toLocaleDateString('ja-JP');
-                return `[${date}]\n${r.item.content}`;
-              })
-              .join('\n\n---\n\n');
+      // チャット履歴メモリ（MemOS）: 直近のユーザーメッセージで関連履歴を検索して注入
+      let chatMemoriesText: string | undefined;
+      if (settings.chatHistoryEnabled && personaId && settings.chatHistoryEmbeddingModel) {
+        const lastUserMsg = [...payload.messages].reverse().find((m) => m.role === 'user');
+        if (lastUserMsg) {
+          hookManager.emit('memory:beforeSearch', { personaId, query: lastUserMsg.content });
+          try {
+            const _searchStart = Date.now();
+            const results = await chatMemoryManager.searchMemories(personaId, lastUserMsg.content, {
+              topK: settings.chatHistoryTopK ?? 3,
+              baseUrl: settings.lmstudioBaseUrl,
+              embeddingModel: settings.chatHistoryEmbeddingModel,
+            });
+            hookManager.emit('memory:afterSearch', {
+              personaId,
+              query: lastUserMsg.content,
+              resultCount: results.length,
+              durationMs: Date.now() - _searchStart,
+            });
+            if (results.length > 0) {
+              chatMemoriesText = results
+                .map((r) => {
+                  const date = new Date(r.item.createdAt).toLocaleDateString('ja-JP');
+                  return `[${date}]\n${r.item.content}`;
+                })
+                .join('\n\n---\n\n');
+            }
+          } catch {
+            // 失敗しても無視（LM Studio 未起動等）
           }
-        } catch {
-          // 失敗しても無視（LM Studio 未起動等）
         }
       }
-    }
 
-    const fileBrowserState = store.getFileBrowserState();
+      const fileBrowserState = store.getFileBrowserState();
 
-    // AI スキル管理コールバック（permission チェック込み）
-    const skillContext = {
-      skills,
-      getContent: (skillId: string) =>
-        skillManager.getSkillContent(personaId, skillId),
-      invokeScript: async (skillId: string) => {
-        const skill = skills.find((s) => s.id === skillId);
-        if (!skill) return `スキル "${skillId}" が見つかりません`;
-        return skillManager.invokeSkillScript(skill);
-      },
-      createAISkill: (name: string, description: string, body: string, trigger?: string) => {
-        if (!personaId) return { success: false as const, message: 'アクティブなペルソナがありません' };
-        try {
-          const skill = skillManager.createAISkill(personaId, { name, description, body, trigger });
-          mainWindow?.webContents.send(IPC_CHANNELS.SKILLS_UPDATED, personaId);
-          return { success: true as const, skill, message: `スキル「${skill.name}」を作成しました` };
-        } catch (e: any) {
-          return { success: false as const, message: e.message };
-        }
-      },
-      editSkill: (skillId: string, fields: { name?: string; description?: string; body?: string; trigger?: string }) => {
-        if (!personaId) return { success: false as const, message: 'アクティブなペルソナがありません' };
-        const existing = skillManager.findSkill(personaId, skillId);
-        if (!existing) return { success: false as const, message: `スキル "${skillId}" が見つかりません` };
-        if (existing.source === 'user') {
-          const persona = settings.personas.find((p) => p.id === personaId);
-          if (!persona?.allowAIEditUserSkills) {
-            return { success: false as const, message: 'ユーザー作成スキルの編集は許可されていません。設定で「AIによるユーザースキル編集を許可」を有効にしてください。' };
-          }
-        }
-        const body = fields.body ?? skillManager.getSkillContent(personaId, skillId) ?? '';
-        skillManager.saveSkill(personaId, skillId, {
-          name: fields.name ?? existing.name,
-          description: fields.description ?? existing.description,
-          trigger: fields.trigger ?? existing.trigger,
-          body,
-        });
-        mainWindow?.webContents.send(IPC_CHANNELS.SKILLS_UPDATED, personaId);
-        return { success: true as const };
-      },
-      deleteAISkill: (skillId: string) => {
-        if (!personaId) return { success: false as const, message: 'アクティブなペルソナがありません' };
-        const existing = skillManager.findSkill(personaId, skillId);
-        if (!existing) return { success: false as const, message: `スキル "${skillId}" が見つかりません` };
-        if (existing.source === 'user') {
-          return { success: false as const, message: 'ユーザー作成スキルはAIが削除できません。削除が必要な場合はユーザーにお願いしてください。' };
-        }
-        skillManager.deleteAISkill(personaId, skillId);
-        mainWindow?.webContents.send(IPC_CHANNELS.SKILLS_UPDATED, personaId);
-        return { success: true as const };
-      },
-      updateMemory: (content: string) => {
-        if (personaId) memoryManager.setMemory(personaId, content);
-      },
-    };
-
-    // チャット後にアシスタント応答を蓄積してメモリ保存するためのバッファ
-    let assistantBuffer = '';
-
-    hookManager.emit('chat:beforeSend', { messages: payload.messages, systemPrompt: settings.systemPrompt });
-
-    try {
-      await claude.streamChat(
-        settings,
-        payload.messages,
-        (chunk: string) => {
-          assistantBuffer += chunk;
-          event.sender.send(IPC_CHANNELS.CHAT_STREAM, chunk);
-
+      // AI スキル管理コールバック（permission チェック込み）
+      const skillContext = {
+        skills,
+        getContent: (skillId: string) => skillManager.getSkillContent(personaId, skillId),
+        invokeScript: async (skillId: string) => {
+          const skill = skills.find((s) => s.id === skillId);
+          if (!skill) return `スキル "${skillId}" が見つかりません`;
+          return skillManager.invokeSkillScript(skill);
         },
-        (stats: ChatMessageStats) => {
-          hookManager.emit('chat:afterResponse', { messages: payload.messages, response: assistantBuffer, stats });
-          event.sender.send(IPC_CHANNELS.CHAT_STREAM_END, stats);
-
-          // チャット履歴メモリへ自動保存（非同期・失敗無視）
-          if (settings.chatHistoryEnabled && personaId && assistantBuffer.trim()) {
-            const lastUserMsg = [...payload.messages].reverse().find((m) => m.role === 'user');
-            if (lastUserMsg) {
-              const cleanResponse = assistantBuffer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-              // 512 トークン制限に収まるようチャンク分割して保存
-              const fullText = `ユーザー: ${lastUserMsg.content}\nアシスタント: ${cleanResponse}`;
-              const chunks = chunkText(fullText);
-              const storeOpts = {
-                sessionId: payload.sessionId,
-                baseUrl: settings.lmstudioBaseUrl,
-                embeddingModel: settings.chatHistoryEmbeddingModel,
+        createAISkill: (name: string, description: string, body: string, trigger?: string) => {
+          if (!personaId) return { success: false as const, message: 'アクティブなペルソナがありません' };
+          try {
+            const skill = skillManager.createAISkill(personaId, { name, description, body, trigger });
+            mainWindow?.webContents.send(IPC_CHANNELS.SKILLS_UPDATED, personaId);
+            return { success: true as const, skill, message: `スキル「${skill.name}」を作成しました` };
+          } catch (e: any) {
+            return { success: false as const, message: e.message };
+          }
+        },
+        editSkill: (
+          skillId: string,
+          fields: { name?: string; description?: string; body?: string; trigger?: string },
+        ) => {
+          if (!personaId) return { success: false as const, message: 'アクティブなペルソナがありません' };
+          const existing = skillManager.findSkill(personaId, skillId);
+          if (!existing) return { success: false as const, message: `スキル "${skillId}" が見つかりません` };
+          if (existing.source === 'user') {
+            const persona = settings.personas.find((p) => p.id === personaId);
+            if (!persona?.allowAIEditUserSkills) {
+              return {
+                success: false as const,
+                message:
+                  'ユーザー作成スキルの編集は許可されていません。設定で「AIによるユーザースキル編集を許可」を有効にしてください。',
               };
-              Promise.all(
-                chunks.map((chunk) => {
-                  hookManager.emit('memory:beforeStore', { personaId, content: chunk });
-                  const _storeStart = Date.now();
-                  return chatMemoryManager
-                    .storeMemory(personaId, chunk, storeOpts)
-                    .then(() => {
-                      hookManager.emit('memory:afterStore', { personaId, content: chunk, durationMs: Date.now() - _storeStart });
-                    });
-                }),
-              )
-                .then(() => {
-                  // 全チャンク保存後に1回だけプルーニング
-                  chatMemoryManager.pruneMemories(personaId, settings.chatHistoryMaxItems ?? 200);
-                })
-                .catch(() => {});
             }
           }
+          const body = fields.body ?? skillManager.getSkillContent(personaId, skillId) ?? '';
+          skillManager.saveSkill(personaId, skillId, {
+            name: fields.name ?? existing.name,
+            description: fields.description ?? existing.description,
+            trigger: fields.trigger ?? existing.trigger,
+            body,
+          });
+          mainWindow?.webContents.send(IPC_CHANNELS.SKILLS_UPDATED, personaId);
+          return { success: true as const };
         },
-        {
-          thinkMode: payload.thinkMode ?? false,
-          fileBrowserState: fileBrowserState.rootPath ? fileBrowserState : undefined,
-          openFilePaths: payload.openFilePaths && payload.openFilePaths.length > 0 ? payload.openFilePaths : undefined,
-          userMemory: userMemory ?? undefined,
-          chatMemories: chatMemoriesText,
-          skillContext,
-          onToolBefore: (toolName, input) =>
-            hookManager.emit('tool:beforeExecute', { toolName, input }),
-          onToolAfter: (toolName, input, result) =>
-            hookManager.emit('tool:afterExecute', { toolName, input, result }),
-          onCommandApprovalRequired: async (command: string, cwd?: string): Promise<boolean> => {
-            const currentSettings = store.getSettings();
-            if (currentSettings.shellCommandPermission === 'allow-all') return true;
-            // コマンド種別（先頭トークン）を取得
-            const cmdToken = command.trim().split(/\s+/)[0] ?? command;
-            if ((currentSettings.allowedShellCommands ?? []).includes(cmdToken)) return true;
-            const { response } = await dialog.showMessageBox(mainWindow!, {
-              type: 'question',
-              title: 'コマンド実行の確認',
-              message: 'AIが次のコマンドを実行しようとしています:',
-              detail: `$ ${command}${cwd ? `\n作業ディレクトリ: ${cwd}` : ''}`,
-              buttons: ['許可', `今後も許可 (${cmdToken})`, '拒否'],
-              defaultId: 0,
-              cancelId: 2,
-            });
-            if (response === 1) {
-              const allowed = [...(currentSettings.allowedShellCommands ?? []), cmdToken];
-              store.saveSettings({ ...currentSettings, allowedShellCommands: allowed });
-            }
-            return response !== 2;
+        deleteAISkill: (skillId: string) => {
+          if (!personaId) return { success: false as const, message: 'アクティブなペルソナがありません' };
+          const existing = skillManager.findSkill(personaId, skillId);
+          if (!existing) return { success: false as const, message: `スキル "${skillId}" が見つかりません` };
+          if (existing.source === 'user') {
+            return {
+              success: false as const,
+              message: 'ユーザー作成スキルはAIが削除できません。削除が必要な場合はユーザーにお願いしてください。',
+            };
+          }
+          skillManager.deleteAISkill(personaId, skillId);
+          mainWindow?.webContents.send(IPC_CHANNELS.SKILLS_UPDATED, personaId);
+          return { success: true as const };
+        },
+        updateMemory: (content: string) => {
+          if (personaId) memoryManager.setMemory(personaId, content);
+        },
+      };
+
+      // チャット後にアシスタント応答を蓄積してメモリ保存するためのバッファ
+      let assistantBuffer = '';
+
+      hookManager.emit('chat:beforeSend', { messages: payload.messages, systemPrompt: settings.systemPrompt });
+
+      try {
+        await claude.streamChat(
+          settings,
+          payload.messages,
+          (chunk: string) => {
+            assistantBuffer += chunk;
+            event.sender.send(IPC_CHANNELS.CHAT_STREAM, chunk);
           },
-        },
-      );
-    } catch (err: any) {
-      event.sender.send(IPC_CHANNELS.CHAT_STREAM_ERROR, err.message || 'Unknown error');
-    }
-  });
+          (stats: ChatMessageStats) => {
+            hookManager.emit('chat:afterResponse', { messages: payload.messages, response: assistantBuffer, stats });
+            event.sender.send(IPC_CHANNELS.CHAT_STREAM_END, stats);
+
+            // チャット履歴メモリへ自動保存（非同期・失敗無視）
+            if (settings.chatHistoryEnabled && personaId && assistantBuffer.trim()) {
+              const lastUserMsg = [...payload.messages].reverse().find((m) => m.role === 'user');
+              if (lastUserMsg) {
+                const cleanResponse = assistantBuffer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+                // 512 トークン制限に収まるようチャンク分割して保存
+                const fullText = `ユーザー: ${lastUserMsg.content}\nアシスタント: ${cleanResponse}`;
+                const chunks = chunkText(fullText);
+                const storeOpts = {
+                  sessionId: payload.sessionId,
+                  baseUrl: settings.lmstudioBaseUrl,
+                  embeddingModel: settings.chatHistoryEmbeddingModel,
+                };
+                Promise.all(
+                  chunks.map((chunk) => {
+                    hookManager.emit('memory:beforeStore', { personaId, content: chunk });
+                    const _storeStart = Date.now();
+                    return chatMemoryManager.storeMemory(personaId, chunk, storeOpts).then(() => {
+                      hookManager.emit('memory:afterStore', {
+                        personaId,
+                        content: chunk,
+                        durationMs: Date.now() - _storeStart,
+                      });
+                    });
+                  }),
+                )
+                  .then(() => {
+                    // 全チャンク保存後に1回だけプルーニング
+                    chatMemoryManager.pruneMemories(personaId, settings.chatHistoryMaxItems ?? 200);
+                  })
+                  .catch(() => {});
+              }
+            }
+          },
+          {
+            thinkMode: payload.thinkMode ?? false,
+            fileBrowserState: fileBrowserState.rootPath ? fileBrowserState : undefined,
+            openFilePaths:
+              payload.openFilePaths && payload.openFilePaths.length > 0 ? payload.openFilePaths : undefined,
+            userMemory: userMemory ?? undefined,
+            chatMemories: chatMemoriesText,
+            skillContext,
+            onToolBefore: (toolName, input) => hookManager.emit('tool:beforeExecute', { toolName, input }),
+            onToolAfter: (toolName, input, result) =>
+              hookManager.emit('tool:afterExecute', { toolName, input, result }),
+            onCommandApprovalRequired: async (command: string, cwd?: string): Promise<boolean> => {
+              const currentSettings = store.getSettings();
+              if (currentSettings.shellCommandPermission === 'allow-all') return true;
+              // コマンド種別（先頭トークン）を取得
+              const cmdToken = command.trim().split(/\s+/)[0] ?? command;
+              if ((currentSettings.allowedShellCommands ?? []).includes(cmdToken)) return true;
+              const { response } = await dialog.showMessageBox(mainWindow!, {
+                type: 'question',
+                title: 'コマンド実行の確認',
+                message: 'AIが次のコマンドを実行しようとしています:',
+                detail: `$ ${command}${cwd ? `\n作業ディレクトリ: ${cwd}` : ''}`,
+                buttons: ['許可', `今後も許可 (${cmdToken})`, '拒否'],
+                defaultId: 0,
+                cancelId: 2,
+              });
+              if (response === 1) {
+                const allowed = [...(currentSettings.allowedShellCommands ?? []), cmdToken];
+                store.saveSettings({ ...currentSettings, allowedShellCommands: allowed });
+              }
+              return response !== 2;
+            },
+          },
+        );
+      } catch (err: any) {
+        event.sender.send(IPC_CHANNELS.CHAT_STREAM_ERROR, err.message || 'Unknown error');
+      }
+    },
+  );
 
   // --- チャット中断 ---
   ipcMain.on(IPC_CHANNELS.CHAT_ABORT, () => {
@@ -935,9 +972,7 @@ function setupIPC(): void {
   ipcMain.handle(IPC_CHANNELS.ICON_SELECT, async (_e, target: 'app' | 'tray' | 'avatar') => {
     const result = await dialog.showOpenDialog(mainWindow!, {
       title: 'アイコン画像を選択',
-      filters: [
-        { name: '画像ファイル', extensions: ['png', 'jpg', 'jpeg', 'svg', 'ico'] },
-      ],
+      filters: [{ name: '画像ファイル', extensions: ['png', 'jpg', 'jpeg', 'svg', 'ico'] }],
       properties: ['openFile'],
     });
 
@@ -952,9 +987,7 @@ function setupIPC(): void {
   ipcMain.handle(IPC_CHANNELS.PERSONA_ICON_SELECT, async (_e, personaId: string) => {
     const result = await dialog.showOpenDialog(mainWindow!, {
       title: 'ペルソナアイコン画像を選択',
-      filters: [
-        { name: '画像ファイル', extensions: ['png', 'jpg', 'jpeg', 'svg', 'ico'] },
-      ],
+      filters: [{ name: '画像ファイル', extensions: ['png', 'jpg', 'jpeg', 'svg', 'ico'] }],
       properties: ['openFile'],
     });
 
@@ -973,9 +1006,7 @@ function setupIPC(): void {
     try {
       // 送信元ウィンドウが存在するディスプレイを特定
       const senderWin = BrowserWindow.fromWebContents(event.sender);
-      const targetDisplay = senderWin
-        ? getDisplayForWindow(senderWin)
-        : screen.getPrimaryDisplay();
+      const targetDisplay = senderWin ? getDisplayForWindow(senderWin) : screen.getPrimaryDisplay();
 
       // ARIA自身が映り込まないようにウィンドウを一時非表示
       const mainWasVisible = mainWindow?.isVisible() ?? false;
@@ -1191,9 +1222,24 @@ function setupIPC(): void {
   });
 
   // --- スキル: 保存（インライン編集） ---
-  ipcMain.handle(IPC_CHANNELS.SKILL_SAVE, (_e, personaId: string, skillId: string, fields: { name: string; description: string; trigger?: string; scriptType?: string; scriptValue?: string; body: string }) => {
-    return skillManager.saveSkill(personaId, skillId, fields);
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.SKILL_SAVE,
+    (
+      _e,
+      personaId: string,
+      skillId: string,
+      fields: {
+        name: string;
+        description: string;
+        trigger?: string;
+        scriptType?: string;
+        scriptValue?: string;
+        body: string;
+      },
+    ) => {
+      return skillManager.saveSkill(personaId, skillId, fields);
+    },
+  );
 
   // --- スキル: 削除 ---
   ipcMain.handle(IPC_CHANNELS.SKILL_DELETE, (_e, personaId: string, skillId: string) => {
@@ -1299,9 +1345,10 @@ function setupIPC(): void {
     try {
       const entry = extensionManager.list().find((e) => e.id === extId);
       if (!entry) return { success: false, error: '拡張が見つかりません' };
-      const extDir = path.isAbsolute(entry.source) && fs.existsSync(entry.source)
-        ? entry.source
-        : path.join(extensionManager.getExtensionsDir(), extId);
+      const extDir =
+        path.isAbsolute(entry.source) && fs.existsSync(entry.source)
+          ? entry.source
+          : path.join(extensionManager.getExtensionsDir(), extId);
       const readmePath = path.join(extDir, 'README.md');
       if (!fs.existsSync(readmePath)) return { success: false, error: 'README.md が見つかりません' };
       return { success: true, content: fs.readFileSync(readmePath, 'utf-8') };
@@ -1347,15 +1394,25 @@ function setupIPC(): void {
     if (process.platform === 'win32') {
       return new Promise<{ path: string; name: string }[]>((resolve) => {
         exec('wmic logicaldisk get name', { timeout: 4000 }, (err, stdout) => {
-          if (err) { resolve([{ path: 'C:\\', name: 'C:' }]); return; }
-          const drives = stdout.trim().split('\n').slice(1)
-            .map((l) => l.trim()).filter((l) => /^[A-Z]:$/.test(l))
+          if (err) {
+            resolve([{ path: 'C:\\', name: 'C:' }]);
+            return;
+          }
+          const drives = stdout
+            .trim()
+            .split('\n')
+            .slice(1)
+            .map((l) => l.trim())
+            .filter((l) => /^[A-Z]:$/.test(l))
             .map((d) => ({ path: d + '\\', name: d }));
           resolve(drives.length ? drives : [{ path: 'C:\\', name: 'C:' }]);
         });
       });
     }
-    return [{ path: '/', name: '/' }, { path: os.homedir(), name: '~' }];
+    return [
+      { path: '/', name: '/' },
+      { path: os.homedir(), name: '~' },
+    ];
   });
 
   ipcMain.handle('filebrowser:open-folder-dialog', async () => {
@@ -1390,27 +1447,28 @@ function setupIPC(): void {
           mtime,
         };
       });
-      items.sort((a, b) =>
-        a.isDir !== b.isDir ? (a.isDir ? -1 : 1) : a.name.localeCompare(b.name, 'ja'),
-      );
+      items.sort((a, b) => (a.isDir !== b.isDir ? (a.isDir ? -1 : 1) : a.name.localeCompare(b.name, 'ja')));
       return { success: true, items, dirPath };
     } catch (err: any) {
       return { success: false, error: err.message, items: [], dirPath };
     }
   });
 
-  ipcMain.handle('filebrowser:open-file', async (_e, { filePath, maxBytes = 5242880 }: { filePath: string; maxBytes?: number }) => {
-    try {
-      const st = fs.statSync(filePath);
-      if (st.size > maxBytes) {
-        return { success: false, error: `ファイルが大きすぎます (${(st.size / 1048576).toFixed(1)} MB)` };
+  ipcMain.handle(
+    'filebrowser:open-file',
+    async (_e, { filePath, maxBytes = 5242880 }: { filePath: string; maxBytes?: number }) => {
+      try {
+        const st = fs.statSync(filePath);
+        if (st.size > maxBytes) {
+          return { success: false, error: `ファイルが大きすぎます (${(st.size / 1048576).toFixed(1)} MB)` };
+        }
+        const content = fs.readFileSync(filePath, 'utf-8');
+        return { success: true, path: filePath, content, size: st.size };
+      } catch (err: any) {
+        return { success: false, error: err.message };
       }
-      const content = fs.readFileSync(filePath, 'utf-8');
-      return { success: true, path: filePath, content, size: st.size };
-    } catch (err: any) {
-      return { success: false, error: err.message };
-    }
-  });
+    },
+  );
 
   ipcMain.handle('filebrowser:save-file', async (_e, { filePath, content }: { filePath: string; content: string }) => {
     try {
@@ -1439,33 +1497,45 @@ function setupIPC(): void {
   });
 
   // ===== ターミナル (node-pty) =====
-  ipcMain.handle('terminal:create', (event, { id, cols, rows, cwd, shell: shellExec }: { id: string; cols: number; rows: number; cwd?: string; shell?: string }) => {
-    if (ptySessions.has(id)) return;
+  ipcMain.handle(
+    'terminal:create',
+    (
+      event,
+      {
+        id,
+        cols,
+        rows,
+        cwd,
+        shell: shellExec,
+      }: { id: string; cols: number; rows: number; cwd?: string; shell?: string },
+    ) => {
+      if (ptySessions.has(id)) return;
 
-    const shell = shellExec || (process.platform === 'win32' ? 'powershell.exe' : (process.env.SHELL || '/bin/bash'));
-    const workDir = cwd || os.homedir();
+      const shell = shellExec || (process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash');
+      const workDir = cwd || os.homedir();
 
-    const ptyProcess = pty.spawn(shell, [], {
-      name: 'xterm-256color',
-      cols,
-      rows,
-      cwd: workDir,
-      env: { ...process.env } as Record<string, string>,
-    });
+      const ptyProcess = pty.spawn(shell, [], {
+        name: 'xterm-256color',
+        cols,
+        rows,
+        cwd: workDir,
+        env: { ...process.env } as Record<string, string>,
+      });
 
-    ptyProcess.onData((data) => {
-      const win = BrowserWindow.fromWebContents(event.sender);
-      win?.webContents.send(`terminal:data:${id}`, data);
-    });
+      ptyProcess.onData((data) => {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        win?.webContents.send(`terminal:data:${id}`, data);
+      });
 
-    ptyProcess.onExit(() => {
-      const win = BrowserWindow.fromWebContents(event.sender);
-      win?.webContents.send(`terminal:exit:${id}`);
-      ptySessions.delete(id);
-    });
+      ptyProcess.onExit(() => {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        win?.webContents.send(`terminal:exit:${id}`);
+        ptySessions.delete(id);
+      });
 
-    ptySessions.set(id, { process: ptyProcess, cols, rows });
-  });
+      ptySessions.set(id, { process: ptyProcess, cols, rows });
+    },
+  );
 
   ipcMain.on('terminal:write', (_e, { id, data }: { id: string; data: string }) => {
     ptySessions.get(id)?.process.write(data);
@@ -1483,7 +1553,9 @@ function setupIPC(): void {
   ipcMain.handle('terminal:destroy', (_e, { id }: { id: string }) => {
     const session = ptySessions.get(id);
     if (session) {
-      try { session.process.kill(); } catch {}
+      try {
+        session.process.kill();
+      } catch {}
       ptySessions.delete(id);
     }
   });
@@ -1497,18 +1569,20 @@ app.whenReady().then(() => {
     const withoutScheme = request.url.slice('arschat-file://'.length);
     const decoded = decodeURIComponent(withoutScheme);
     // Windows: "/C:/Users/..." → "C:/Users/..."  Unix: "/home/..." → "/home/..."
-    const filePath = process.platform === 'win32'
-      ? decoded.replace(/^\/([A-Za-z]:)/, '$1')
-      : decoded;
+    const filePath = process.platform === 'win32' ? decoded.replace(/^\/([A-Za-z]:)/, '$1') : decoded;
     try {
       const data = fs.readFileSync(filePath);
       const ext = path.extname(filePath).slice(1).toLowerCase();
       const mime =
-        ext === 'png' ? 'image/png' :
-        ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' :
-        ext === 'svg' ? 'image/svg+xml' :
-        ext === 'ico' ? 'image/x-icon' :
-        'image/png';
+        ext === 'png'
+          ? 'image/png'
+          : ext === 'jpg' || ext === 'jpeg'
+            ? 'image/jpeg'
+            : ext === 'svg'
+              ? 'image/svg+xml'
+              : ext === 'ico'
+                ? 'image/x-icon'
+                : 'image/png';
       return new Response(data, { headers: { 'Content-Type': mime } });
     } catch {
       return new Response('Not found', { status: 404 });
@@ -1536,11 +1610,13 @@ app.whenReady().then(() => {
 
   // 拡張機能の自動ロード（バックグラウンド）
   const claudeForExt = createClaudeService(mcpManager);
-  extensionManager.loadAll((entry) =>
-    createExtensionContext(entry, extensionManager.getExtensionsDir(), store, claudeForExt, mainWindow, hookManager),
-  ).catch((err) => {
-    console.error('[Extension] 初期ロードエラー:', err?.message);
-  });
+  extensionManager
+    .loadAll((entry) =>
+      createExtensionContext(entry, extensionManager.getExtensionsDir(), store, claudeForExt, mainWindow, hookManager),
+    )
+    .catch((err) => {
+      console.error('[Extension] 初期ロードエラー:', err?.message);
+    });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

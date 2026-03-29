@@ -1,16 +1,17 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import TitleBar from './components/TitleBar';
-import ChatWindow from './components/ChatWindow';
-import Settings from './components/Settings';
+import type React from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import ActivityBar from './components/ActivityBar';
-import Sidebar from './components/Sidebar';
-import RightPanel from './components/RightPanel';
-import WidgetOverlay from './components/WidgetOverlay';
-import UpdateNotification from './components/UpdateNotification';
-import PaneGroup from './components/PaneGroup';
-import TerminalPanel from './components/TerminalPanel';
+import ChatWindow from './components/ChatWindow';
 import { FileViewerPage } from './components/FileBrowser';
-import { loadExtensions, type LoadedExtension, type OpenTabOptions } from './extension-loader';
+import PaneGroup from './components/PaneGroup';
+import RightPanel from './components/RightPanel';
+import Settings from './components/Settings';
+import Sidebar from './components/Sidebar';
+import TerminalPanel from './components/TerminalPanel';
+import TitleBar from './components/TitleBar';
+import UpdateNotification from './components/UpdateNotification';
+import WidgetOverlay from './components/WidgetOverlay';
+import { type LoadedExtension, loadExtensions, type OpenTabOptions } from './extension-loader';
 import type { AppTab, DragState, Pane } from './types/app';
 
 export default function App() {
@@ -23,9 +24,7 @@ export default function App() {
 
   // ===== State =====
   const initialTab: AppTab = { id: 'chat', page: 'chat', label: 'チャット', icon: '💬', closable: false };
-  const [panes, setPanes] = useState<Pane[]>([
-    { id: 'pane-1', tabs: [initialTab], activeTabId: 'chat' },
-  ]);
+  const [panes, setPanes] = useState<Pane[]>([{ id: 'pane-1', tabs: [initialTab], activeTabId: 'chat' }]);
   const [activePaneId, setActivePaneId] = useState<string>('pane-1');
   const [dragging, setDragging] = useState<DragState | null>(null);
 
@@ -47,13 +46,19 @@ export default function App() {
 
   // ===== Refs（安定した参照用） =====
   const extensionsRef = useRef<LoadedExtension[]>(extensions);
-  useEffect(() => { extensionsRef.current = extensions; }, [extensions]);
+  useEffect(() => {
+    extensionsRef.current = extensions;
+  }, [extensions]);
 
   const activePaneIdRef = useRef<string>(activePaneId);
-  useEffect(() => { activePaneIdRef.current = activePaneId; }, [activePaneId]);
+  useEffect(() => {
+    activePaneIdRef.current = activePaneId;
+  }, [activePaneId]);
 
   const panesRef = useRef<Pane[]>(panes);
-  useEffect(() => { panesRef.current = panes; }, [panes]);
+  useEffect(() => {
+    panesRef.current = panes;
+  }, [panes]);
 
   // ===== 現在ページ（後方互換・Sidebar/TitleBar に渡す用） =====
   const activePane = panes.find((p) => p.id === activePaneId) ?? panes[0];
@@ -62,13 +67,13 @@ export default function App() {
 
   // ===== ページラベル・アイコン取得 =====
   function getTabMeta(page: string, exts: LoadedExtension[]): { label: string; icon?: string } {
-    if (page === 'chat')     return { label: 'チャット', icon: '💬' };
-    if (page === 'settings') return { label: '設定',     icon: '⚙️' };
+    if (page === 'chat') return { label: 'チャット', icon: '💬' };
+    if (page === 'settings') return { label: '設定', icon: '⚙️' };
     const m = page.match(/^ext:(.+?):(.+)$/);
     if (m) {
       const [, extId, pageId] = m;
       const ext = exts.find((e) => e.info.id === extId);
-      const pc  = ext?.info.manifest.pages?.find((p) => p.id === pageId);
+      const pc = ext?.info.manifest.pages?.find((p) => p.id === pageId);
       return { label: pc?.title ?? pageId, icon: pc?.icon };
     }
     return { label: page };
@@ -84,9 +89,7 @@ export default function App() {
         const existing = pane.tabs.find((t) => t.page === page);
         if (existing) {
           setActivePaneId(pane.id);
-          return prev.map((p) =>
-            p.id === pane.id ? { ...p, activeTabId: existing.id } : p,
-          );
+          return prev.map((p) => (p.id === pane.id ? { ...p, activeTabId: existing.id } : p));
         }
       }
       // アクティブペインに新規タブを追加
@@ -94,14 +97,14 @@ export default function App() {
       const { label, icon } = getTabMeta(page, extensionsRef.current);
       const newTab: AppTab = { id: page, page, label, icon, closable: page !== 'chat' };
       return prev.map((p) =>
-        p.id === currentPaneId
-          ? { ...p, tabs: [...p.tabs, newTab], activeTabId: newTab.id }
-          : p,
+        p.id === currentPaneId ? { ...p, tabs: [...p.tabs, newTab], activeTabId: newTab.id } : p,
       );
     });
   }
 
-  useEffect(() => { navigateRef.current = navigate; });
+  useEffect(() => {
+    navigateRef.current = navigate;
+  });
   const stableNavigate = useCallback((page: string) => navigateRef.current(page), []);
 
   // ===== openExtTab（拡張からの動的タブ生成） =====
@@ -115,9 +118,7 @@ export default function App() {
         const existing = pane.tabs.find((t) => t.id === fullId);
         if (existing) {
           setActivePaneId(pane.id);
-          return prev.map((p) =>
-            p.id === pane.id ? { ...p, activeTabId: fullId } : p,
-          );
+          return prev.map((p) => (p.id === pane.id ? { ...p, activeTabId: fullId } : p));
         }
       }
       const currentPaneId = activePaneIdRef.current;
@@ -130,19 +131,14 @@ export default function App() {
         pageComponentId: options.pageId,
         tabId: options.id,
       };
-      return prev.map((p) =>
-        p.id === currentPaneId
-          ? { ...p, tabs: [...p.tabs, newTab], activeTabId: fullId }
-          : p,
-      );
+      return prev.map((p) => (p.id === currentPaneId ? { ...p, tabs: [...p.tabs, newTab], activeTabId: fullId } : p));
     });
   }
 
-  useEffect(() => { openExtTabRef.current = openExtTab; });
-  const stableOpenExtTab = useCallback(
-    (options: OpenTabOptions) => openExtTabRef.current(options),
-    [],
-  );
+  useEffect(() => {
+    openExtTabRef.current = openExtTab;
+  });
+  const stableOpenExtTab = useCallback((options: OpenTabOptions) => openExtTabRef.current(options), []);
 
   // ===== closeTab =====
   function closeTab(id: string) {
@@ -152,9 +148,7 @@ export default function App() {
         if (idx < 0 || !pane.tabs[idx].closable) return pane;
         const next = pane.tabs.filter((t) => t.id !== id);
         const newActiveTabId =
-          pane.activeTabId === id
-            ? next[Math.max(0, idx - 1)]?.id ?? next[0]?.id ?? ''
-            : pane.activeTabId;
+          pane.activeTabId === id ? (next[Math.max(0, idx - 1)]?.id ?? next[0]?.id ?? '') : pane.activeTabId;
         return { ...pane, tabs: next, activeTabId: newActiveTabId };
       });
       // 空になったペインは削除（最低1ペインは残す）
@@ -169,7 +163,7 @@ export default function App() {
   function moveTab(fromPaneId: string, toPaneId: string, tabId: string, insertIdx: number) {
     setPanes((prev) => {
       const fromPane = prev.find((p) => p.id === fromPaneId);
-      const toPane   = prev.find((p) => p.id === toPaneId);
+      const toPane = prev.find((p) => p.id === toPaneId);
       if (!fromPane || !toPane) return prev;
 
       const tab = fromPane.tabs.find((t) => t.id === tabId);
@@ -182,7 +176,7 @@ export default function App() {
         if (adjustedIdx === sourceIdx) return prev;
         const newTabs = fromPane.tabs.filter((t) => t.id !== tabId);
         newTabs.splice(adjustedIdx, 0, tab);
-        return prev.map((p) => p.id === fromPaneId ? { ...p, tabs: newTabs } : p);
+        return prev.map((p) => (p.id === fromPaneId ? { ...p, tabs: newTabs } : p));
       }
 
       // 異なるペイン間移動
@@ -190,7 +184,7 @@ export default function App() {
       const newFromTabs = fromPane.tabs.filter((t) => t.id !== tabId);
       const newFromActiveId =
         fromPane.activeTabId === tabId
-          ? newFromTabs[Math.max(0, fromTabIdx - 1)]?.id ?? newFromTabs[0]?.id ?? ''
+          ? (newFromTabs[Math.max(0, fromTabIdx - 1)]?.id ?? newFromTabs[0]?.id ?? '')
           : fromPane.activeTabId;
 
       const newToTabs = [...toPane.tabs];
@@ -201,24 +195,19 @@ export default function App() {
       if (newFromTabs.length === 0) {
         return prev
           .filter((p) => p.id !== fromPaneId)
-          .map((p) => p.id === toPaneId ? { ...p, tabs: newToTabs, activeTabId: tabId } : p);
+          .map((p) => (p.id === toPaneId ? { ...p, tabs: newToTabs, activeTabId: tabId } : p));
       }
 
       return prev.map((p) => {
         if (p.id === fromPaneId) return { ...p, tabs: newFromTabs, activeTabId: newFromActiveId };
-        if (p.id === toPaneId)   return { ...p, tabs: newToTabs, activeTabId: tabId };
+        if (p.id === toPaneId) return { ...p, tabs: newToTabs, activeTabId: tabId };
         return p;
       });
     });
   }
 
   /** 対象ペインの左右にタブを分割して配置 */
-  function splitPaneAtTarget(
-    sourcePaneId: string,
-    targetPaneId: string,
-    tabId: string,
-    direction: 'left' | 'right',
-  ) {
+  function splitPaneAtTarget(sourcePaneId: string, targetPaneId: string, tabId: string, direction: 'left' | 'right') {
     setPanes((prev) => {
       const sourcePane = prev.find((p) => p.id === sourcePaneId);
       if (!sourcePane) return prev;
@@ -231,10 +220,7 @@ export default function App() {
       let result = prev.map((p) => {
         if (p.id !== sourcePaneId) return p;
         const newTabs = p.tabs.filter((t) => t.id !== tabId);
-        const newActiveId =
-          p.activeTabId === tabId
-            ? newTabs[0]?.id ?? ''
-            : p.activeTabId;
+        const newActiveId = p.activeTabId === tabId ? (newTabs[0]?.id ?? '') : p.activeTabId;
         return { ...p, tabs: newTabs, activeTabId: newActiveId };
       });
 
@@ -253,21 +239,16 @@ export default function App() {
 
   // ===== ドラッグイベントハンドラ =====
 
-  const handleDragStart = useCallback(
-    (tabId: string, paneId: string, x: number, y: number) => {
-      setDragging({ tabId, sourcePaneId: paneId, currentX: x, currentY: y });
-    },
-    [],
-  );
+  const handleDragStart = useCallback((tabId: string, paneId: string, x: number, y: number) => {
+    setDragging({ tabId, sourcePaneId: paneId, currentX: x, currentY: y });
+  }, []);
 
   // ドラッグ中のマウス追跡・終了
   useEffect(() => {
     if (!dragging) return;
 
     const onMove = (e: MouseEvent) => {
-      setDragging((prev) =>
-        prev ? { ...prev, currentX: e.clientX, currentY: e.clientY } : null,
-      );
+      setDragging((prev) => (prev ? { ...prev, currentX: e.clientX, currentY: e.clientY } : null));
     };
     const onUp = () => setDragging(null);
 
@@ -277,7 +258,7 @@ export default function App() {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!dragging]);
 
   const handleDropOnTabBar = useCallback(
@@ -337,29 +318,32 @@ export default function App() {
     [],
   );
 
-  const handleResizeStart      = makeResizeHandler(sidePanelWidth,  setSidePanelWidth,  'right', 160, 480);
-  const handleRightResizeStart = makeResizeHandler(rightPanelWidth, setRightPanelWidth, 'left',  200, 600);
+  const handleResizeStart = makeResizeHandler(sidePanelWidth, setSidePanelWidth, 'right', 160, 480);
+  const handleRightResizeStart = makeResizeHandler(rightPanelWidth, setRightPanelWidth, 'left', 200, 600);
 
   // ターミナルパネル上端ドラッグでリサイズ
-  const handleTerminalResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    const startY = e.clientY;
-    const startH = terminalHeight;
-    document.body.style.cursor = 'row-resize';
-    document.body.style.userSelect = 'none';
-    const onMove = (ev: MouseEvent) => {
-      const delta = startY - ev.clientY;
-      setTerminalHeight(Math.min(800, Math.max(100, startH + delta)));
-    };
-    const onUp = () => {
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }, [terminalHeight]);
+  const handleTerminalResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      const startY = e.clientY;
+      const startH = terminalHeight;
+      document.body.style.cursor = 'row-resize';
+      document.body.style.userSelect = 'none';
+      const onMove = (ev: MouseEvent) => {
+        const delta = startY - ev.clientY;
+        setTerminalHeight(Math.min(800, Math.max(100, startH + delta)));
+      };
+      const onUp = () => {
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    },
+    [terminalHeight],
+  );
 
   // ===== 初期化 =====
   useEffect(() => {
@@ -435,7 +419,7 @@ export default function App() {
         const existing = pane.tabs.find((t) => t.id === tabId);
         if (existing) {
           setActivePaneId(pane.id);
-          return prev.map((p) => p.id === pane.id ? { ...p, activeTabId: tabId } : p);
+          return prev.map((p) => (p.id === pane.id ? { ...p, activeTabId: tabId } : p));
         }
       }
       const currentPaneId = activePaneIdRef.current;
@@ -447,11 +431,7 @@ export default function App() {
         closable: true,
         tabId,
       };
-      return prev.map((p) =>
-        p.id === currentPaneId
-          ? { ...p, tabs: [...p.tabs, newTab], activeTabId: tabId }
-          : p,
-      );
+      return prev.map((p) => (p.id === currentPaneId ? { ...p, tabs: [...p.tabs, newTab], activeTabId: tabId } : p));
     });
   }, []);
 
@@ -521,181 +501,167 @@ export default function App() {
 
   return (
     <>
-    <div className="h-screen flex flex-col bg-aria-bg">
-      <TitleBar
-        onMenuClick={() => setActivityBarVisible((v) => !v)}
-        onSettingsClick={() => {
-          if (settingsExists) {
-            closeTab('settings');
-          } else {
-            navigate('settings');
-          }
-        }}
-        onRightPanelClick={() => setRightPanelOpen((v) => !v)}
-        rightPanelOpen={rightPanelOpen}
-        currentPage={currentPage}
-        terminalOpen={terminalOpen}
-        onTerminalClick={() => setTerminalOpen((v) => !v)}
-      />
-
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* 上部エリア（水平レイアウト） */}
-        <div className="flex-1 flex overflow-hidden min-h-0">
-          {/* アクティビティバー */}
-          <div
-            className={`shrink-0 overflow-hidden transition-all duration-200 ${
-              activityBarVisible ? 'w-12' : 'w-0'
-            }`}
-          >
-            <ActivityBar
-              activePanelId={activePanelId}
-              currentPage={currentPage}
-              extensions={extensions}
-              onNewSession={() => {
-                setCurrentSessionId(null);
-                window.arsChatAPI.setActiveSession?.(null);
-                setActivePaneId(panes[0].id);
-                setPanes((prev) =>
-                  prev.map((p, i) => (i === 0 ? { ...p, activeTabId: 'chat' } : p)),
-                );
-              }}
-              onSelectPanel={handleSelectPanel}
-              onNavigate={stableNavigate}
-              onReloadExtensions={handleReloadExtensions}
-              isReloading={isReloadingExtensions}
-            />
-          </div>
-
-          {/* サイドコンテンツパネル */}
-          <div
-            className="flex-none overflow-hidden border-r border-aria-border flex"
-            style={
-              activityBarVisible && activePanelId
-                ? { width: sidePanelWidth, transition: 'none' }
-                : { width: 0, transition: 'width 0.2s' }
+      <div className="h-screen flex flex-col bg-aria-bg">
+        <TitleBar
+          onMenuClick={() => setActivityBarVisible((v) => !v)}
+          onSettingsClick={() => {
+            if (settingsExists) {
+              closeTab('settings');
+            } else {
+              navigate('settings');
             }
-          >
-            {activePanelId && (
-              <>
-                <div className="h-full flex-1 min-w-0 overflow-hidden bg-aria-bg-light">
-                  <Sidebar
-                    activePanelId={activePanelId}
-                    currentSessionId={currentSessionId}
-                    currentPage={currentPage}
-                    extensions={extensions}
-                    onOpenFileTab={handleOpenFileTab}
-                    onFileBrowserPathChange={setFileBrowserPath}
-                    onSelectSession={(id) => {
-                      setCurrentSessionId(id);
-                      window.arsChatAPI.setActiveSession?.(id);
-                      // チャットタブがあるペインをアクティブに
-                      const chatPane = panes.find((p) => p.tabs.some((t) => t.page === 'chat'));
-                      if (chatPane) {
-                        setActivePaneId(chatPane.id);
-                        setPanes((prev) =>
-                          prev.map((p) =>
-                            p.id === chatPane.id ? { ...p, activeTabId: 'chat' } : p,
-                          ),
-                        );
-                      }
-                    }}
-                    onNewSession={() => {
-                      setCurrentSessionId(null);
-                      window.arsChatAPI.setActiveSession?.(null);
-                      const chatPane = panes.find((p) => p.tabs.some((t) => t.page === 'chat'));
-                      if (chatPane) {
-                        setActivePaneId(chatPane.id);
-                        setPanes((prev) =>
-                          prev.map((p) =>
-                            p.id === chatPane.id ? { ...p, activeTabId: 'chat' } : p,
-                          ),
-                        );
-                      }
-                    }}
-                    onNavigate={(page) => navigate(page)}
-                  />
-                </div>
-                {/* リサイズハンドル（右端） */}
-                <div
-                  onMouseDown={handleResizeStart}
-                  className="w-1 flex-none cursor-col-resize hover:bg-aria-primary/40 active:bg-aria-primary/60 transition-colors"
-                />
-              </>
-            )}
-          </div>
+          }}
+          onRightPanelClick={() => setRightPanelOpen((v) => !v)}
+          rightPanelOpen={rightPanelOpen}
+          currentPage={currentPage}
+          terminalOpen={terminalOpen}
+          onTerminalClick={() => setTerminalOpen((v) => !v)}
+        />
 
-          {/* メインコンテンツ（ペイングループ＋ターミナル） */}
-          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-            <PaneGroup
-              panes={panes}
-              activePaneId={activePaneId}
-              dragging={dragging}
-              onTabClose={(_paneId, tabId) => closeTab(tabId)}
-              onTabActivate={(paneId, tabId) => {
-                setActivePaneId(paneId);
-                setPanes((prev) =>
-                  prev.map((p) => (p.id === paneId ? { ...p, activeTabId: tabId } : p)),
-                );
-              }}
-              onPaneActivate={setActivePaneId}
-              onDragStart={handleDragStart}
-              onDropOnTabBar={handleDropOnTabBar}
-              onDropOnContent={handleDropOnContent}
-              renderContent={renderTabContent}
-            />
-
-            {/* ターミナルパネル（中央エリア下部） */}
-            {terminalOpen && (
-              <>
-                <div
-                  onMouseDown={handleTerminalResizeStart}
-                  className="h-1 shrink-0 cursor-row-resize hover:bg-aria-primary/40 active:bg-aria-primary/60 transition-colors border-t border-aria-border"
-                />
-                <div className="shrink-0 overflow-hidden" style={{ height: terminalHeight }}>
-                  <TerminalPanel visible={terminalOpen} cwd={fileBrowserPath} />
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* 右パネル */}
-          <div
-            className="flex-none overflow-hidden flex"
-            style={
-              rightPanelOpen
-                ? { width: rightPanelWidth, transition: 'none' }
-                : { width: 0, transition: 'width 0.2s' }
-            }
-          >
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* 上部エリア（水平レイアウト） */}
+          <div className="flex-1 flex overflow-hidden min-h-0">
+            {/* アクティビティバー */}
             <div
-              onMouseDown={handleRightResizeStart}
-              className="w-1 flex-none cursor-col-resize hover:bg-aria-primary/40 active:bg-aria-primary/60 transition-colors border-l border-aria-border"
-            />
-            <div className="flex-1 min-w-0 overflow-hidden">
-              <RightPanel extensions={extensions} />
+              className={`shrink-0 overflow-hidden transition-all duration-200 ${activityBarVisible ? 'w-12' : 'w-0'}`}
+            >
+              <ActivityBar
+                activePanelId={activePanelId}
+                currentPage={currentPage}
+                extensions={extensions}
+                onNewSession={() => {
+                  setCurrentSessionId(null);
+                  window.arsChatAPI.setActiveSession?.(null);
+                  setActivePaneId(panes[0].id);
+                  setPanes((prev) => prev.map((p, i) => (i === 0 ? { ...p, activeTabId: 'chat' } : p)));
+                }}
+                onSelectPanel={handleSelectPanel}
+                onNavigate={stableNavigate}
+                onReloadExtensions={handleReloadExtensions}
+                isReloading={isReloadingExtensions}
+              />
+            </div>
+
+            {/* サイドコンテンツパネル */}
+            <div
+              className="flex-none overflow-hidden border-r border-aria-border flex"
+              style={
+                activityBarVisible && activePanelId
+                  ? { width: sidePanelWidth, transition: 'none' }
+                  : { width: 0, transition: 'width 0.2s' }
+              }
+            >
+              {activePanelId && (
+                <>
+                  <div className="h-full flex-1 min-w-0 overflow-hidden bg-aria-bg-light">
+                    <Sidebar
+                      activePanelId={activePanelId}
+                      currentSessionId={currentSessionId}
+                      currentPage={currentPage}
+                      extensions={extensions}
+                      onOpenFileTab={handleOpenFileTab}
+                      onFileBrowserPathChange={setFileBrowserPath}
+                      onSelectSession={(id) => {
+                        setCurrentSessionId(id);
+                        window.arsChatAPI.setActiveSession?.(id);
+                        // チャットタブがあるペインをアクティブに
+                        const chatPane = panes.find((p) => p.tabs.some((t) => t.page === 'chat'));
+                        if (chatPane) {
+                          setActivePaneId(chatPane.id);
+                          setPanes((prev) =>
+                            prev.map((p) => (p.id === chatPane.id ? { ...p, activeTabId: 'chat' } : p)),
+                          );
+                        }
+                      }}
+                      onNewSession={() => {
+                        setCurrentSessionId(null);
+                        window.arsChatAPI.setActiveSession?.(null);
+                        const chatPane = panes.find((p) => p.tabs.some((t) => t.page === 'chat'));
+                        if (chatPane) {
+                          setActivePaneId(chatPane.id);
+                          setPanes((prev) =>
+                            prev.map((p) => (p.id === chatPane.id ? { ...p, activeTabId: 'chat' } : p)),
+                          );
+                        }
+                      }}
+                      onNavigate={(page) => navigate(page)}
+                    />
+                  </div>
+                  {/* リサイズハンドル（右端） */}
+                  <div
+                    onMouseDown={handleResizeStart}
+                    className="w-1 flex-none cursor-col-resize hover:bg-aria-primary/40 active:bg-aria-primary/60 transition-colors"
+                  />
+                </>
+              )}
+            </div>
+
+            {/* メインコンテンツ（ペイングループ＋ターミナル） */}
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+              <PaneGroup
+                panes={panes}
+                activePaneId={activePaneId}
+                dragging={dragging}
+                onTabClose={(_paneId, tabId) => closeTab(tabId)}
+                onTabActivate={(paneId, tabId) => {
+                  setActivePaneId(paneId);
+                  setPanes((prev) => prev.map((p) => (p.id === paneId ? { ...p, activeTabId: tabId } : p)));
+                }}
+                onPaneActivate={setActivePaneId}
+                onDragStart={handleDragStart}
+                onDropOnTabBar={handleDropOnTabBar}
+                onDropOnContent={handleDropOnContent}
+                renderContent={renderTabContent}
+              />
+
+              {/* ターミナルパネル（中央エリア下部） */}
+              {terminalOpen && (
+                <>
+                  <div
+                    onMouseDown={handleTerminalResizeStart}
+                    className="h-1 shrink-0 cursor-row-resize hover:bg-aria-primary/40 active:bg-aria-primary/60 transition-colors border-t border-aria-border"
+                  />
+                  <div className="shrink-0 overflow-hidden" style={{ height: terminalHeight }}>
+                    <TerminalPanel visible={terminalOpen} cwd={fileBrowserPath} />
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* 右パネル */}
+            <div
+              className="flex-none overflow-hidden flex"
+              style={
+                rightPanelOpen ? { width: rightPanelWidth, transition: 'none' } : { width: 0, transition: 'width 0.2s' }
+              }
+            >
+              <div
+                onMouseDown={handleRightResizeStart}
+                className="w-1 flex-none cursor-col-resize hover:bg-aria-primary/40 active:bg-aria-primary/60 transition-colors border-l border-aria-border"
+              />
+              <div className="flex-1 min-w-0 overflow-hidden">
+                <RightPanel extensions={extensions} />
+              </div>
             </div>
           </div>
         </div>
 
+        {/* ドラッグゴースト */}
+        {dragging &&
+          (() => {
+            const tab = panesRef.current.flatMap((p) => p.tabs).find((t) => t.id === dragging.tabId);
+            return (
+              <div
+                className="fixed pointer-events-none z-50 bg-aria-bg-light border border-aria-border rounded px-3 py-1 text-xs opacity-90 shadow-lg flex items-center gap-1.5"
+                style={{ left: dragging.currentX + 12, top: dragging.currentY - 14 }}
+              >
+                {tab?.icon && <span>{tab.icon}</span>}
+                <span>{tab?.label ?? dragging.tabId}</span>
+              </div>
+            );
+          })()}
       </div>
-
-      {/* ドラッグゴースト */}
-      {dragging && (() => {
-        const tab = panesRef.current
-          .flatMap((p) => p.tabs)
-          .find((t) => t.id === dragging.tabId);
-        return (
-          <div
-            className="fixed pointer-events-none z-50 bg-aria-bg-light border border-aria-border rounded px-3 py-1 text-xs opacity-90 shadow-lg flex items-center gap-1.5"
-            style={{ left: dragging.currentX + 12, top: dragging.currentY - 14 }}
-          >
-            {tab?.icon && <span>{tab.icon}</span>}
-            <span>{tab?.label ?? dragging.tabId}</span>
-          </div>
-        );
-      })()}
-    </div>
-    <UpdateNotification />
+      <UpdateNotification />
     </>
   );
 }

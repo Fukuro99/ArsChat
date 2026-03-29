@@ -1,6 +1,6 @@
-import React from 'react';
-import { PrimitiveProps } from '../types';
-import { resolveColor, resolveSpacing, resolveRounded, ALLOWED_GAP, ALLOWED_PADDING } from '../design-tokens';
+import type React from 'react';
+import { ALLOWED_GAP, ALLOWED_PADDING, resolveColor, resolveRounded, resolveSpacing } from '../design-tokens';
+import type { PrimitiveProps } from '../types';
 
 export default function Box({ props, children }: PrimitiveProps) {
   const {
@@ -51,9 +51,5 @@ export default function Box({ props, children }: PrimitiveProps) {
   if (minWidth) style.minWidth = typeof minWidth === 'number' ? `${minWidth}px` : minWidth;
   if (maxWidth) style.maxWidth = typeof maxWidth === 'number' ? `${maxWidth}px` : maxWidth;
 
-  return (
-    <div style={style}>
-      {children}
-    </div>
-  );
+  return <div style={style}>{children}</div>;
 }

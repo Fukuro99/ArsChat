@@ -4,7 +4,8 @@
  *  - FileBrowserPanel : サイドバーパネル（ツリー表示）
  *  - FileViewerPage   : メインタブのファイルビューワー（Monaco エディタ）
  */
-import React, { useState, useEffect, useRef } from 'react';
+import type React from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { pendingFiles } from './fileBrowserStore';
 
@@ -21,38 +22,70 @@ interface FileBrowserItem {
 
 // ===== 拡張子 → アイコンファイル名 マッピング =====
 const EXT_ICON: Record<string, string> = {
-  js: 'file_type_js', mjs: 'file_type_js', cjs: 'file_type_js',
-  ts: 'file_type_typescript', tsx: 'file_type_reactts', jsx: 'file_type_reactjs',
-  json: 'file_type_json', jsonc: 'file_type_json',
-  yaml: 'file_type_yaml', yml: 'file_type_yaml',
-  toml: 'file_type_toml', xml: 'file_type_xml',
-  graphql: 'file_type_graphql', gql: 'file_type_graphql',
+  js: 'file_type_js',
+  mjs: 'file_type_js',
+  cjs: 'file_type_js',
+  ts: 'file_type_typescript',
+  tsx: 'file_type_reactts',
+  jsx: 'file_type_reactjs',
+  json: 'file_type_json',
+  jsonc: 'file_type_json',
+  yaml: 'file_type_yaml',
+  yml: 'file_type_yaml',
+  toml: 'file_type_toml',
+  xml: 'file_type_xml',
+  graphql: 'file_type_graphql',
+  gql: 'file_type_graphql',
   sql: 'file_type_sql',
-  md: 'file_type_markdown', markdown: 'file_type_markdown',
-  html: 'file_type_html', htm: 'file_type_html',
-  css: 'file_type_css', scss: 'file_type_scss', sass: 'file_type_sass', less: 'file_type_less',
+  md: 'file_type_markdown',
+  markdown: 'file_type_markdown',
+  html: 'file_type_html',
+  htm: 'file_type_html',
+  css: 'file_type_css',
+  scss: 'file_type_scss',
+  sass: 'file_type_sass',
+  less: 'file_type_less',
   py: 'file_type_python',
   rs: 'file_type_rust',
   go: 'file_type_go',
-  rb: 'file_type_ruby', php: 'file_type_php', java: 'file_type_java',
+  rb: 'file_type_ruby',
+  php: 'file_type_php',
+  java: 'file_type_java',
   cs: 'file_type_csharp',
-  cpp: 'file_type_cpp', cc: 'file_type_cpp', cxx: 'file_type_cpp',
-  c: 'file_type_c', h: 'file_type_c', hpp: 'file_type_cpp', hxx: 'file_type_cpp',
+  cpp: 'file_type_cpp',
+  cc: 'file_type_cpp',
+  cxx: 'file_type_cpp',
+  c: 'file_type_c',
+  h: 'file_type_c',
+  hpp: 'file_type_cpp',
+  hxx: 'file_type_cpp',
   dart: 'file_type_dartlang',
-  kt: 'file_type_kotlin', kts: 'file_type_kotlin',
+  kt: 'file_type_kotlin',
+  kts: 'file_type_kotlin',
   swift: 'file_type_swift',
   lua: 'file_type_lua',
-  ex: 'file_type_elixir', exs: 'file_type_elixir',
+  ex: 'file_type_elixir',
+  exs: 'file_type_elixir',
   wasm: 'file_type_wasm',
-  txt: 'file_type_text', log: 'file_type_log',
-  sh: 'file_type_shell', bash: 'file_type_shell', zsh: 'file_type_shell',
-  bat: 'file_type_bat', cmd: 'file_type_bat',
+  txt: 'file_type_text',
+  log: 'file_type_log',
+  sh: 'file_type_shell',
+  bash: 'file_type_shell',
+  zsh: 'file_type_shell',
+  bat: 'file_type_bat',
+  cmd: 'file_type_bat',
   ps1: 'file_type_powershell',
-  png: 'file_type_image', jpg: 'file_type_image', jpeg: 'file_type_image',
-  gif: 'file_type_image', svg: 'file_type_image', ico: 'file_type_image', webp: 'file_type_image',
+  png: 'file_type_image',
+  jpg: 'file_type_image',
+  jpeg: 'file_type_image',
+  gif: 'file_type_image',
+  svg: 'file_type_image',
+  ico: 'file_type_image',
+  webp: 'file_type_image',
   pdf: 'file_type_pdf',
   dockerfile: 'file_type_docker',
-  gitignore: 'file_type_git', gitattributes: 'file_type_git',
+  gitignore: 'file_type_git',
+  gitattributes: 'file_type_git',
 };
 
 const FILENAME_ICON: Record<string, string> = {
@@ -72,7 +105,7 @@ function resolveIconName(name: string, isDir: boolean, isExpanded: boolean): str
   const lower = name.toLowerCase();
   if (FILENAME_ICON[lower]) return FILENAME_ICON[lower];
   if (lower.startsWith('.env')) return 'file_type_text';
-  const ext = lower.includes('.') ? lower.split('.').pop() ?? '' : '';
+  const ext = lower.includes('.') ? (lower.split('.').pop() ?? '') : '';
   return EXT_ICON[ext] ?? 'default_file';
 }
 
@@ -95,42 +128,141 @@ function FileIcon({ name, isDir, isExpanded }: { name: string; isDir: boolean; i
 
 // ===== テキストファイル判定 =====
 const TEXT_EXTS = new Set([
-  'js','mjs','cjs','ts','tsx','jsx','json','jsonc','md','html','htm',
-  'css','scss','sass','less','py','rs','go','rb','php','java','cs',
-  'cpp','c','h','hpp','swift','kt','kts','dart','r','lua','ex','exs',
-  'txt','log','sh','bash','zsh','ps1','bat','cmd','yaml','yml','toml',
-  'xml','svg','sql','graphql','gql','env','gitignore','gitattributes',
-  'editorconfig','prettierrc','eslintrc','babelrc','nvmrc',
+  'js',
+  'mjs',
+  'cjs',
+  'ts',
+  'tsx',
+  'jsx',
+  'json',
+  'jsonc',
+  'md',
+  'html',
+  'htm',
+  'css',
+  'scss',
+  'sass',
+  'less',
+  'py',
+  'rs',
+  'go',
+  'rb',
+  'php',
+  'java',
+  'cs',
+  'cpp',
+  'c',
+  'h',
+  'hpp',
+  'swift',
+  'kt',
+  'kts',
+  'dart',
+  'r',
+  'lua',
+  'ex',
+  'exs',
+  'txt',
+  'log',
+  'sh',
+  'bash',
+  'zsh',
+  'ps1',
+  'bat',
+  'cmd',
+  'yaml',
+  'yml',
+  'toml',
+  'xml',
+  'svg',
+  'sql',
+  'graphql',
+  'gql',
+  'env',
+  'gitignore',
+  'gitattributes',
+  'editorconfig',
+  'prettierrc',
+  'eslintrc',
+  'babelrc',
+  'nvmrc',
 ]);
 
 // Monaco の言語 ID マッピング
 const EXT_LANG: Record<string, string> = {
-  js:'javascript', mjs:'javascript', cjs:'javascript', jsx:'javascript',
-  ts:'typescript', tsx:'typescript',
-  json:'json', jsonc:'json',
-  md:'markdown', markdown:'markdown',
-  html:'html', htm:'html',
-  css:'css', scss:'scss', sass:'scss', less:'less',
-  py:'python', rb:'ruby', php:'php',
-  java:'java', cs:'csharp',
-  cpp:'cpp', c:'cpp', h:'cpp', hpp:'cpp',
-  rs:'rust', go:'go', swift:'swift', kt:'kotlin', kts:'kotlin',
-  dart:'dart', r:'r', lua:'lua', ex:'elixir', exs:'elixir',
-  sh:'shell', bash:'shell', zsh:'shell',
-  ps1:'powershell', bat:'bat', cmd:'bat',
-  yaml:'yaml', yml:'yaml', toml:'ini',
-  xml:'xml', svg:'xml',
-  sql:'sql', graphql:'graphql', gql:'graphql',
-  dockerfile:'dockerfile',
+  js: 'javascript',
+  mjs: 'javascript',
+  cjs: 'javascript',
+  jsx: 'javascript',
+  ts: 'typescript',
+  tsx: 'typescript',
+  json: 'json',
+  jsonc: 'json',
+  md: 'markdown',
+  markdown: 'markdown',
+  html: 'html',
+  htm: 'html',
+  css: 'css',
+  scss: 'scss',
+  sass: 'scss',
+  less: 'less',
+  py: 'python',
+  rb: 'ruby',
+  php: 'php',
+  java: 'java',
+  cs: 'csharp',
+  cpp: 'cpp',
+  c: 'cpp',
+  h: 'cpp',
+  hpp: 'cpp',
+  rs: 'rust',
+  go: 'go',
+  swift: 'swift',
+  kt: 'kotlin',
+  kts: 'kotlin',
+  dart: 'dart',
+  r: 'r',
+  lua: 'lua',
+  ex: 'elixir',
+  exs: 'elixir',
+  sh: 'shell',
+  bash: 'shell',
+  zsh: 'shell',
+  ps1: 'powershell',
+  bat: 'bat',
+  cmd: 'bat',
+  yaml: 'yaml',
+  yml: 'yaml',
+  toml: 'ini',
+  xml: 'xml',
+  svg: 'xml',
+  sql: 'sql',
+  graphql: 'graphql',
+  gql: 'graphql',
+  dockerfile: 'dockerfile',
 };
 
 const LANG_COLORS: Record<string, string> = {
-  typescript:'#3178c6', javascript:'#f0d040', python:'#3572a5',
-  rust:'#dea584', go:'#00add8', css:'#9b59b6', html:'#e44d26',
-  json:'#888', markdown:'#5b8dee', cpp:'#f34b7d', java:'#b07219',
-  csharp:'#9b4f96', ruby:'#701516', php:'#4f5d95', shell:'#89e051',
-  kotlin:'#7f52ff', swift:'#fa7343', dart:'#00b4ab', sql:'#e38c00',
-  powershell:'#012456',
+  typescript: '#3178c6',
+  javascript: '#f0d040',
+  python: '#3572a5',
+  rust: '#dea584',
+  go: '#00add8',
+  css: '#9b59b6',
+  html: '#e44d26',
+  json: '#888',
+  markdown: '#5b8dee',
+  cpp: '#f34b7d',
+  java: '#b07219',
+  csharp: '#9b4f96',
+  ruby: '#701516',
+  php: '#4f5d95',
+  shell: '#89e051',
+  kotlin: '#7f52ff',
+  swift: '#fa7343',
+  dart: '#00b4ab',
+  sql: '#e38c00',
+  powershell: '#012456',
 };
 
 function getMonacoLanguage(filePath: string): string {
@@ -156,11 +288,32 @@ function fmtSize(bytes: number | null): string {
 function fileIconEmoji(name: string): string {
   const ext = name.split('.').pop()?.toLowerCase() ?? '';
   const MAP: Record<string, string> = {
-    ts:'📄', tsx:'⚛️', jsx:'⚛️', json:'📋', md:'📝',
-    html:'🌐', css:'🎨', scss:'🎨', py:'🐍', rs:'🦀', go:'🐹',
-    sh:'⚙️', bat:'⚙️', yaml:'📋', yml:'📋', toml:'📋', xml:'📋',
-    sql:'🗄️', csv:'📊', png:'🖼️', jpg:'🖼️', jpeg:'🖼️',
-    gif:'🖼️', svg:'🖼️', ico:'🖼️', pdf:'📕',
+    ts: '📄',
+    tsx: '⚛️',
+    jsx: '⚛️',
+    json: '📋',
+    md: '📝',
+    html: '🌐',
+    css: '🎨',
+    scss: '🎨',
+    py: '🐍',
+    rs: '🦀',
+    go: '🐹',
+    sh: '⚙️',
+    bat: '⚙️',
+    yaml: '📋',
+    yml: '📋',
+    toml: '📋',
+    xml: '📋',
+    sql: '🗄️',
+    csv: '📊',
+    png: '🖼️',
+    jpg: '🖼️',
+    jpeg: '🖼️',
+    gif: '🖼️',
+    svg: '🖼️',
+    ico: '🖼️',
+    pdf: '📕',
   };
   return MAP[ext] ?? '📄';
 }
@@ -191,34 +344,47 @@ function TreeRow({
   return (
     <div
       style={{
-        display: 'flex', alignItems: 'center',
+        display: 'flex',
+        alignItems: 'center',
         padding: `2px 8px 2px ${8 + depth * 16}px`,
-        cursor: 'pointer', userSelect: 'none', fontSize: 13, gap: 4,
+        cursor: 'pointer',
+        userSelect: 'none',
+        fontSize: 13,
+        gap: 4,
         background: selected ? 'rgba(99,102,241,0.2)' : hover ? 'rgba(255,255,255,0.05)' : 'transparent',
         color: selected ? 'var(--aria-primary,#6366f1)' : 'var(--aria-text,#ccc)',
       }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      onClick={() => item.isDir ? onExpand(item) : onFileClick(item)}
+      onClick={() => (item.isDir ? onExpand(item) : onFileClick(item))}
       title={item.path}
     >
-      {item.isDir
-        ? <span style={{ fontSize: 10, width: 12, textAlign: 'center', flexShrink: 0, color: '#888' }}>
-            {item._expanded ? '▼' : '▶'}
-          </span>
-        : <span style={{ width: 12, flexShrink: 0 }} />
-      }
+      {item.isDir ? (
+        <span style={{ fontSize: 10, width: 12, textAlign: 'center', flexShrink: 0, color: '#888' }}>
+          {item._expanded ? '▼' : '▶'}
+        </span>
+      ) : (
+        <span style={{ width: 12, flexShrink: 0 }} />
+      )}
       <FileIcon name={item.name} isDir={item.isDir} isExpanded={item._expanded} />
-      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {item.name}
-      </span>
+      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
       {item.isFile && item.size != null && (
         <span style={{ fontSize: 10, color: '#666', flexShrink: 0 }}>{fmtSize(item.size)}</span>
       )}
       {hover && (
         <span
-          style={{ fontSize: 10, padding: '1px 4px', marginLeft: 4, borderRadius: 3, background: 'rgba(255,255,255,0.1)', flexShrink: 0 }}
-          onClick={(e) => { e.stopPropagation(); onCopyPath(item.path); }}
+          style={{
+            fontSize: 10,
+            padding: '1px 4px',
+            marginLeft: 4,
+            borderRadius: 3,
+            background: 'rgba(255,255,255,0.1)',
+            flexShrink: 0,
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onCopyPath(item.path);
+          }}
           title="パスをコピー"
         >
           📋
@@ -249,10 +415,12 @@ export function FileBrowserPanel({ onOpenFileTab, onPathChange }: FileBrowserPan
   const saveState = (root: string, exp: Set<string>) => {
     if (saveStateRef.current) clearTimeout(saveStateRef.current);
     saveStateRef.current = setTimeout(() => {
-      window.arsChatAPI.fileBrowser.saveState({
-        rootPath: root,
-        expandedPaths: Array.from(exp),
-      }).catch(() => {});
+      window.arsChatAPI.fileBrowser
+        .saveState({
+          rootPath: root,
+          expandedPaths: Array.from(exp),
+        })
+        .catch(() => {});
     }, 500);
   };
 
@@ -262,22 +430,24 @@ export function FileBrowserPanel({ onOpenFileTab, onPathChange }: FileBrowserPan
       window.arsChatAPI.fileBrowser.getState(),
       window.arsChatAPI.fileBrowser.getHome(),
       window.arsChatAPI.fileBrowser.getDrives(),
-    ]).then(([state, homeResult, drivesResult]) => {
-      if (Array.isArray(drivesResult)) setDrives(drivesResult);
-      const startPath = state.rootPath || homeResult.path;
-      if (startPath) {
-        const savedExpanded = new Set<string>(state.expandedPaths);
-        loadDir(startPath, savedExpanded);
-      }
-    }).catch(() => {
-      // フォールバック: ホームディレクトリ
-      window.arsChatAPI.fileBrowser.getHome().then((r) => {
-        if (r?.path) loadDir(r.path, new Set());
+    ])
+      .then(([state, homeResult, drivesResult]) => {
+        if (Array.isArray(drivesResult)) setDrives(drivesResult);
+        const startPath = state.rootPath || homeResult.path;
+        if (startPath) {
+          const savedExpanded = new Set<string>(state.expandedPaths);
+          loadDir(startPath, savedExpanded);
+        }
+      })
+      .catch(() => {
+        // フォールバック: ホームディレクトリ
+        window.arsChatAPI.fileBrowser.getHome().then((r) => {
+          if (r?.path) loadDir(r.path, new Set());
+        });
+        window.arsChatAPI.fileBrowser.getDrives().then((r) => {
+          if (Array.isArray(r)) setDrives(r);
+        });
       });
-      window.arsChatAPI.fileBrowser.getDrives().then((r) => {
-        if (Array.isArray(r)) setDrives(r);
-      });
-    });
 
     return () => {
       if (saveStateRef.current) clearTimeout(saveStateRef.current);
@@ -402,39 +572,64 @@ export function FileBrowserPanel({ onOpenFileTab, onPathChange }: FileBrowserPan
   const flatRows = flattenTree(rootItems, 0);
 
   const panelStyle: React.CSSProperties = {
-    display: 'flex', flexDirection: 'column', height: '100%',
-    overflow: 'hidden', fontFamily: 'sans-serif', fontSize: 13,
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100%',
+    overflow: 'hidden',
+    fontFamily: 'sans-serif',
+    fontSize: 13,
   };
   const toolbarStyle: React.CSSProperties = {
-    display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px',
-    borderBottom: '1px solid var(--aria-border,#2a2a2a)', flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    padding: '6px 8px',
+    borderBottom: '1px solid var(--aria-border,#2a2a2a)',
+    flexShrink: 0,
   };
   const btnStyle: React.CSSProperties = {
-    padding: '3px 8px', borderRadius: 4,
+    padding: '3px 8px',
+    borderRadius: 4,
     border: '1px solid var(--aria-border,#444)',
     background: 'var(--aria-bg,#1e1e1e)',
     color: 'var(--aria-text,#ccc)',
-    cursor: 'pointer', fontSize: 12,
+    cursor: 'pointer',
+    fontSize: 12,
   };
 
   return (
     <div style={panelStyle}>
       {/* ツールバー */}
       <div style={toolbarStyle}>
-        <button style={btnStyle} onClick={handleOpenFolder} title="フォルダを開く">📂 開く</button>
+        <button style={btnStyle} onClick={handleOpenFolder} title="フォルダを開く">
+          📂 開く
+        </button>
         {drives.length > 0 && (
-          <button style={btnStyle} onClick={() => setShowDrives((v) => !v)} title="ドライブを選択">💾</button>
+          <button style={btnStyle} onClick={() => setShowDrives((v) => !v)} title="ドライブを選択">
+            💾
+          </button>
         )}
       </div>
 
       {/* ドライブセレクター */}
       {showDrives && (
-        <div style={{ borderBottom: '1px solid var(--aria-border,#2a2a2a)', padding: '4px 8px', display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        <div
+          style={{
+            borderBottom: '1px solid var(--aria-border,#2a2a2a)',
+            padding: '4px 8px',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 4,
+          }}
+        >
           {drives.map((d) => (
             <button
               key={d.path}
               style={{ ...btnStyle, fontSize: 11 }}
-              onClick={() => { loadDir(d.path, new Set()); setShowDrives(false); }}
+              onClick={() => {
+                loadDir(d.path, new Set());
+                setShowDrives(false);
+              }}
             >
               {d.name}
             </button>
@@ -444,7 +639,17 @@ export function FileBrowserPanel({ onOpenFileTab, onPathChange }: FileBrowserPan
 
       {/* 現在パス */}
       {rootPath && (
-        <div style={{ padding: '2px 8px 4px', fontSize: 11, color: '#666', borderBottom: '1px solid var(--aria-border,#2a2a2a)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div
+          style={{
+            padding: '2px 8px 4px',
+            fontSize: 11,
+            color: '#666',
+            borderBottom: '1px solid var(--aria-border,#2a2a2a)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
           {rootPath}
         </div>
       )}
@@ -454,24 +659,33 @@ export function FileBrowserPanel({ onOpenFileTab, onPathChange }: FileBrowserPan
         <div style={{ padding: 16, color: '#666', fontSize: 12 }}>読み込み中...</div>
       ) : (
         <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
-          {flatRows.length === 0 && rootPath
-            ? <div style={{ padding: 16, color: '#666', fontSize: 12 }}>フォルダが空です</div>
-            : flatRows.map((row) => (
-                <TreeRow
-                  key={row.item.path}
-                  row={row}
-                  selectedPath={selectedPath}
-                  onExpand={handleExpand}
-                  onFileClick={handleFileClick}
-                  onCopyPath={handleCopyPath}
-                />
-              ))
-          }
+          {flatRows.length === 0 && rootPath ? (
+            <div style={{ padding: 16, color: '#666', fontSize: 12 }}>フォルダが空です</div>
+          ) : (
+            flatRows.map((row) => (
+              <TreeRow
+                key={row.item.path}
+                row={row}
+                selectedPath={selectedPath}
+                onExpand={handleExpand}
+                onFileClick={handleFileClick}
+                onCopyPath={handleCopyPath}
+              />
+            ))
+          )}
         </div>
       )}
 
       {/* ステータスバー */}
-      <div style={{ padding: '2px 8px', fontSize: 11, color: 'var(--aria-text-muted,#666)', borderTop: '1px solid var(--aria-border,#2a2a2a)', flexShrink: 0 }}>
+      <div
+        style={{
+          padding: '2px 8px',
+          fontSize: 11,
+          color: 'var(--aria-text-muted,#666)',
+          borderTop: '1px solid var(--aria-border,#2a2a2a)',
+          flexShrink: 0,
+        }}
+      >
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{statusMsg}</span>
       </div>
     </div>
@@ -557,7 +771,7 @@ export function FileViewerPage({ tabId }: { tabId: string }) {
       saveAction.dispose();
       editor.dispose();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleSave() {
@@ -575,7 +789,17 @@ export function FileViewerPage({ tabId }: { tabId: string }) {
 
   if (!filePath) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#666', fontSize: 13, fontFamily: 'sans-serif' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100%',
+          color: '#666',
+          fontSize: 13,
+          fontFamily: 'sans-serif',
+        }}
+      >
         ファイルが見つかりません
       </div>
     );
@@ -583,33 +807,77 @@ export function FileViewerPage({ tabId }: { tabId: string }) {
 
   const langColor = LANG_COLORS[language] ?? '#666';
   const btnStyle: React.CSSProperties = {
-    padding: '3px 8px', borderRadius: 4,
+    padding: '3px 8px',
+    borderRadius: 4,
     border: '1px solid var(--aria-border,#444)',
     background: 'var(--aria-bg,#1e1e1e)',
     color: 'var(--aria-text,#ccc)',
-    cursor: 'pointer', fontSize: 12,
+    cursor: 'pointer',
+    fontSize: 12,
   };
   const btnPrimaryStyle: React.CSSProperties = {
-    padding: '3px 10px', borderRadius: 4, border: 'none',
-    background: 'var(--aria-primary,#6366f1)', color: '#fff',
+    padding: '3px 10px',
+    borderRadius: 4,
+    border: 'none',
+    background: 'var(--aria-primary,#6366f1)',
+    color: '#fff',
     cursor: modified ? 'pointer' : 'default',
-    opacity: modified ? 1 : 0.4, fontSize: 12,
+    opacity: modified ? 1 : 0.4,
+    fontSize: 12,
   };
   const statusBarStyle: React.CSSProperties = {
-    padding: '2px 8px', fontSize: 11,
+    padding: '2px 8px',
+    fontSize: 11,
     color: 'var(--aria-text-muted,#666)',
     borderTop: '1px solid var(--aria-border,#2a2a2a)',
-    flexShrink: 0, display: 'flex', justifyContent: 'space-between',
+    flexShrink: 0,
+    display: 'flex',
+    justifyContent: 'space-between',
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', fontFamily: 'sans-serif' }}>
+    <div
+      style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', fontFamily: 'sans-serif' }}
+    >
       {/* ツールバー */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderBottom: '1px solid var(--aria-border,#2a2a2a)', flexShrink: 0, background: 'var(--aria-bg-light,#252525)' }}>
-        <span style={{ fontSize: 11, color: '#888', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }} title={filePath}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '4px 8px',
+          borderBottom: '1px solid var(--aria-border,#2a2a2a)',
+          flexShrink: 0,
+          background: 'var(--aria-bg-light,#252525)',
+        }}
+      >
+        <span
+          style={{
+            fontSize: 11,
+            color: '#888',
+            flex: 1,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            minWidth: 0,
+          }}
+          title={filePath}
+        >
           {filePath}
         </span>
-        <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 3, flexShrink: 0, background: langColor + '22', color: langColor, border: `1px solid ${langColor}55`, fontFamily: 'monospace', fontWeight: 'bold' }}>
+        <span
+          style={{
+            fontSize: 10,
+            padding: '1px 6px',
+            borderRadius: 3,
+            flexShrink: 0,
+            background: langColor + '22',
+            color: langColor,
+            border: `1px solid ${langColor}55`,
+            fontFamily: 'monospace',
+            fontWeight: 'bold',
+          }}
+        >
           {language}
         </span>
         <button style={btnPrimaryStyle} onClick={handleSave} disabled={!modified} title="Ctrl+S">
@@ -629,7 +897,10 @@ export function FileViewerPage({ tabId }: { tabId: string }) {
 
       {/* ステータスバー */}
       <div style={statusBarStyle}>
-        <span>{fileName}{modified ? ' — 未保存の変更あり' : ' — 保存済み'}</span>
+        <span>
+          {fileName}
+          {modified ? ' — 未保存の変更あり' : ' — 保存済み'}
+        </span>
         <span>{lineCount} 行</span>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { InteractiveUIBlock, ParsedContent, UIUpdatePatch, SandboxHTMLBlock, IframeHTMLBlock } from './types';
+import type { IframeHTMLBlock, InteractiveUIBlock, ParsedContent, SandboxHTMLBlock, UIUpdatePatch } from './types';
 
 export function parseInteractiveUI(content: string): ParsedContent {
   const blocks: InteractiveUIBlock[] = [];

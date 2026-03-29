@@ -24,15 +24,12 @@ export default function RightPanel({ extensions }: RightPanelProps) {
   );
 
   // タブが増減したとき、activeTab が存在しない場合は先頭を選択
-  const resolvedActive =
-    tabs.find((t) => t.key === activeTab)?.key ?? tabs[0]?.key ?? null;
+  const resolvedActive = tabs.find((t) => t.key === activeTab)?.key ?? tabs[0]?.key ?? null;
 
   if (tabs.length === 0) {
     return (
       <div className="h-full w-full bg-aria-bg-light flex items-center justify-center">
-        <p className="text-xs text-aria-text-muted px-4 text-center">
-          右パネルを提供する拡張機能がありません
-        </p>
+        <p className="text-xs text-aria-text-muted px-4 text-center">右パネルを提供する拡張機能がありません</p>
       </div>
     );
   }
@@ -61,9 +58,7 @@ export default function RightPanel({ extensions }: RightPanelProps) {
       </div>
 
       {/* コンテンツ */}
-      <div className="flex-1 overflow-y-auto p-2">
-        {ActiveComponent && <ActiveComponent api={null as any} />}
-      </div>
+      <div className="flex-1 overflow-y-auto p-2">{ActiveComponent && <ActiveComponent api={null as any} />}</div>
     </div>
   );
 }

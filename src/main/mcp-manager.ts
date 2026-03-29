@@ -1,8 +1,8 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { MCPServerConfig, MCPServerStatus, MCPToolInfo } from '../shared/types';
+import type { MCPServerConfig, MCPServerStatus, MCPToolInfo } from '../shared/types';
 
 // ===== 内部型 =====
 
@@ -89,7 +89,9 @@ export function createMCPManager() {
   async function disconnectAll(): Promise<void> {
     for (const [, conn] of connections) {
       if (conn.status === 'connected' && conn.client) {
-        try { await conn.client.close(); } catch {}
+        try {
+          await conn.client.close();
+        } catch {}
       }
     }
     connections.clear();
@@ -226,9 +228,7 @@ export function createMCPManager() {
    * 一時的にサーバーへ接続してツール一覧を取得後すぐ切断する（説明生成などに使用）
    * 既に接続済みの場合はそのツールをそのまま返す
    */
-  async function getToolsTemporarily(
-    config: MCPServerConfig,
-  ): Promise<Array<{ name: string; description: string }>> {
+  async function getToolsTemporarily(config: MCPServerConfig): Promise<Array<{ name: string; description: string }>> {
     // 既に接続済みならそのまま返す
     const existing = connections.get(config.name);
     if (existing?.status === 'connected' && existing.tools.length > 0) {
@@ -245,7 +245,9 @@ export function createMCPManager() {
         description: t.description.replace(`[${config.name}] `, ''),
       }));
     } finally {
-      try { await conn.client.close(); } catch {}
+      try {
+        await conn.client.close();
+      } catch {}
     }
   }
 

@@ -1,12 +1,8 @@
 import React from 'react';
-import { PrimitiveProps } from '../types';
+import type { PrimitiveProps } from '../types';
 
 export default function Select({ props, value, onChange }: PrimitiveProps) {
-  const {
-    inputId,
-    options = [],
-    placeholder = '選択してください',
-  } = props || {};
+  const { inputId, options = [], placeholder = '選択してください' } = props || {};
 
   return (
     <select
@@ -27,7 +23,9 @@ export default function Select({ props, value, onChange }: PrimitiveProps) {
       }}
       className="iui-select"
     >
-      <option value="" disabled>{placeholder}</option>
+      <option value="" disabled>
+        {placeholder}
+      </option>
       {(options as string[]).map((opt, i) => (
         <option key={i} value={typeof opt === 'object' ? (opt as any).value : opt}>
           {typeof opt === 'object' ? (opt as any).label : opt}
