@@ -47,3 +47,4 @@ jobs:
         run: npm run dist -- --publish always
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          EP_DRAFT: false          # Draft にしない

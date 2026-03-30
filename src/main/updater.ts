@@ -55,6 +55,12 @@ export function setupUpdater(win: BrowserWindow): void {
   });
 
   autoUpdater.on('error', (err) => {
+    // リリースフィードが存在しない場合はエラーではなく「最新版」扱い
+    if (err.message.includes('Unable to find') || err.message.includes('Cannot parse releases feed')) {
+      sendStatus(win, { status: 'not-available' });
+      console.warn('[Updater] リリースフィードが見つかりません（未リリース）:', err.message);
+      return;
+    }
     sendStatus(win, { status: 'error', error: err.message });
     console.error('[Updater] エラー:', err.message);
   });
