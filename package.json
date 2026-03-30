@@ -1,6 +1,6 @@
 {
   "name": "arschat",
-  "version": "1.0.0",
+  "version": "1.0.4",
   "description": "ArsChat - AI Desktop Chat Assistant",
   "author": "Fukuro99",
   "main": "dist/main/index.js",
