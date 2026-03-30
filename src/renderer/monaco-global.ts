@@ -21,5 +21,3 @@ import * as monaco from 'monaco-editor';
 // ===== グローバル公開 =====
 // 拡張の renderer.js から `const monaco = window.monaco;` で参照できる
 (window as any).monaco = monaco;
-
-export {};

@@ -1,8 +1,8 @@
 // ===== 共有型定義 =====
 
 export interface AppTab {
-  id: string;               // ユニーク ID（通常は page 文字列、動的タブは 'ext:{id}:{tabId}'）
-  page: string;             // 'chat' | 'settings' | 'ext:{id}:{pageId or tabId}'
+  id: string; // ユニーク ID（通常は page 文字列、動的タブは 'ext:{id}:{tabId}'）
+  page: string; // 'chat' | 'settings' | 'ext:{id}:{pageId or tabId}'
   label: string;
   icon?: string;
   closable: boolean;

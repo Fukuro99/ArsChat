@@ -1,13 +1,9 @@
 import React from 'react';
-import { PrimitiveProps } from '../types';
 import { resolveColor } from '../design-tokens';
+import type { PrimitiveProps } from '../types';
 
 export default function Badge({ props }: PrimitiveProps) {
-  const {
-    content = '',
-    color = 'text',
-    bg = 'surface',
-  } = props || {};
+  const { content = '', color = 'text', bg = 'surface' } = props || {};
 
   const resolvedColor = resolveColor(color) || 'var(--aria-text)';
   const resolvedBg = resolveColor(bg) || 'var(--aria-surface)';

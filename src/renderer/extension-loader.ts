@@ -35,12 +35,7 @@ export interface ExtensionRendererAPI {
      * pageId は renderer.js の pages.{pageId} に対応するコンポーネント。
      * コンポーネントは props.tabId でこの id を受け取れる。
      */
-    openTab(options: {
-      id: string;
-      label: string;
-      icon?: string;
-      pageId: string;
-    }): void;
+    openTab(options: { id: string; label: string; icon?: string; pageId: string }): void;
   };
 }
 
@@ -142,9 +137,7 @@ ${result.code}
   const api = createRendererAPI(info, onNavigate, onOpenTab);
 
   // API を各コンポーネントに bind した Wrapper を作る
-  function bindAll(
-    map: Record<string, React.ComponentType<any>>,
-  ): Record<string, React.ComponentType<any>> {
+  function bindAll(map: Record<string, React.ComponentType<any>>): Record<string, React.ComponentType<any>> {
     const bound: Record<string, React.ComponentType<any>> = {};
     for (const [id, Component] of Object.entries(map)) {
       bound[id] = (props: any) => React.createElement(Component, { ...props, api });
@@ -168,12 +161,9 @@ function createRendererAPI(
 ): ExtensionRendererAPI {
   return {
     ipc: {
-      invoke: (channel: string, data?: any) =>
-        window.arsChatAPI.extensions.invoke(info.id, channel, data),
-      send: (channel: string, data?: any) =>
-        window.arsChatAPI.extensions.send(info.id, channel, data),
-      on: (channel: string, handler: (data: any) => void) =>
-        window.arsChatAPI.extensions.on(info.id, channel, handler),
+      invoke: (channel: string, data?: any) => window.arsChatAPI.extensions.invoke(info.id, channel, data),
+      send: (channel: string, data?: any) => window.arsChatAPI.extensions.send(info.id, channel, data),
+      on: (channel: string, handler: (data: any) => void) => window.arsChatAPI.extensions.on(info.id, channel, handler),
     },
     extension: {
       id: info.id,

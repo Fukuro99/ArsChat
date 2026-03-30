@@ -1,6 +1,6 @@
-import React from 'react';
-import { PrimitiveProps } from '../types';
-import { resolveColor, resolveSize, resolveFontWeight } from '../design-tokens';
+import type React from 'react';
+import { resolveColor, resolveFontWeight, resolveSize } from '../design-tokens';
+import type { PrimitiveProps } from '../types';
 
 /**
  * state を参照してテンプレート変数 {state.xxx} や {state.foo.bar} を展開する。
@@ -38,13 +38,7 @@ function resolveKeyPath(obj: Record<string, any>, keyPath: string): any {
 }
 
 export default function Text({ props, state }: PrimitiveProps) {
-  const {
-    content = '',
-    size,
-    weight,
-    color,
-    align,
-  } = props || {};
+  const { content = '', size, weight, color, align } = props || {};
 
   const expanded = expandTemplate(String(content), state);
 
@@ -61,9 +55,5 @@ export default function Text({ props, state }: PrimitiveProps) {
 
   if (align) style.textAlign = align as React.CSSProperties['textAlign'];
 
-  return (
-    <span style={style}>
-      {expanded}
-    </span>
-  );
+  return <span style={style}>{expanded}</span>;
 }

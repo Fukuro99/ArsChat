@@ -60,9 +60,7 @@ export default function TabBar({
   const handleBarMouseMove = useCallback(
     (e: React.MouseEvent) => {
       if (!isDraggingActive || !barRef.current) return;
-      const tabEls = Array.from(
-        barRef.current.querySelectorAll('[data-tab-item]'),
-      ) as HTMLElement[];
+      const tabEls = Array.from(barRef.current.querySelectorAll('[data-tab-item]')) as HTMLElement[];
       let idx = tabEls.length;
       for (let i = 0; i < tabEls.length; i++) {
         const rect = tabEls[i].getBoundingClientRect();

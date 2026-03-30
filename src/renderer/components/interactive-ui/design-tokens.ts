@@ -2,15 +2,27 @@
 
 /** 許可されたサイズトークン */
 export const ALLOWED_SIZES = ['xs', 'sm', 'md', 'lg', 'xl'] as const;
-export type SizeToken = typeof ALLOWED_SIZES[number];
+export type SizeToken = (typeof ALLOWED_SIZES)[number];
 
 /** 許可されたセマンティックカラートークン */
 export const ALLOWED_COLORS = [
-  'primary', 'secondary', 'success', 'warning', 'danger', 'muted',
-  'text', 'text-inverse', 'bg', 'surface', 'border',
-  'black', 'white', 'dark', 'light',
+  'primary',
+  'secondary',
+  'success',
+  'warning',
+  'danger',
+  'muted',
+  'text',
+  'text-inverse',
+  'bg',
+  'surface',
+  'border',
+  'black',
+  'white',
+  'dark',
+  'light',
 ] as const;
-export type ColorToken = typeof ALLOWED_COLORS[number];
+export type ColorToken = (typeof ALLOWED_COLORS)[number];
 
 /** 許可されたスペーシング値 */
 export const ALLOWED_GAP = [0, 2, 4, 8, 12, 16, 24, 32] as const;
@@ -18,14 +30,14 @@ export const ALLOWED_PADDING = [0, 4, 8, 12, 16, 24] as const;
 
 /** 許可されたボーダー丸め */
 export const ALLOWED_ROUNDED = ['none', 'sm', 'md', 'lg', 'full'] as const;
-export type RoundedToken = typeof ALLOWED_ROUNDED[number];
+export type RoundedToken = (typeof ALLOWED_ROUNDED)[number];
 
 /** 許可されたボーダー太さ */
 export const ALLOWED_BORDER = ['none', 'thin', 'medium'] as const;
 
 /** 許可されたフォントウェイト */
 export const ALLOWED_WEIGHT = ['normal', 'medium', 'bold'] as const;
-export type WeightToken = typeof ALLOWED_WEIGHT[number];
+export type WeightToken = (typeof ALLOWED_WEIGHT)[number];
 
 /** 許可されたテキスト整列 */
 export const ALLOWED_ALIGN = ['left', 'center', 'right'] as const;

@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { ChatSession } from '../../shared/types';
+import type React from 'react';
+import { useEffect, useState } from 'react';
+import type { ChatSession } from '../../shared/types';
 import type { LoadedExtension } from '../extension-loader';
-import { FileBrowserPanel, type FileBrowserPanelProps } from './FileBrowser';
 import ExtensionManagerPanel from './ExtensionManagerPanel';
+import { FileBrowserPanel, type FileBrowserPanelProps } from './FileBrowser';
 
 interface SidePanelProps {
   /** アクティブなパネル ID ('history' | 'extensions' | 'browser' | '{extId}:{pageId}') */
@@ -86,7 +87,7 @@ function HistoryPanel({
                   title="削除"
                 >
                   <svg width="12" height="12" viewBox="0 0 12 12">
-                    <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                   </svg>
                 </button>
               </div>
@@ -163,11 +164,7 @@ export default function Sidebar({
 }: SidePanelProps) {
   if (activePanelId === 'history') {
     return (
-      <HistoryPanel
-        currentSessionId={currentSessionId}
-        onSelectSession={onSelectSession}
-        onNewSession={onNewSession}
-      />
+      <HistoryPanel currentSessionId={currentSessionId} onSelectSession={onSelectSession} onNewSession={onNewSession} />
     );
   }
 
@@ -186,13 +183,7 @@ export default function Sidebar({
   }
 
   if (activePanelId === 'extensions') {
-    return (
-      <ExtensionsPanel
-        extensions={extensions}
-        currentPage={currentPage}
-        onNavigate={onNavigate}
-      />
-    );
+    return <ExtensionsPanel extensions={extensions} currentPage={currentPage} onNavigate={onNavigate} />;
   }
 
   if (activePanelId === 'ext-manager') {

@@ -1,12 +1,13 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { marked } from 'marked';
 import markedKatex from 'marked-katex-extension';
+import type React from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import 'katex/dist/katex.min.css';
-import { ChatMessage } from '../../shared/types';
+import type { ChatMessage } from '../../shared/types';
 import ariaIconUrl from '../assets/aria-icon.png';
 import { parseInteractiveUI } from './interactive-ui/parser';
-import { BlockRenderer } from './interactive-ui/UIRenderer';
 import { SandboxRenderer } from './interactive-ui/SandboxRenderer';
+import { BlockRenderer } from './interactive-ui/UIRenderer';
 import './interactive-ui/styles.css';
 
 /** ローカルファイルパスをカスタムスキームの URL に変換する（Windows / http:localhost 対応） */
@@ -26,13 +27,9 @@ marked.use(markedKatex({ throwOnError: false, output: 'html' }));
 function normalizeYenToBackslash(text: string): string {
   const yen = /[¥\uFFE5]/g;
   // $$...$$ ブロック（複数行対応）を先に処理
-  let result = text.replace(/\$\$([\s\S]*?)\$\$/g, (_, math) =>
-    `$$${math.replace(yen, '\\')}$$`
-  );
+  let result = text.replace(/\$\$([\s\S]*?)\$\$/g, (_, math) => `$$${math.replace(yen, '\\')}$$`);
   // $...$ ブロック（改行を含まないインライン数式）を処理
-  result = result.replace(/\$([^\$\n]+?)\$/g, (_, math) =>
-    `$${math.replace(yen, '\\')}$`
-  );
+  result = result.replace(/\$([^$\n]+?)\$/g, (_, math) => `$${math.replace(yen, '\\')}$`);
   return result;
 }
 
@@ -42,7 +39,7 @@ interface MessageBubbleProps {
   showThinking?: boolean;
   isEditing?: boolean;
   avatarSrc?: string | null; // カスタムアバター画像パス（null/undefined = デフォルト）
-  iconSize?: number;         // アイコンサイズ（px、デフォルト 32）
+  iconSize?: number; // アイコンサイズ（px、デフォルト 32）
   onCopy?: () => void;
   onDelete?: () => void;
   onRegenerate?: () => void;
@@ -86,7 +83,13 @@ function UserMessageContent({ message }: { message: ChatMessage }) {
           }}
         >
           <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.85 }}>
-            <path d="M2 8L8 2M5 2h3v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path
+              d="M2 8L8 2M5 2h3v3"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
           {trigger}
         </span>
@@ -135,15 +138,7 @@ function parseThinkBlocks(content: string): {
 }
 
 /** アクションボタン */
-function ActionBtn({
-  title,
-  onClick,
-  children,
-}: {
-  title: string;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
+function ActionBtn({ title, onClick, children }: { title: string; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       onClick={onClick}
@@ -277,7 +272,9 @@ export default function MessageBubble({
             src={avatarSrc ? toFileUrl(avatarSrc) : ariaIconUrl}
             alt="ArsChat"
             className="w-full h-full object-contain"
-            onError={(e) => { (e.currentTarget as HTMLImageElement).src = ariaIconUrl; }}
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src = ariaIconUrl;
+            }}
           />
         </div>
       )}
@@ -285,11 +282,11 @@ export default function MessageBubble({
       {/* メッセージ本体 */}
       <div className={`max-w-[85%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
         {/* バブル */}
-        <div className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed w-full ${
-          isUser
-            ? 'bg-aria-primary/15 text-aria-text rounded-br-md'
-            : 'bg-aria-surface text-aria-text rounded-bl-md'
-        }`}>
+        <div
+          className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed w-full ${
+            isUser ? 'bg-aria-primary/15 text-aria-text rounded-br-md' : 'bg-aria-surface text-aria-text rounded-bl-md'
+          }`}
+        >
           {/* 編集モード */}
           {isEditing ? (
             <div className="flex flex-col gap-2">
@@ -298,7 +295,10 @@ export default function MessageBubble({
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onEditSave?.(editText); }
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    onEditSave?.(editText);
+                  }
                   if (e.key === 'Escape') onEditCancel?.();
                 }}
                 className="w-full bg-aria-bg-light border border-aria-border rounded-lg px-3 py-2 text-sm text-aria-text resize-none focus:outline-none focus:border-aria-primary min-h-[80px]"
@@ -336,19 +336,23 @@ export default function MessageBubble({
               {/* 思考ブロック（完結済み・折りたたみ） */}
               {showThinking && hasThinking && (
                 <div className="think-block mb-2">
-                  <button
-                    onClick={() => setThinkOpen(!thinkOpen)}
-                    className="think-block-toggle"
-                  >
+                  <button onClick={() => setThinkOpen(!thinkOpen)} className="think-block-toggle">
                     <svg
-                      width="12" height="12" viewBox="0 0 12 12" fill="none"
+                      width="12"
+                      height="12"
+                      viewBox="0 0 12 12"
+                      fill="none"
                       className={`think-block-chevron ${thinkOpen ? 'open' : ''}`}
                     >
-                      <path d="M4 2.5L7.5 6L4 9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path
+                        d="M4 2.5L7.5 6L4 9.5"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
                     </svg>
-                    <span className="think-block-label">
-                      {thinkOpen ? '思考プロセス' : '思考プロセスを表示'}
-                    </span>
+                    <span className="think-block-label">{thinkOpen ? '思考プロセス' : '思考プロセスを表示'}</span>
                   </button>
                   {thinkOpen && (
                     <div
@@ -437,13 +441,7 @@ export default function MessageBubble({
                     }
                     const html = parsedContent.textHtmlParts[i];
                     if (!html && !part) return null;
-                    return (
-                      <div
-                        key={i}
-                        className="markdown-body"
-                        dangerouslySetInnerHTML={{ __html: html || part }}
-                      />
-                    );
+                    return <div key={i} className="markdown-body" dangerouslySetInnerHTML={{ __html: html || part }} />;
                   })}
                   {/* 未閉じUIブロック（ストリーミング中） */}
                   {parsedContent.isLoading && (
@@ -459,9 +457,18 @@ export default function MessageBubble({
           {/* ストリーミング中でコンテンツが空の場合 */}
           {isStreaming && !message.content && (
             <div className="flex items-center gap-1.5 py-1">
-              <div className="w-1.5 h-1.5 rounded-full bg-aria-primary animate-bounce" style={{ animationDelay: '0ms' }} />
-              <div className="w-1.5 h-1.5 rounded-full bg-aria-primary animate-bounce" style={{ animationDelay: '150ms' }} />
-              <div className="w-1.5 h-1.5 rounded-full bg-aria-primary animate-bounce" style={{ animationDelay: '300ms' }} />
+              <div
+                className="w-1.5 h-1.5 rounded-full bg-aria-primary animate-bounce"
+                style={{ animationDelay: '0ms' }}
+              />
+              <div
+                className="w-1.5 h-1.5 rounded-full bg-aria-primary animate-bounce"
+                style={{ animationDelay: '150ms' }}
+              />
+              <div
+                className="w-1.5 h-1.5 rounded-full bg-aria-primary animate-bounce"
+                style={{ animationDelay: '300ms' }}
+              />
             </div>
           )}
 
@@ -482,8 +489,19 @@ export default function MessageBubble({
               <span className="flex items-center gap-1">
                 {/* cycle icon */}
                 <svg width="10" height="10" viewBox="0 0 16 16" fill="none" className="opacity-60">
-                  <path d="M13.5 2.5A6.5 6.5 0 1 0 14.5 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  <path d="M14.5 2.5v3h-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path
+                    d="M13.5 2.5A6.5 6.5 0 1 0 14.5 8"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M14.5 2.5v3h-3"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </svg>
                 {stats.tokensPerSec.toFixed(2)} トークン/秒
               </span>
@@ -492,9 +510,9 @@ export default function MessageBubble({
               <span className="flex items-center gap-1">
                 {/* bar chart icon */}
                 <svg width="10" height="10" viewBox="0 0 16 16" fill="none" className="opacity-60">
-                  <rect x="1" y="7" width="3" height="8" rx="0.5" fill="currentColor"/>
-                  <rect x="6" y="4" width="3" height="11" rx="0.5" fill="currentColor"/>
-                  <rect x="11" y="1" width="3" height="14" rx="0.5" fill="currentColor"/>
+                  <rect x="1" y="7" width="3" height="8" rx="0.5" fill="currentColor" />
+                  <rect x="6" y="4" width="3" height="11" rx="0.5" fill="currentColor" />
+                  <rect x="11" y="1" width="3" height="14" rx="0.5" fill="currentColor" />
                 </svg>
                 {stats.totalTokens} トークン
               </span>
@@ -503,15 +521,13 @@ export default function MessageBubble({
               <span className="flex items-center gap-1">
                 {/* clock icon */}
                 <svg width="10" height="10" viewBox="0 0 16 16" fill="none" className="opacity-60">
-                  <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.3"/>
-                  <path d="M8 4.5V8l2.5 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                  <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.3" />
+                  <path d="M8 4.5V8l2.5 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
                 </svg>
                 {stats.timeSeconds}s
               </span>
             )}
-            {stats.finishReason && (
-              <span className="opacity-70">停止理由: {stats.finishReason}</span>
-            )}
+            {stats.finishReason && <span className="opacity-70">停止理由: {stats.finishReason}</span>}
           </div>
         )}
 
@@ -521,18 +537,30 @@ export default function MessageBubble({
 
           {/* アクションボタン（ホバー時に表示） */}
           {!isEditing && !isStreaming && (
-            <div className={`flex items-center gap-0.5 transition-opacity duration-150 ${hovered ? 'opacity-100' : 'opacity-0'}`}>
+            <div
+              className={`flex items-center gap-0.5 transition-opacity duration-150 ${hovered ? 'opacity-100' : 'opacity-0'}`}
+            >
               {/* コピー */}
               {onCopy && (
                 <ActionBtn title="コピー" onClick={handleCopy}>
                   {copied ? (
                     <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
-                      <path d="M3 8l3.5 3.5L13 4" stroke="#22c55e" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path
+                        d="M3 8l3.5 3.5L13 4"
+                        stroke="#22c55e"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
                     </svg>
                   ) : (
                     <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
-                      <rect x="5" y="4" width="8" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
-                      <path d="M5 3.5V3A1.5 1.5 0 0 0 3.5 1.5h0A1.5 1.5 0 0 0 2 3v8A1.5 1.5 0 0 0 3.5 12.5H5" stroke="currentColor" strokeWidth="1.2"/>
+                      <rect x="5" y="4" width="8" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+                      <path
+                        d="M5 3.5V3A1.5 1.5 0 0 0 3.5 1.5h0A1.5 1.5 0 0 0 2 3v8A1.5 1.5 0 0 0 3.5 12.5H5"
+                        stroke="currentColor"
+                        strokeWidth="1.2"
+                      />
                     </svg>
                   )}
                 </ActionBtn>
@@ -541,7 +569,13 @@ export default function MessageBubble({
               {onEditStart && (
                 <ActionBtn title="編集" onClick={() => onEditStart()}>
                   <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
-                    <path d="M11 2.5l2.5 2.5L5 13.5H2.5V11L11 2.5z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path
+                      d="M11 2.5l2.5 2.5L5 13.5H2.5V11L11 2.5z"
+                      stroke="currentColor"
+                      strokeWidth="1.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
                 </ActionBtn>
               )}
@@ -549,8 +583,14 @@ export default function MessageBubble({
               {onRegenerate && (
                 <ActionBtn title="再生成" onClick={onRegenerate}>
                   <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
-                    <path d="M13 2.5A6 6 0 1 0 14 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-                    <path d="M14 2.5v3h-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M13 2.5A6 6 0 1 0 14 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                    <path
+                      d="M14 2.5v3h-3"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
                 </ActionBtn>
               )}
@@ -558,7 +598,13 @@ export default function MessageBubble({
               {onContinue && (
                 <ActionBtn title="続きを生成" onClick={onContinue}>
                   <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
-                    <path d="M3 8h10M10 5l3 3-3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path
+                      d="M3 8h10M10 5l3 3-3 3"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
                 </ActionBtn>
               )}
@@ -566,11 +612,11 @@ export default function MessageBubble({
               {onBranch && (
                 <ActionBtn title="ここから分岐" onClick={onBranch}>
                   <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
-                    <circle cx="4" cy="3" r="1.5" stroke="currentColor" strokeWidth="1.2"/>
-                    <circle cx="4" cy="13" r="1.5" stroke="currentColor" strokeWidth="1.2"/>
-                    <circle cx="12" cy="8" r="1.5" stroke="currentColor" strokeWidth="1.2"/>
-                    <path d="M4 4.5v7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                    <path d="M4 7.5Q4 8 6 8h4.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                    <circle cx="4" cy="3" r="1.5" stroke="currentColor" strokeWidth="1.2" />
+                    <circle cx="4" cy="13" r="1.5" stroke="currentColor" strokeWidth="1.2" />
+                    <circle cx="12" cy="8" r="1.5" stroke="currentColor" strokeWidth="1.2" />
+                    <path d="M4 4.5v7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                    <path d="M4 7.5Q4 8 6 8h4.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
                   </svg>
                 </ActionBtn>
               )}
@@ -578,7 +624,13 @@ export default function MessageBubble({
               {onDelete && (
                 <ActionBtn title="削除" onClick={onDelete}>
                   <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
-                    <path d="M3 4.5h10M6 4.5V3h4v1.5M5.5 4.5l.5 8h4l.5-8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path
+                      d="M3 4.5h10M6 4.5V3h4v1.5M5.5 4.5l.5 8h4l.5-8"
+                      stroke="currentColor"
+                      strokeWidth="1.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
                 </ActionBtn>
               )}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 
 type UpdaterStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'ready' | 'error';
 
@@ -19,7 +19,10 @@ export default function UpdateNotification() {
 
   useEffect(() => {
     // 現在のステータスを取得
-    window.arsChatAPI.updater.getStatus().then(setInfo).catch(() => {});
+    window.arsChatAPI.updater
+      .getStatus()
+      .then(setInfo)
+      .catch(() => {});
 
     // ステータス変化をリッスン
     const unsub = window.arsChatAPI.updater.onStatus((newInfo: UpdaterInfo) => {
@@ -33,11 +36,7 @@ export default function UpdateNotification() {
   }, []);
 
   // 表示不要なケース
-  const hidden =
-    dismissed ||
-    info.status === 'idle' ||
-    info.status === 'checking' ||
-    info.status === 'not-available';
+  const hidden = dismissed || info.status === 'idle' || info.status === 'checking' || info.status === 'not-available';
 
   if (hidden) return null;
 
@@ -57,8 +56,14 @@ export default function UpdateNotification() {
       <div className="flex items-center justify-between px-3 py-2 bg-aria-primary/10 border-b border-white/10">
         <div className="flex items-center gap-1.5">
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" className="text-aria-primary">
-            <path d="M8 2v8M5 7l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M2 13h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <path
+              d="M8 2v8M5 7l3 3 3-3"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path d="M2 13h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
           <span className="text-xs font-semibold text-aria-primary">アップデート</span>
         </div>
@@ -68,7 +73,7 @@ export default function UpdateNotification() {
           aria-label="閉じる"
         >
           <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
-            <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
         </button>
       </div>
@@ -140,7 +145,9 @@ export default function UpdateNotification() {
           <>
             <p className="text-xs text-red-400">アップデートに失敗しました</p>
             {info.error && (
-              <p className="text-[11px] text-aria-text-muted truncate" title={info.error}>{info.error}</p>
+              <p className="text-[11px] text-aria-text-muted truncate" title={info.error}>
+                {info.error}
+              </p>
             )}
           </>
         )}

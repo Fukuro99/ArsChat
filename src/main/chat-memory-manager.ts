@@ -83,11 +83,7 @@ function resolveEmbeddingEndpoint(baseUrl: string): string {
  * LM Studio の /v1/embeddings を呼び出して Float32Array を返す。
  * 失敗（未起動・モデル未指定 など）は null を返す。
  */
-async function fetchEmbedding(
-  baseUrl: string,
-  model: string,
-  text: string,
-): Promise<Float32Array | null> {
+async function fetchEmbedding(baseUrl: string, model: string, text: string): Promise<Float32Array | null> {
   if (!baseUrl || !model) return null;
   try {
     const endpoint = resolveEmbeddingEndpoint(baseUrl);
@@ -193,16 +189,7 @@ export function createChatMemoryManager(dataDir: string) {
              (id, persona_id, session_id, content, embedding, importance, access_count, created_at, accessed_at)
            VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
         )
-        .run(
-          id,
-          personaId,
-          options.sessionId ?? null,
-          content,
-          embeddingBuffer,
-          options.importance ?? 0.5,
-          now,
-          now,
-        );
+        .run(id, personaId, options.sessionId ?? null, content, embeddingBuffer, options.importance ?? 0.5, now, now);
 
       return id;
     },
@@ -295,9 +282,7 @@ export function createChatMemoryManager(dataDir: string) {
     /** 件数が maxItems を超えたら重要度スコアが低い順に削除 */
     pruneMemories(personaId: string, maxItems: number = 200): void {
       const db = getDb();
-      const { c } = db
-        .prepare('SELECT COUNT(*) AS c FROM chat_memories WHERE persona_id = ?')
-        .get(personaId) as any;
+      const { c } = db.prepare('SELECT COUNT(*) AS c FROM chat_memories WHERE persona_id = ?').get(personaId) as any;
       if (c <= maxItems) return;
       db.prepare(
         `DELETE FROM chat_memories WHERE id IN (

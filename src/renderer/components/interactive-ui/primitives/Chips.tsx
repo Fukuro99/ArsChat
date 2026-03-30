@@ -1,23 +1,15 @@
 import React from 'react';
-import { PrimitiveProps } from '../types';
+import type { PrimitiveProps } from '../types';
 
 export default function Chips({ props, value, onChange }: PrimitiveProps) {
-  const {
-    inputId,
-    options = [],
-    multi = false,
-  } = props || {};
+  const { inputId, options = [], multi = false } = props || {};
 
   // value は単一値（string）またはstring[]
-  const selected: string[] = Array.isArray(value)
-    ? value
-    : value ? [value] : [];
+  const selected: string[] = Array.isArray(value) ? value : value ? [value] : [];
 
   const handleToggle = (opt: string) => {
     if (multi) {
-      const next = selected.includes(opt)
-        ? selected.filter((s) => s !== opt)
-        : [...selected, opt];
+      const next = selected.includes(opt) ? selected.filter((s) => s !== opt) : [...selected, opt];
       onChange?.(next);
     } else {
       onChange?.(selected.includes(opt) ? '' : opt);

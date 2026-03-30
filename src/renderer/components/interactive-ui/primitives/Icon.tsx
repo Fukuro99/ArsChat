@@ -1,6 +1,6 @@
 import React from 'react';
-import { PrimitiveProps } from '../types';
 import { resolveSize } from '../design-tokens';
+import type { PrimitiveProps } from '../types';
 
 /**
  * Icon プリミティブ
@@ -12,19 +12,13 @@ import { resolveSize } from '../design-tokens';
  *   size    – 'sm' | 'md' | 'lg'
  */
 export default function Icon({ props }: PrimitiveProps) {
-  const {
-    emoji   = '',
-    codicon = '',
-    size    = 'md',
-  } = props || {};
+  const { emoji = '', codicon = '', size = 'md' } = props || {};
 
   const resolvedSize = resolveSize(size) || '1rem';
 
   // codicon が指定されていれば SVG 画像を表示
   if (codicon) {
-    const px = resolvedSize.endsWith('rem')
-      ? `${parseFloat(resolvedSize) * 16}px`
-      : resolvedSize;
+    const px = resolvedSize.endsWith('rem') ? `${parseFloat(resolvedSize) * 16}px` : resolvedSize;
 
     return (
       <img

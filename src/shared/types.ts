@@ -2,20 +2,20 @@
 
 /** アシスタントメッセージのトークン統計 */
 export interface ChatMessageStats {
-  tokensPerSec?: number;    // トークン生成速度（トークン/秒）
-  totalTokens?: number;     // 合計トークン数（補完分）
-  timeSeconds?: number;     // 応答にかかった時間（秒）
-  finishReason?: string;    // 停止理由 ("stop", "length", "tool_calls" など)
+  tokensPerSec?: number; // トークン生成速度（トークン/秒）
+  totalTokens?: number; // 合計トークン数（補完分）
+  timeSeconds?: number; // 応答にかかった時間（秒）
+  finishReason?: string; // 停止理由 ("stop", "length", "tool_calls" など)
 }
 
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  displayContent?: string;    // UI表示用テキスト（スキル注入時に元の入力を保持）
-  imageBase64?: string;       // 添付画像（Base64）
+  displayContent?: string; // UI表示用テキスト（スキル注入時に元の入力を保持）
+  imageBase64?: string; // 添付画像（Base64）
   timestamp: number;
-  stats?: ChatMessageStats;   // トークン統計（アシスタントメッセージのみ）
+  stats?: ChatMessageStats; // トークン統計（アシスタントメッセージのみ）
 }
 
 export interface ChatSession {
@@ -74,30 +74,30 @@ export interface ArsChatSettings {
 
   // 外観
   theme: 'dark' | 'light';
-  accentColor: string;          // HEX カラーコード
+  accentColor: string; // HEX カラーコード
   customIconPath: string | null; // カスタムアイコンパス（null=デフォルト）
   customTrayIconPath: string | null;
   customAvatarPath: string | null;
 
   // 動作
-  hotkey: string;               // グローバルホットキー
+  hotkey: string; // グローバルホットキー
   launchAtStartup: boolean;
   alwaysOnTop: boolean;
   windowWidth: number;
   windowHeight: number;
   enableInteractiveUI: boolean; // インタラクティブAI機能
-  mcpTokenSaving: boolean;      // MCPツール省トークン化（サーバー選択→ツール取得の2段階方式）
-  maxToolRounds: number;        // 最大ツール呼び出しラウンド数（0 = 無制限）
+  mcpTokenSaving: boolean; // MCPツール省トークン化（サーバー選択→ツール取得の2段階方式）
+  maxToolRounds: number; // 最大ツール呼び出しラウンド数（0 = 無制限）
   shellCommandPermission: ShellCommandPermission; // AIシェルコマンド実行の許可モード
-  allowedShellCommands: string[];                 // 今後も許可したコマンド種別リスト（先頭トークン）
-  chatIconSize: number;         // チャットアイコンサイズ（px、デフォルト 32）
-  autoExtractMemory: boolean;   // 会話後にメモリを自動更新するか（デフォルト: false）
+  allowedShellCommands: string[]; // 今後も許可したコマンド種別リスト（先頭トークン）
+  chatIconSize: number; // チャットアイコンサイズ（px、デフォルト 32）
+  autoExtractMemory: boolean; // 会話後にメモリを自動更新するか（デフォルト: false）
 
   // チャット履歴メモリ（MemOS 相当）
-  chatHistoryEnabled: boolean;        // チャット履歴の意味検索を有効化（デフォルト: false）
-  chatHistoryEmbeddingModel: string;  // LM Studio で使用する Embedding モデル ID
-  chatHistoryTopK: number;            // 検索時に注入する件数（デフォルト: 3）
-  chatHistoryMaxItems: number;        // ペルソナごとの最大保存件数（デフォルト: 200）
+  chatHistoryEnabled: boolean; // チャット履歴の意味検索を有効化（デフォルト: false）
+  chatHistoryEmbeddingModel: string; // LM Studio で使用する Embedding モデル ID
+  chatHistoryTopK: number; // 検索時に注入する件数（デフォルト: 3）
+  chatHistoryMaxItems: number; // ペルソナごとの最大保存件数（デフォルト: 200）
 }
 
 /** 現在日時を [yyyy:MM:DD;hh:mm] 形式で返す */
@@ -157,10 +157,27 @@ export function getEffectiveSystemPrompt(
     const persona = settings.personas.find((p) => p.id === settings.activePersonaId);
     if (persona) {
       const namePrefix = `あなたの名前は「${persona.name}」です。\n\n`;
-      return namePrefix + persona.systemPrompt + memorySection + chatMemoriesSection + skillsSection + fileBrowserSection + openFilesSection + `\n\n現在日時: ${dateTime}`;
+      return (
+        namePrefix +
+        persona.systemPrompt +
+        memorySection +
+        chatMemoriesSection +
+        skillsSection +
+        fileBrowserSection +
+        openFilesSection +
+        `\n\n現在日時: ${dateTime}`
+      );
     }
   }
-  return settings.systemPrompt + memorySection + chatMemoriesSection + skillsSection + fileBrowserSection + openFilesSection + `\n\n現在日時: ${dateTime}`;
+  return (
+    settings.systemPrompt +
+    memorySection +
+    chatMemoriesSection +
+    skillsSection +
+    fileBrowserSection +
+    openFilesSection +
+    `\n\n現在日時: ${dateTime}`
+  );
 }
 
 /** アクティブな人格のアバターパスを返す */
@@ -181,7 +198,8 @@ export const DEFAULT_SETTINGS: ArsChatSettings = {
   lmstudioModel: '',
   lmstudioContextLength: 4096,
 
-  systemPrompt: 'あなたはArsChat（アリスチャット）という名前のAIアシスタントです。ユーザーの質問に丁寧かつ的確に日本語で回答してください。コードを含む回答にはマークダウンを使用してください。',
+  systemPrompt:
+    'あなたはArsChat（アリスチャット）という名前のAIアシスタントです。ユーザーの質問に丁寧かつ的確に日本語で回答してください。コードを含む回答にはマークダウンを使用してください。',
 
   personas: [],
   activePersonaId: null,
@@ -221,29 +239,29 @@ export interface SkillScript {
 
 /** スキルのメタ情報（本文はファイルから動的に読み込む） */
 export interface Skill {
-  id: string;           // ファイル名（拡張子なし）
-  name: string;         // frontmatter.name
-  description: string;  // frontmatter.description（システムプロンプトに載せる概要）
-  trigger?: string;     // frontmatter.trigger（例: "/review"）
+  id: string; // ファイル名（拡張子なし）
+  name: string; // frontmatter.name
+  description: string; // frontmatter.description（システムプロンプトに載せる概要）
+  trigger?: string; // frontmatter.trigger（例: "/review"）
   script?: SkillScript; // frontmatter.script
-  filePath: string;     // 絶対ファイルパス
+  filePath: string; // 絶対ファイルパス
   source: 'user' | 'ai' | 'builtin'; // スキルの作成者
 }
 
 // ===== MCP 設定 =====
 
 export interface MCPServerConfig {
-  name: string;           // サーバーラベル（一意のキー）
-  description?: string;   // サーバーの説明（省トークンモードでシステムプロンプトに注入）
+  name: string; // サーバーラベル（一意のキー）
+  description?: string; // サーバーの説明（省トークンモードでシステムプロンプトに注入）
   type: 'stdio' | 'http' | 'streamable-http';
 
   // stdio 型
-  command?: string;       // 例: "npx"
-  args?: string[];        // 例: ["-y", "@modelcontextprotocol/server-filesystem", "C:/path"]
+  command?: string; // 例: "npx"
+  args?: string[]; // 例: ["-y", "@modelcontextprotocol/server-filesystem", "C:/path"]
   env?: Record<string, string>;
 
   // http 型
-  url?: string;           // 例: "http://localhost:3000/mcp"
+  url?: string; // 例: "http://localhost:3000/mcp"
   headers?: Record<string, string>;
 
   enabled: boolean;
@@ -413,10 +431,10 @@ export type ExtensionPermission =
 export interface ExtensionPageDef {
   id: string;
   title: string;
-  icon: string;           // 絵文字 or Lucide icon名
-  sidebar?: boolean;      // 左サイドバーのナビリンクに表示するか（デフォルト true）
+  icon: string; // 絵文字 or Lucide icon名
+  sidebar?: boolean; // 左サイドバーのナビリンクに表示するか（デフォルト true）
   sidebarPanel?: boolean; // 左サイドバー内にインラインパネルとして描画するか
-  rightPanel?: boolean;   // 右パネルのタブとして描画するか
+  rightPanel?: boolean; // 右パネルのタブとして描画するか
 }
 
 /** 拡張機能の設定パネル定義 */
@@ -432,18 +450,18 @@ export interface ExtensionManifest {
   icon: string;
   minAppVersion?: string;
   permissions: ExtensionPermission[];
-  main?: string;         // Main Process エントリ（dist/main.js 等）
-  renderer: string;      // Renderer エントリ（dist/renderer.js 等）
+  main?: string; // Main Process エントリ（dist/main.js 等）
+  renderer: string; // Renderer エントリ（dist/renderer.js 等）
   pages?: ExtensionPageDef[];
   settings?: ExtensionSettingsDef[];
 }
 
 /** registry.json に保存される拡張エントリ */
 export interface ExtensionRegistryEntry {
-  id: string;            // リポジトリ名（arschat-ext-xxx）
-  source: string;        // GitHub URL
-  version: string;       // package.json の version
-  installedAt: string;   // ISO 8601
+  id: string; // リポジトリ名（arschat-ext-xxx）
+  source: string; // GitHub URL
+  version: string; // package.json の version
+  installedAt: string; // ISO 8601
   enabled: boolean;
   permissions: ExtensionPermission[];
   manifest: ExtensionManifest;

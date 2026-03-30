@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ChatMessage, getEffectiveAvatarPath } from '../../shared/types';
+import type React from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { type ChatMessage, getEffectiveAvatarPath } from '../../shared/types';
 import ariaIconUrl from '../assets/aria-icon.png';
 
 /** ローカルファイルパスをカスタムスキームの URL に変換 */
@@ -179,32 +180,35 @@ export default function WidgetOverlay() {
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
 
-  const handleIconMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return; // 左クリックのみ
-    e.preventDefault();
-    dragActive.current = false;
-
-    const onMove = (ev: MouseEvent) => {
-      if (ev.movementX !== 0 || ev.movementY !== 0) {
-        dragActive.current = true;
-        setIsDragging(true);
-        window.arsChatAPI.moveWidget(ev.movementX, ev.movementY);
-      }
-    };
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      const wasDragging = dragActive.current;
+  const handleIconMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.button !== 0) return; // 左クリックのみ
+      e.preventDefault();
       dragActive.current = false;
-      setIsDragging(false);
-      // 移動していなければクリック判定 → チャットを開く
-      if (!wasDragging) {
-        handleExpand();
-      }
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  }, [handleExpand]);
+
+      const onMove = (ev: MouseEvent) => {
+        if (ev.movementX !== 0 || ev.movementY !== 0) {
+          dragActive.current = true;
+          setIsDragging(true);
+          window.arsChatAPI.moveWidget(ev.movementX, ev.movementY);
+        }
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        const wasDragging = dragActive.current;
+        dragActive.current = false;
+        setIsDragging(false);
+        // 移動していなければクリック判定 → チャットを開く
+        if (!wasDragging) {
+          handleExpand();
+        }
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    },
+    [handleExpand],
+  );
 
   const handleCollapse = useCallback(() => {
     setExpanded(false);
@@ -254,10 +258,7 @@ export default function WidgetOverlay() {
         <button
           onMouseDown={handleIconMouseDown}
           className={`widget-no-drag w-full h-full bg-transparent border-none p-0 select-none transition-all
-            ${isDragging
-              ? 'scale-95 cursor-grabbing opacity-80'
-              : 'hover:scale-105 cursor-pointer'
-            }`}
+            ${isDragging ? 'scale-95 cursor-grabbing opacity-80' : 'hover:scale-105 cursor-pointer'}`}
           title="クリック: チャットを開く　ドラッグ: 移動"
           draggable={false}
         >
@@ -266,7 +267,9 @@ export default function WidgetOverlay() {
             alt="ArsChat"
             className="w-full h-full object-contain pointer-events-none"
             draggable={false}
-            onError={(e) => { (e.currentTarget as HTMLImageElement).src = ariaIconUrl; }}
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src = ariaIconUrl;
+            }}
           />
         </button>
       </div>
@@ -287,7 +290,13 @@ export default function WidgetOverlay() {
             title="フルウィンドウで開く"
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M2 4V2h4M6 10H2V6M10 8v2H6M6 2h4v4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path
+                d="M2 4V2h4M6 10H2V6M10 8v2H6M6 2h4v4"
+                stroke="currentColor"
+                strokeWidth="1.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
           </button>
           <button
@@ -296,7 +305,7 @@ export default function WidgetOverlay() {
             title="閉じる"
           >
             <svg width="10" height="10" viewBox="0 0 10 10">
-              <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
             </svg>
           </button>
         </div>
@@ -311,17 +320,23 @@ export default function WidgetOverlay() {
         )}
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] px-2.5 py-1.5 rounded-lg text-xs leading-relaxed ${
-              msg.role === 'user'
-                ? 'bg-aria-primary/80 text-white'
-                : 'bg-white/10 text-white/90'
-            }`}>
+            <div
+              className={`max-w-[85%] px-2.5 py-1.5 rounded-lg text-xs leading-relaxed ${
+                msg.role === 'user' ? 'bg-aria-primary/80 text-white' : 'bg-white/10 text-white/90'
+              }`}
+            >
               {msg.imageBase64 && (
                 <div className="mb-1">
-                  <img src={`data:image/png;base64,${msg.imageBase64}`} alt="" className="rounded max-h-16 object-contain" />
+                  <img
+                    src={`data:image/png;base64,${msg.imageBase64}`}
+                    alt=""
+                    className="rounded max-h-16 object-contain"
+                  />
                 </div>
               )}
-              <p className="whitespace-pre-wrap break-words">{msg.role === 'assistant' ? stripThinkBlocks(msg.content) : msg.content}</p>
+              <p className="whitespace-pre-wrap break-words">
+                {msg.role === 'assistant' ? stripThinkBlocks(msg.content) : msg.content}
+              </p>
             </div>
           </div>
         ))}
@@ -336,9 +351,18 @@ export default function WidgetOverlay() {
           <div className="flex justify-start">
             <div className="px-2.5 py-1.5 rounded-lg bg-white/10">
               <div className="flex gap-1">
-                <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                <span
+                  className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce"
+                  style={{ animationDelay: '0ms' }}
+                />
+                <span
+                  className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce"
+                  style={{ animationDelay: '150ms' }}
+                />
+                <span
+                  className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce"
+                  style={{ animationDelay: '300ms' }}
+                />
               </div>
             </div>
           </div>
@@ -353,32 +377,33 @@ export default function WidgetOverlay() {
           <button
             onClick={() => setScreenWatchMode(!screenWatchMode)}
             className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${
-              screenWatchMode
-                ? 'bg-aria-primary/30 text-aria-primary'
-                : 'bg-white/5 text-white/40 hover:text-white/60'
+              screenWatchMode ? 'bg-aria-primary/30 text-aria-primary' : 'bg-white/5 text-white/40 hover:text-white/60'
             }`}
             title={screenWatchMode ? '画面監視モード ON' : '画面監視モード OFF'}
           >
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-              <rect x="2" y="3" width="12" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
-              <path d="M5 14h6M8 11v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-              {screenWatchMode && <circle cx="12" cy="5" r="2" fill="#6366f1" stroke="#1a1b2e" strokeWidth="1"/>}
+              <rect x="2" y="3" width="12" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+              <path d="M5 14h6M8 11v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              {screenWatchMode && <circle cx="12" cy="5" r="2" fill="#6366f1" stroke="#1a1b2e" strokeWidth="1" />}
             </svg>
           </button>
           {/* Thinkモードトグル */}
           <button
             onClick={() => setThinkMode(!thinkMode)}
             className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${
-              thinkMode
-                ? 'bg-amber-500/20 text-amber-400'
-                : 'bg-white/5 text-white/40 hover:text-white/60'
+              thinkMode ? 'bg-amber-500/20 text-amber-400' : 'bg-white/5 text-white/40 hover:text-white/60'
             }`}
             title={thinkMode ? 'Thinkモード ON' : 'Thinkモード OFF'}
           >
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="6.5" r="4" stroke="currentColor" strokeWidth="1.3"/>
-              <path d="M6 10.5c0 1.5 0.5 2.5 2 3M10 10.5c0 1.5-0.5 2.5-2 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-              <path d="M6.5 14h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              <circle cx="8" cy="6.5" r="4" stroke="currentColor" strokeWidth="1.3" />
+              <path
+                d="M6 10.5c0 1.5 0.5 2.5 2 3M10 10.5c0 1.5-0.5 2.5-2 3"
+                stroke="currentColor"
+                strokeWidth="1.3"
+                strokeLinecap="round"
+              />
+              <path d="M6.5 14h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
               {thinkMode && <circle cx="8" cy="6" r="1.5" fill="currentColor" />}
             </svg>
           </button>
@@ -400,18 +425,20 @@ export default function WidgetOverlay() {
               title="停止"
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
-                <rect x="1" y="1" width="8" height="8" rx="1.5"/>
+                <rect x="1" y="1" width="8" height="8" rx="1.5" />
               </svg>
             </button>
           ) : (
             <button
-              onClick={() => { void handleSend(); }}
+              onClick={() => {
+                void handleSend();
+              }}
               disabled={!input.trim()}
               className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg bg-aria-primary text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-aria-primary/80 transition-colors"
               title="送信"
             >
               <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
-                <path d="M14 8L2 2l2 6-2 6z" fill="currentColor"/>
+                <path d="M14 8L2 2l2 6-2 6z" fill="currentColor" />
               </svg>
             </button>
           )}

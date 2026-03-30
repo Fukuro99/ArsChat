@@ -1,13 +1,13 @@
+import { exec } from 'child_process';
+import { shell } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
-import { shell } from 'electron';
-import { exec } from 'child_process';
-import { Skill, SkillScript } from '../shared/types';
 import {
-  INSTRUCTION_INTERACTIVE_UI,
   INSTRUCTION_IFRAME,
   INSTRUCTION_INTERACTIVE_HTML,
+  INSTRUCTION_INTERACTIVE_UI,
 } from '../shared/interactiveUiInstructions';
+import type { Skill, SkillScript } from '../shared/types';
 
 // =========================================================
 // ビルトインスキル（Interactive UI 関連）
@@ -18,7 +18,8 @@ const BUILTIN_SKILLS: Skill[] = [
   {
     id: 'interactive-ui',
     name: 'Interactive UI コンポーネント',
-    description: 'ユーザー側にボタン・フォーム・スライダー等のUIを表示し操作結果をAIに送信する（liveモード・ローカルアクション対応）',
+    description:
+      'ユーザー側にボタン・フォーム・スライダー等のUIを表示し操作結果をAIに送信する（liveモード・ローカルアクション対応）',
     filePath: '__builtin__',
     source: 'builtin',
   },
@@ -41,7 +42,7 @@ const BUILTIN_SKILLS: Skill[] = [
 /** ビルトインスキルの本文コンテンツ */
 const BUILTIN_SKILL_CONTENT: Record<string, string> = {
   'interactive-ui': INSTRUCTION_INTERACTIVE_UI,
-  'iframe': INSTRUCTION_IFRAME,
+  iframe: INSTRUCTION_IFRAME,
   'interactive-html': INSTRUCTION_INTERACTIVE_HTML,
 };
 
@@ -58,7 +59,7 @@ function parseFrontmatter(content: string): { meta: Record<string, any>; body: s
   let currentKey: string | null = null;
   for (const line of metaRaw.split(/\r?\n/)) {
     // ネストキー（2スペースインデント）
-    const nested = line.match(/^  (\w+):\s*(.*)$/);
+    const nested = line.match(/^ {2}(\w+):\s*(.*)$/);
     if (nested && currentKey) {
       if (typeof meta[currentKey] !== 'object' || Array.isArray(meta[currentKey])) {
         meta[currentKey] = {};
@@ -184,7 +185,14 @@ export function createSkillManager(dataDir: string) {
   }
 
   /** スキルファイルのフロントマター＋本文を生成 */
-  function buildSkillContent(fields: { name: string; description: string; trigger?: string; scriptType?: string; scriptValue?: string; body: string }): string {
+  function buildSkillContent(fields: {
+    name: string;
+    description: string;
+    trigger?: string;
+    scriptType?: string;
+    scriptValue?: string;
+    body: string;
+  }): string {
     let frontmatter = `name: ${fields.name}\ndescription: ${fields.description}`;
     if (fields.trigger) frontmatter += `\ntrigger: ${fields.trigger}`;
     if (fields.scriptType && fields.scriptValue) {
@@ -260,7 +268,18 @@ export function createSkillManager(dataDir: string) {
     },
 
     /** スキルをフロントマターと本文から保存（既存スキルの上書き。source に応じてディレクトリ選択） */
-    saveSkill(personaId: string, skillId: string, fields: { name: string; description: string; trigger?: string; scriptType?: string; scriptValue?: string; body: string }): Skill | null {
+    saveSkill(
+      personaId: string,
+      skillId: string,
+      fields: {
+        name: string;
+        description: string;
+        trigger?: string;
+        scriptType?: string;
+        scriptValue?: string;
+        body: string;
+      },
+    ): Skill | null {
       // まず既存ファイルの場所を特定
       const userPath = path.join(getSkillsDir(personaId), `${skillId}.md`);
       const aiPath = path.join(getAISkillsDir(personaId), `${skillId}.md`);
@@ -282,14 +301,18 @@ export function createSkillManager(dataDir: string) {
     },
 
     /** AI スキルを新規作成して保存 */
-    createAISkill(personaId: string, fields: { name: string; description: string; body: string; trigger?: string }): Skill {
+    createAISkill(
+      personaId: string,
+      fields: { name: string; description: string; body: string; trigger?: string },
+    ): Skill {
       const dir = ensureAISkillsDir(personaId);
       // 重複しない ID を生成（名前をスラッグ化 → 被ったら連番）
-      const base = fields.name
-        .toLowerCase()
-        .replace(/[^\w\u3040-\u30ff\u4e00-\u9fff]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .slice(0, 40) || 'ai-skill';
+      const base =
+        fields.name
+          .toLowerCase()
+          .replace(/[^\w\u3040-\u30ff\u4e00-\u9fff]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+          .slice(0, 40) || 'ai-skill';
       let fileName = `${base}.md`;
       let counter = 1;
       while (fs.existsSync(path.join(dir, fileName))) {
@@ -318,7 +341,10 @@ export function createSkillManager(dataDir: string) {
     /** スキルファイルを削除（source に関わらず両ディレクトリから探して削除） */
     deleteSkill(personaId: string, skillId: string): void {
       const userPath = path.join(getSkillsDir(personaId), `${skillId}.md`);
-      if (fs.existsSync(userPath)) { fs.unlinkSync(userPath); return; }
+      if (fs.existsSync(userPath)) {
+        fs.unlinkSync(userPath);
+        return;
+      }
       const aiPath = path.join(getAISkillsDir(personaId), `${skillId}.md`);
       if (fs.existsSync(aiPath)) fs.unlinkSync(aiPath);
     },

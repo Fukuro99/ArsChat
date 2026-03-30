@@ -1,7 +1,7 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { UINode, InteractiveUIBlock, UIAction } from './types';
+import React, { useCallback, useEffect, useState } from 'react';
 import { primitiveRegistry } from './primitives/index';
 import { mergePatch } from './state-manager';
+import type { InteractiveUIBlock, UIAction, UINode } from './types';
 
 // ===== キーパス解決ユーティリティ =====
 
@@ -80,7 +80,7 @@ export function UIRenderer({ node, state, onAction, onStateChange }: UIRendererP
   }
 
   // stateバインディングの解決（bind が文字列以外の場合は無視）
-  const boundValue = (node.bind && typeof node.bind === 'string') ? resolveKeyPath(state, node.bind) : undefined;
+  const boundValue = node.bind && typeof node.bind === 'string' ? resolveKeyPath(state, node.bind) : undefined;
 
   const handleChange = useCallback(
     (v: any) => {
@@ -88,25 +88,19 @@ export function UIRenderer({ node, state, onAction, onStateChange }: UIRendererP
         onStateChange(node.bind, v);
       }
     },
-    [node.bind, onStateChange]
+    [node.bind, onStateChange],
   );
 
   const handleAction = useCallback(
     (actionId: string, data?: any) => {
       onAction(node.id, actionId, data);
     },
-    [node.id, onAction]
+    [node.id, onAction],
   );
 
   // 子コンポーネントを再帰的にレンダリング
   const renderedChildren = node.children?.map((child, i) => (
-    <UIRenderer
-      key={child.id || i}
-      node={child}
-      state={state}
-      onAction={onAction}
-      onStateChange={onStateChange}
-    />
+    <UIRenderer key={child.id || i} node={child} state={state} onAction={onAction} onStateChange={onStateChange} />
   ));
 
   return (
@@ -137,7 +131,15 @@ interface BlockRendererProps {
   isLoading?: boolean;
 }
 
-export function BlockRenderer({ block, onSubmit, onAction, onLiveAction, onLocalStateChange, liveState, isLoading }: BlockRendererProps) {
+export function BlockRenderer({
+  block,
+  onSubmit,
+  onAction,
+  onLiveAction,
+  onLocalStateChange,
+  liveState,
+  isLoading,
+}: BlockRendererProps) {
   const isLive = block.mode === 'live';
 
   // ライブモードの場合は外部stateを使い、デフォルトモードはローカルstate
@@ -154,14 +156,17 @@ export function BlockRenderer({ block, onSubmit, onAction, onLiveAction, onLocal
   const currentState = isLive && liveState !== undefined ? liveState : localState;
   const isFinished = isLive && currentState.status === 'finished';
 
-  const handleStateChange = useCallback((keyPath: string, value: any) => {
-    if (!isLive) {
-      setLocalState((prev) => updateKeyPath(prev, keyPath, value));
-    } else if (onLocalStateChange) {
-      // ライブモードの local: true アクション → AI送信なしでstateだけ更新
-      onLocalStateChange(block.id, keyPath, value);
-    }
-  }, [isLive, block.id, onLocalStateChange]);
+  const handleStateChange = useCallback(
+    (keyPath: string, value: any) => {
+      if (!isLive) {
+        setLocalState((prev) => updateKeyPath(prev, keyPath, value));
+      } else if (onLocalStateChange) {
+        // ライブモードの local: true アクション → AI送信なしでstateだけ更新
+        onLocalStateChange(block.id, keyPath, value);
+      }
+    },
+    [isLive, block.id, onLocalStateChange],
+  );
 
   const handleAction = useCallback(
     (nodeId: string | undefined, actionId: string, data?: any) => {
@@ -174,7 +179,7 @@ export function BlockRenderer({ block, onSubmit, onAction, onLiveAction, onLocal
         onAction(block.id, actionId, { ...data, nodeId });
       }
     },
-    [block.id, onAction, onLiveAction, isLive, isFinished, currentState]
+    [block.id, onAction, onLiveAction, isLive, isFinished, currentState],
   );
 
   const handleSubmit = useCallback(
@@ -186,7 +191,7 @@ export function BlockRenderer({ block, onSubmit, onAction, onLiveAction, onLocal
         onAction(block.id, actionId, localState);
       }
     },
-    [block.id, localState, onSubmit, onAction, submitted]
+    [block.id, localState, onSubmit, onAction, submitted],
   );
 
   // ローディング中
@@ -214,23 +219,14 @@ export function BlockRenderer({ block, onSubmit, onAction, onLiveAction, onLocal
 
       {/* UIツリー */}
       <div className={`iui-block-content${isFinished ? ' iui-block-content-disabled' : ''}`}>
-        <UIRenderer
-          node={block.root}
-          state={currentState}
-          onAction={handleAction}
-          onStateChange={handleStateChange}
-        />
+        <UIRenderer node={block.root} state={currentState} onAction={handleAction} onStateChange={handleStateChange} />
       </div>
 
       {/* アクションボタン（defaultモードのsubmit/cancel等のみ） */}
       {!isLive && block.actions && block.actions.length > 0 && !submitted && (
         <div className="iui-block-actions">
           {block.actions.map((action: UIAction, i: number) => (
-            <ActionButton
-              key={i}
-              action={action}
-              onSubmit={handleSubmit}
-            />
+            <ActionButton key={i} action={action} onSubmit={handleSubmit} />
           ))}
         </div>
       )}

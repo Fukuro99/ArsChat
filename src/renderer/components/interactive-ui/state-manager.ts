@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 // ===== ライブUIアクション履歴 =====
 
@@ -15,10 +15,7 @@ export interface LiveUIAction {
  * ライブUIブロックの状態を管理するフック。
  * 外部から state を注入できるように externalState と setExternalState を受け取る。
  */
-export function useLiveUIState(
-  blockId: string,
-  initialState: Record<string, any>,
-) {
+export function useLiveUIState(blockId: string, initialState: Record<string, any>) {
   const [state, setState] = useState<Record<string, any>>(initialState);
   const blockIdRef = useRef(blockId);
   blockIdRef.current = blockId;
@@ -37,10 +34,7 @@ export function useLiveUIState(
  * patchのキーが現在のstateのオブジェクト値であれば再帰的にマージ、
  * それ以外は上書きする。
  */
-export function mergePatch(
-  current: Record<string, any>,
-  patch: Record<string, any>,
-): Record<string, any> {
+export function mergePatch(current: Record<string, any>, patch: Record<string, any>): Record<string, any> {
   const result = { ...current };
   for (const [key, value] of Object.entries(patch)) {
     if (

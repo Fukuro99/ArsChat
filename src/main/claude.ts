@@ -1,5 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { ArsChatSettings, ChatMessage, ChatMessageStats, LMStudioModelInfo, Skill, FileBrowserState, getEffectiveSystemPrompt } from '../shared/types';
+import {
+  type ArsChatSettings,
+  type ChatMessage,
+  type ChatMessageStats,
+  type FileBrowserState,
+  getEffectiveSystemPrompt,
+  type LMStudioModelInfo,
+  type Skill,
+} from '../shared/types';
 import type { MCPManager } from './mcp-manager';
 
 /** スキルコンテキスト（チャット時にスキル情報を渡すための構造体） */
@@ -8,8 +16,16 @@ export interface SkillContext {
   getContent: (skillId: string) => string | null;
   invokeScript: (skillId: string) => Promise<string>;
   // AI スキル管理（permission チェック込み）
-  createAISkill?: (name: string, description: string, body: string, trigger?: string) => { success: boolean; skill?: Skill; message?: string };
-  editSkill?: (skillId: string, fields: { name?: string; description?: string; body?: string; trigger?: string }) => { success: boolean; message?: string };
+  createAISkill?: (
+    name: string,
+    description: string,
+    body: string,
+    trigger?: string,
+  ) => { success: boolean; skill?: Skill; message?: string };
+  editSkill?: (
+    skillId: string,
+    fields: { name?: string; description?: string; body?: string; trigger?: string },
+  ) => { success: boolean; message?: string };
   deleteAISkill?: (skillId: string) => { success: boolean; message?: string };
   // メモリ
   updateMemory?: (content: string) => void;
@@ -17,9 +33,10 @@ export interface SkillContext {
 
 /** <think>...</think> / <thinking>...</thinking> ブロックを除去して本文だけ返す */
 function stripThinkTags(text: string): string {
-  return text.replace(/<think>[\s\S]*?<\/think>/gi, '')
-             .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
-             .trim();
+  return text
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    .trim();
 }
 
 export function createClaudeService(mcpManager?: MCPManager) {
@@ -99,84 +116,84 @@ export function createClaudeService(mcpManager?: MCPManager) {
     for (const url of [endpoint, fallbackEndpoint]) {
       try {
         const res = await fetch(url, { method: 'GET' });
-        if (res.ok) { response = res; break; }
-      } catch { /* 次を試す */ }
+        if (res.ok) {
+          response = res;
+          break;
+        }
+      } catch {
+        /* 次を試す */
+      }
     }
     // 失敗したら /api/v0/models を試みる
     if (!response) {
       for (const url of [v0Endpoint, v0FallbackEndpoint]) {
         try {
           const res = await fetch(url, { method: 'GET' });
-          if (res.ok) { response = res; break; }
-        } catch { /* 次を試す */ }
+          if (res.ok) {
+            response = res;
+            break;
+          }
+        } catch {
+          /* 次を試す */
+        }
       }
     }
-    if (!response) throw new Error(`モデル一覧の取得に失敗しました。LM Studio のサーバーが起動しているか確認してください。`);
+    if (!response)
+      throw new Error(`モデル一覧の取得に失敗しました。LM Studio のサーバーが起動しているか確認してください。`);
     const json: any = await response.json();
     // v0 API は { data: [...] } または { models: [...] } またはそのまま配列
-    const items: any[] = Array.isArray(json)
-      ? json
-      : json?.data ?? json?.models ?? [];
-    return items
-      .map((item: any): LMStudioModelInfo => {
-        // --- ID ---
-        // v1 API: key フィールド / v0 API: id フィールド / 旧: identifier
-        const id = item.key ?? item.id ?? item.instance_id ?? item.identifier ?? '';
+    const items: any[] = Array.isArray(json) ? json : (json?.data ?? json?.models ?? []);
+    return (
+      items
+        .map((item: any): LMStudioModelInfo => {
+          // --- ID ---
+          // v1 API: key フィールド / v0 API: id フィールド / 旧: identifier
+          const id = item.key ?? item.id ?? item.instance_id ?? item.identifier ?? '';
 
-        // --- 表示名 ---
-        const displayName =
-          item.display_name ?? item.displayName ?? item.name ?? id;
+          // --- 表示名 ---
+          const displayName = item.display_name ?? item.displayName ?? item.name ?? id;
 
-        // --- 最大コンテキスト長 ---
-        const maxContextLength: number =
-          item.max_context_length ??
-          item.maxContextLength ??
-          item.context_length ??
-          4096;
+          // --- 最大コンテキスト長 ---
+          const maxContextLength: number =
+            item.max_context_length ?? item.maxContextLength ?? item.context_length ?? 4096;
 
-        // --- ロード済みコンテキスト長 ---
-        // v1 API: loaded_instances[0].config.context_length
-        // v0 API: loaded_context_length
-        const loadedInstance = Array.isArray(item.loaded_instances) && item.loaded_instances.length > 0
-          ? item.loaded_instances[0]
-          : null;
-        const loadedContextLength: number | undefined =
-          loadedInstance?.config?.context_length ??
-          item.loaded_context_length ??
-          undefined;
+          // --- ロード済みコンテキスト長 ---
+          // v1 API: loaded_instances[0].config.context_length
+          // v0 API: loaded_context_length
+          const loadedInstance =
+            Array.isArray(item.loaded_instances) && item.loaded_instances.length > 0 ? item.loaded_instances[0] : null;
+          const loadedContextLength: number | undefined =
+            loadedInstance?.config?.context_length ?? item.loaded_context_length ?? undefined;
 
-        // --- ロード状態 ---
-        // v1 API: loaded_instances.length > 0 で判定
-        // v0 API: state フィールド / status フィールド
-        let state: string;
-        if (item.state !== undefined) {
-          state = item.state;
-        } else if (item.status !== undefined) {
-          state = item.status;
-        } else if (Array.isArray(item.loaded_instances)) {
-          state = item.loaded_instances.length > 0 ? 'loaded' : 'not-loaded';
-        } else {
-          state = item.loaded ? 'loaded' : 'not-loaded';
-        }
+          // --- ロード状態 ---
+          // v1 API: loaded_instances.length > 0 で判定
+          // v0 API: state フィールド / status フィールド
+          let state: string;
+          if (item.state !== undefined) {
+            state = item.state;
+          } else if (item.status !== undefined) {
+            state = item.status;
+          } else if (Array.isArray(item.loaded_instances)) {
+            state = item.loaded_instances.length > 0 ? 'loaded' : 'not-loaded';
+          } else {
+            state = item.loaded ? 'loaded' : 'not-loaded';
+          }
 
-        // --- タイプ ---
-        const type = item.type ?? 'llm';
+          // --- タイプ ---
+          const type = item.type ?? 'llm';
 
-        return { id, displayName, maxContextLength, loadedContextLength, state, type } as LMStudioModelInfo;
-      })
-      // embedding モデルはチャット不可なので除外（"embedding" / "embeddings" 両方対応）
-      .filter((m) => m.id && m.type !== 'embedding' && m.type !== 'embeddings');
+          return { id, displayName, maxContextLength, loadedContextLength, state, type } as LMStudioModelInfo;
+        })
+        // embedding モデルはチャット不可なので除外（"embedding" / "embeddings" 両方対応）
+        .filter((m) => m.id && m.type !== 'embedding' && m.type !== 'embeddings')
+    );
   }
 
   /**
    * LM Studio v1 API でモデルをロード
    * POST /api/v1/models/load はロード完了までブロックして返す（ポーリング不要）
    */
-  async function loadLMStudioModelById(
-    baseUrl: string,
-    modelId: string,
-    contextLength: number,
-  ): Promise<void> {
+  async function loadLMStudioModelById(baseUrl: string, modelId: string, contextLength: number): Promise<void> {
     // /api/v1/models/load エンドポイントを解決
     // baseUrl が http://localhost:1234/api/v1 → http://localhost:1234/api/v1/models/load
     const normalized = normalizeBaseUrl(baseUrl);
@@ -235,11 +252,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
       if (typeof item?.name === 'string') return item.name;
       return null;
     };
-    const sourceItemsRaw = [
-      ...asArray(payload),
-      ...asArray(payload?.models),
-      ...asArray(payload?.data),
-    ];
+    const sourceItemsRaw = [...asArray(payload), ...asArray(payload?.models), ...asArray(payload?.data)];
     const sourceItems = requireVision
       ? sourceItemsRaw.filter((item) => item?.capabilities?.vision === true)
       : sourceItemsRaw;
@@ -262,11 +275,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
     return err?.message === 'fetch failed' || err?.cause?.code === 'ECONNREFUSED';
   }
 
-  async function fetchWithFallback(
-    url: string,
-    init: RequestInit,
-    attemptedUrls: string[],
-  ): Promise<Response> {
+  async function fetchWithFallback(url: string, init: RequestInit, attemptedUrls: string[]): Promise<Response> {
     attemptedUrls.push(url);
     try {
       return await fetch(url, init);
@@ -275,8 +284,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
       try {
         const parsed = new URL(url);
         const canFallbackToIpv4 =
-          parsed.hostname === 'localhost' &&
-          (err?.message === 'fetch failed' || err?.cause?.code === 'ECONNREFUSED');
+          parsed.hostname === 'localhost' && (err?.message === 'fetch failed' || err?.cause?.code === 'ECONNREFUSED');
 
         if (canFallbackToIpv4) {
           parsed.hostname = LMSTUDIO_LOCALHOST_FALLBACK;
@@ -300,11 +308,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
   ): Promise<string | null> {
     const modelsEndpoint = resolveModelsEndpoint(baseUrl);
     try {
-      const response = await fetchWithFallback(
-        modelsEndpoint,
-        { method: 'GET', signal },
-        attemptedUrls,
-      );
+      const response = await fetchWithFallback(modelsEndpoint, { method: 'GET', signal }, attemptedUrls);
       if (!response.ok) return null;
 
       const raw = await response.text();
@@ -345,17 +349,14 @@ export function createClaudeService(mcpManager?: MCPManager) {
       const stats: ChatMessageStats = {};
       try {
         const payload = JSON.parse(raw);
-        const content =
-          payload?.choices?.[0]?.message?.content ??
-          payload?.choices?.[0]?.delta?.content ?? '';
+        const content = payload?.choices?.[0]?.message?.content ?? payload?.choices?.[0]?.delta?.content ?? '';
         const usage = payload?.usage;
         const elapsed = (endTime - requestStartTime) / 1000;
         const completionTokens = usage?.completion_tokens ?? 0;
         stats.totalTokens = completionTokens || undefined;
         stats.timeSeconds = Math.round(elapsed * 100) / 100;
-        stats.tokensPerSec = completionTokens > 0 && elapsed > 0
-          ? Math.round((completionTokens / elapsed) * 100) / 100
-          : undefined;
+        stats.tokensPerSec =
+          completionTokens > 0 && elapsed > 0 ? Math.round((completionTokens / elapsed) * 100) / 100 : undefined;
         stats.finishReason = formatFinishReason(payload?.choices?.[0]?.finish_reason);
         if (content) onChunk(content);
       } catch {
@@ -388,14 +389,11 @@ export function createClaudeService(mcpManager?: MCPManager) {
           if (data === '[DONE]') {
             // 統計を確定して終了
             const endTime = Date.now();
-            const genTime = firstChunkTime
-              ? (endTime - firstChunkTime) / 1000
-              : (endTime - requestStartTime) / 1000;
+            const genTime = firstChunkTime ? (endTime - firstChunkTime) / 1000 : (endTime - requestStartTime) / 1000;
             stats.totalTokens = stats.totalTokens ?? (completionTokens > 0 ? completionTokens : undefined);
             stats.timeSeconds = Math.round(((endTime - requestStartTime) / 1000) * 100) / 100;
-            stats.tokensPerSec = completionTokens > 0 && genTime > 0
-              ? Math.round((completionTokens / genTime) * 100) / 100
-              : undefined;
+            stats.tokensPerSec =
+              completionTokens > 0 && genTime > 0 ? Math.round((completionTokens / genTime) * 100) / 100 : undefined;
             onEnd(stats);
             return;
           }
@@ -424,14 +422,11 @@ export function createClaudeService(mcpManager?: MCPManager) {
 
     // [DONE] なしで終了した場合のフォールバック統計
     const endTime = Date.now();
-    const genTime = firstChunkTime
-      ? (endTime - firstChunkTime) / 1000
-      : (endTime - requestStartTime) / 1000;
+    const genTime = firstChunkTime ? (endTime - firstChunkTime) / 1000 : (endTime - requestStartTime) / 1000;
     stats.totalTokens = stats.totalTokens ?? (completionTokens > 0 ? completionTokens : undefined);
     stats.timeSeconds = Math.round(((endTime - requestStartTime) / 1000) * 100) / 100;
-    stats.tokensPerSec = completionTokens > 0 && genTime > 0
-      ? Math.round((completionTokens / genTime) * 100) / 100
-      : undefined;
+    stats.tokensPerSec =
+      completionTokens > 0 && genTime > 0 ? Math.round((completionTokens / genTime) * 100) / 100 : undefined;
     onEnd(stats);
   }
 
@@ -484,7 +479,8 @@ export function createClaudeService(mcpManager?: MCPManager) {
     if (skillContext) {
       tools.push({
         name: 'update_user_memory',
-        description: 'ユーザーについて覚えておくべき情報を記録・更新する。会話から得たユーザーの好み・背景・状況・習慣などを自由な文章で書き込む。既存の記憶は完全に上書きされるため、既存内容を保持したい場合は含めること。',
+        description:
+          'ユーザーについて覚えておくべき情報を記録・更新する。会話から得たユーザーの好み・背景・状況・習慣などを自由な文章で書き込む。既存の記憶は完全に上書きされるため、既存内容を保持したい場合は含めること。',
         input_schema: {
           type: 'object',
           properties: {
@@ -495,29 +491,31 @@ export function createClaudeService(mcpManager?: MCPManager) {
       });
       tools.push({
         name: 'create_skill',
-        description: '新しいスキルを作成して永続化する。ユーザーから繰り返し依頼されるタスクや手順を再利用可能なスキルとして保存する際に使う。作成したスキルは ai-skills/ に保存され、次回以降の会話でも利用できる。',
+        description:
+          '新しいスキルを作成して永続化する。ユーザーから繰り返し依頼されるタスクや手順を再利用可能なスキルとして保存する際に使う。作成したスキルは ai-skills/ に保存され、次回以降の会話でも利用できる。',
         input_schema: {
           type: 'object',
           properties: {
-            name:        { type: 'string', description: 'スキル名（短く明確に）' },
+            name: { type: 'string', description: 'スキル名（短く明確に）' },
             description: { type: 'string', description: 'スキルの説明（システムプロンプトに表示）' },
-            body:        { type: 'string', description: 'スキルの詳細手順・指示（Markdown）' },
-            trigger:     { type: 'string', description: 'トリガーキーワード（例: /review）省略可' },
+            body: { type: 'string', description: 'スキルの詳細手順・指示（Markdown）' },
+            trigger: { type: 'string', description: 'トリガーキーワード（例: /review）省略可' },
           },
           required: ['name', 'description', 'body'],
         },
       });
       tools.push({
         name: 'edit_skill',
-        description: '既存スキルの内容を更新する。改善・修正が必要なときに使う。ユーザー作成スキルは設定で許可されている場合のみ編集可能。',
+        description:
+          '既存スキルの内容を更新する。改善・修正が必要なときに使う。ユーザー作成スキルは設定で許可されている場合のみ編集可能。',
         input_schema: {
           type: 'object',
           properties: {
-            skill_id:    { type: 'string', description: '編集対象のスキルID' },
-            name:        { type: 'string', description: '新しいスキル名（省略時は変更なし）' },
+            skill_id: { type: 'string', description: '編集対象のスキルID' },
+            name: { type: 'string', description: '新しいスキル名（省略時は変更なし）' },
             description: { type: 'string', description: '新しい説明（省略時は変更なし）' },
-            body:        { type: 'string', description: '新しい本文（省略時は変更なし）' },
-            trigger:     { type: 'string', description: '新しいトリガー（省略時は変更なし）' },
+            body: { type: 'string', description: '新しい本文（省略時は変更なし）' },
+            trigger: { type: 'string', description: '新しいトリガー（省略時は変更なし）' },
           },
           required: ['skill_id'],
         },
@@ -529,14 +527,14 @@ export function createClaudeService(mcpManager?: MCPManager) {
           type: 'object',
           properties: {
             skill_id: { type: 'string', description: '削除対象のスキルID' },
-            reason:   { type: 'string', description: '削除理由（ユーザーへの説明用）' },
+            reason: { type: 'string', description: '削除理由（ユーザーへの説明用）' },
           },
           required: ['skill_id'],
         },
       });
     }
 
-    let apiMessages: Anthropic.MessageParam[] = messages.map((msg) => {
+    const apiMessages: Anthropic.MessageParam[] = messages.map((msg) => {
       const content: any[] = [];
       if (msg.content) content.push({ type: 'text', text: msg.content });
       if (msg.imageBase64) {
@@ -548,7 +546,14 @@ export function createClaudeService(mcpManager?: MCPManager) {
       return { role: msg.role as 'user' | 'assistant', content };
     });
 
-    const systemPrompt = getEffectiveSystemPrompt(settings, skillContext?.skills, fileBrowserState, openFilePaths, userMemory, chatMemories);
+    const systemPrompt = getEffectiveSystemPrompt(
+      settings,
+      skillContext?.skills,
+      fileBrowserState,
+      openFilePaths,
+      userMemory,
+      chatMemories,
+    );
     const MAX_ROUNDS = (settings.maxToolRounds ?? 10) === 0 ? Infinity : (settings.maxToolRounds ?? 10);
 
     for (let round = 0; round < MAX_ROUNDS; round++) {
@@ -571,7 +576,9 @@ export function createClaudeService(mcpManager?: MCPManager) {
           onChunk(text);
         }
       });
-      stream.on('error', (error) => { throw error; });
+      stream.on('error', (error) => {
+        throw error;
+      });
 
       currentAbortController!.signal.addEventListener('abort', () => stream.abort());
 
@@ -595,8 +602,8 @@ export function createClaudeService(mcpManager?: MCPManager) {
         onEnd({
           timeSeconds: Math.round(((endTime - requestStartTime) / 1000) * 100) / 100,
           totalTokens: completionTokens || undefined,
-          tokensPerSec: completionTokens > 0 && genTime > 0
-            ? Math.round((completionTokens / genTime) * 100) / 100 : undefined,
+          tokensPerSec:
+            completionTokens > 0 && genTime > 0 ? Math.round((completionTokens / genTime) * 100) / 100 : undefined,
           finishReason: formatFinishReason(finalMsg.stop_reason ?? undefined),
         });
         currentAbortController = null;
@@ -625,7 +632,12 @@ export function createClaudeService(mcpManager?: MCPManager) {
             const res = skillContext.createAISkill?.(inp.name, inp.description, inp.body, inp.trigger);
             result = JSON.stringify(res ?? { success: false, message: 'スキル作成機能が無効です' });
           } else if (block.name === 'edit_skill') {
-            const res = skillContext.editSkill?.(skillId, { name: inp.name, description: inp.description, body: inp.body, trigger: inp.trigger });
+            const res = skillContext.editSkill?.(skillId, {
+              name: inp.name,
+              description: inp.description,
+              body: inp.body,
+              trigger: inp.trigger,
+            });
             result = JSON.stringify(res ?? { success: false, message: 'スキル編集機能が無効です' });
           } else if (block.name === 'delete_skill') {
             const res = skillContext.deleteAISkill?.(skillId);
@@ -674,16 +686,9 @@ export function createClaudeService(mcpManager?: MCPManager) {
     // モデル解決
     let model = settings.lmstudioModel.trim();
     if (!model) {
-      const autoModel = await resolveAutoModel(
-        baseUrl,
-        currentAbortController!.signal,
-        attemptedUrls,
-        hasVisionInput,
-      );
+      const autoModel = await resolveAutoModel(baseUrl, currentAbortController!.signal, attemptedUrls, hasVisionInput);
       if (hasVisionInput && !autoModel) {
-        throw new Error(
-          '画像入力には Vision 対応モデルが必要です。LM StudioでVision対応モデルをロードしてください。'
-        );
+        throw new Error('画像入力には Vision 対応モデルが必要です。LM StudioでVision対応モデルをロードしてください。');
       }
       model = autoModel || 'local-model';
     } else {
@@ -704,15 +709,20 @@ export function createClaudeService(mcpManager?: MCPManager) {
 
     // OpenAI互換メッセージ形式を構築
     const apiMessages: any[] = [];
-    let effectiveSystemPrompt = getEffectiveSystemPrompt(settings, options?.skillContext?.skills, options?.fileBrowserState, options?.openFilePaths, options?.userMemory, options?.chatMemories);
+    let effectiveSystemPrompt = getEffectiveSystemPrompt(
+      settings,
+      options?.skillContext?.skills,
+      options?.fileBrowserState,
+      options?.openFilePaths,
+      options?.userMemory,
+      options?.chatMemories,
+    );
 
     // 省トークンモード: 接続中MCPサーバーの概要をシステムプロンプトに注入
     if (settings.mcpTokenSaving && mcpManager) {
       const summaries = mcpManager.getServerSummaries();
       if (summaries.length > 0) {
-        const rows = summaries
-          .map((s) => `| ${s.name} | ${s.description ?? ''} |`)
-          .join('\n');
+        const rows = summaries.map((s) => `| ${s.name} | ${s.description ?? ''} |`).join('\n');
         effectiveSystemPrompt +=
           `\n\n## 利用可能なMCPサーバー\n\n以下のMCPサーバーが接続されています。` +
           `ユーザーの要求に応じて使用するサーバーを判断し、\`get_mcp_server_tools\` でツール詳細を確認してから \`call_mcp_tool\` で実行してください。\n\n` +
@@ -771,10 +781,62 @@ export function createClaudeService(mcpManager?: MCPManager) {
     }
     // メモリ・AI スキル管理ツール（LMStudio 側・常に追加）
     if (options?.skillContext) {
-      skillTools.push({ type: 'function', function: { name: 'update_user_memory', description: 'ユーザーについて覚えておくべき情報を記録・更新する。既存の記憶は完全に上書きされるため、既存内容を保持したい場合は含めること。', parameters: { type: 'object', properties: { content: { type: 'string' } }, required: ['content'] } } });
-      skillTools.push({ type: 'function', function: { name: 'create_skill', description: '新しいスキルを作成して永続化する。', parameters: { type: 'object', properties: { name: { type: 'string' }, description: { type: 'string' }, body: { type: 'string' }, trigger: { type: 'string' } }, required: ['name', 'description', 'body'] } } });
-      skillTools.push({ type: 'function', function: { name: 'edit_skill', description: '既存スキルの内容を更新する。ユーザー作成スキルは設定で許可されている場合のみ編集可能。', parameters: { type: 'object', properties: { skill_id: { type: 'string' }, name: { type: 'string' }, description: { type: 'string' }, body: { type: 'string' }, trigger: { type: 'string' } }, required: ['skill_id'] } } });
-      skillTools.push({ type: 'function', function: { name: 'delete_skill', description: 'AIが作成したスキルのみ削除できる。ユーザースキルは削除不可。', parameters: { type: 'object', properties: { skill_id: { type: 'string' }, reason: { type: 'string' } }, required: ['skill_id'] } } });
+      skillTools.push({
+        type: 'function',
+        function: {
+          name: 'update_user_memory',
+          description:
+            'ユーザーについて覚えておくべき情報を記録・更新する。既存の記憶は完全に上書きされるため、既存内容を保持したい場合は含めること。',
+          parameters: { type: 'object', properties: { content: { type: 'string' } }, required: ['content'] },
+        },
+      });
+      skillTools.push({
+        type: 'function',
+        function: {
+          name: 'create_skill',
+          description: '新しいスキルを作成して永続化する。',
+          parameters: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              description: { type: 'string' },
+              body: { type: 'string' },
+              trigger: { type: 'string' },
+            },
+            required: ['name', 'description', 'body'],
+          },
+        },
+      });
+      skillTools.push({
+        type: 'function',
+        function: {
+          name: 'edit_skill',
+          description: '既存スキルの内容を更新する。ユーザー作成スキルは設定で許可されている場合のみ編集可能。',
+          parameters: {
+            type: 'object',
+            properties: {
+              skill_id: { type: 'string' },
+              name: { type: 'string' },
+              description: { type: 'string' },
+              body: { type: 'string' },
+              trigger: { type: 'string' },
+            },
+            required: ['skill_id'],
+          },
+        },
+      });
+      skillTools.push({
+        type: 'function',
+        function: {
+          name: 'delete_skill',
+          description: 'AIが作成したスキルのみ削除できる。ユーザースキルは削除不可。',
+          parameters: {
+            type: 'object',
+            properties: { skill_id: { type: 'string' }, reason: { type: 'string' } },
+            required: ['skill_id'],
+          },
+        },
+      });
     }
 
     // MCP ツールが有効かつ LM Studio の場合にツール呼び出しループを実行
@@ -782,38 +844,42 @@ export function createClaudeService(mcpManager?: MCPManager) {
     if (settings.mcpTokenSaving && mcpManager) {
       // 省トークンモード: 全ツール定義の代わりにメタツール2つを使用
       const hasMCPServers = mcpManager.getServerSummaries().length > 0;
-      mcpTools = hasMCPServers ? [
-        {
-          type: 'function',
-          function: {
-            name: 'get_mcp_server_tools',
-            description: 'MCPサーバーのツール一覧と詳細（パラメータスキーマを含む）を取得します。ツールを使用する前に必ず呼び出してください。',
-            parameters: {
-              type: 'object',
-              properties: {
-                server_name: { type: 'string', description: 'ツール一覧を取得するMCPサーバー名' },
+      mcpTools = hasMCPServers
+        ? [
+            {
+              type: 'function',
+              function: {
+                name: 'get_mcp_server_tools',
+                description:
+                  'MCPサーバーのツール一覧と詳細（パラメータスキーマを含む）を取得します。ツールを使用する前に必ず呼び出してください。',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    server_name: { type: 'string', description: 'ツール一覧を取得するMCPサーバー名' },
+                  },
+                  required: ['server_name'],
+                },
               },
-              required: ['server_name'],
             },
-          },
-        },
-        {
-          type: 'function',
-          function: {
-            name: 'call_mcp_tool',
-            description: 'MCPサーバーのツールを実行します。事前に get_mcp_server_tools でパラメータを確認してください。',
-            parameters: {
-              type: 'object',
-              properties: {
-                server_name: { type: 'string', description: 'MCPサーバー名' },
-                tool_name: { type: 'string', description: 'ツール名（get_mcp_server_tools で取得した name）' },
-                arguments: { type: 'object', description: 'ツールの引数（スキーマに従って指定）' },
+            {
+              type: 'function',
+              function: {
+                name: 'call_mcp_tool',
+                description:
+                  'MCPサーバーのツールを実行します。事前に get_mcp_server_tools でパラメータを確認してください。',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    server_name: { type: 'string', description: 'MCPサーバー名' },
+                    tool_name: { type: 'string', description: 'ツール名（get_mcp_server_tools で取得した name）' },
+                    arguments: { type: 'object', description: 'ツールの引数（スキーマに従って指定）' },
+                  },
+                  required: ['server_name', 'tool_name'],
+                },
               },
-              required: ['server_name', 'tool_name'],
             },
-          },
-        },
-      ] : [];
+          ]
+        : [];
     } else {
       mcpTools = mcpManager?.getOpenAITools() ?? [];
     }
@@ -859,13 +925,9 @@ export function createClaudeService(mcpManager?: MCPManager) {
         if (!response.ok) {
           const errText = await response.text();
           if (/does not support image inputs/i.test(errText)) {
-            throw new Error(
-              'このモデルは画像入力に対応していません。Vision対応モデルをロードして設定してください。'
-            );
+            throw new Error('このモデルは画像入力に対応していません。Vision対応モデルをロードして設定してください。');
           }
-          throw new Error(
-            `LM Studio エラー ${response.status}: ${errText.replace(/\s+/g, ' ').trim().slice(0, 200)}`
-          );
+          throw new Error(`LM Studio エラー ${response.status}: ${errText.replace(/\s+/g, ' ').trim().slice(0, 200)}`);
         }
 
         await processOpenAIStream(response, onChunk, onEnd, requestStartTime);
@@ -876,8 +938,8 @@ export function createClaudeService(mcpManager?: MCPManager) {
         const formatUrls = (urls: string[]) => [...new Set(urls)].map((u) => `- ${u}`).join('\n');
         throw new Error(
           `LM Studio に接続できません (${settings.lmstudioBaseUrl})\n` +
-          'LM Studio を起動して「Local Server」を開始してください。\n' +
-          `試行URL:\n${formatUrls(attemptedUrls)}`
+            'LM Studio を起動して「Local Server」を開始してください。\n' +
+            `試行URL:\n${formatUrls(attemptedUrls)}`,
         );
       }
       throw err;
@@ -897,7 +959,11 @@ export function createClaudeService(mcpManager?: MCPManager) {
     signal: AbortSignal,
   ): Promise<
     | { type: 'content' }
-    | { type: 'tool_calls'; toolCalls: Array<{ id: string; function: { name: string; arguments: string } }>; assistantContent: string }
+    | {
+        type: 'tool_calls';
+        toolCalls: Array<{ id: string; function: { name: string; arguments: string } }>;
+        assistantContent: string;
+      }
   > {
     const reader = response.body!.getReader();
     const decoder = new TextDecoder();
@@ -958,7 +1024,9 @@ export function createClaudeService(mcpManager?: MCPManager) {
             const usage = json?.usage;
             if (usage?.completion_tokens) completionTokens = usage.completion_tokens;
             if (usage?.total_tokens) completionTokens = usage.total_tokens;
-          } catch { /* JSON パース失敗は無視 */ }
+          } catch {
+            /* JSON パース失敗は無視 */
+          }
         }
       }
     } finally {
@@ -980,8 +1048,8 @@ export function createClaudeService(mcpManager?: MCPManager) {
     onEnd({
       totalTokens: completionTokens > 0 ? completionTokens : undefined,
       timeSeconds: Math.round(elapsed * 100) / 100,
-      tokensPerSec: completionTokens > 0 && genTime > 0
-        ? Math.round((completionTokens / genTime) * 100) / 100 : undefined,
+      tokensPerSec:
+        completionTokens > 0 && genTime > 0 ? Math.round((completionTokens / genTime) * 100) / 100 : undefined,
       finishReason: formatFinishReason(finishReason ?? undefined),
     });
     return { type: 'content' };
@@ -1030,9 +1098,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
 
       if (!response.ok) {
         const errText = await response.text();
-        throw new Error(
-          `LM Studio エラー ${response.status}: ${errText.replace(/\s+/g, ' ').trim().slice(0, 200)}`
-        );
+        throw new Error(`LM Studio エラー ${response.status}: ${errText.replace(/\s+/g, ' ').trim().slice(0, 200)}`);
       }
 
       const result = await readStreamForTools(response, onChunk, onEnd, requestStartTime, signal);
@@ -1054,7 +1120,11 @@ export function createClaudeService(mcpManager?: MCPManager) {
       for (const tc of result.toolCalls) {
         if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
         let args: Record<string, unknown> = {};
-        try { args = JSON.parse(tc.function.arguments || '{}'); } catch { /* 無視 */ }
+        try {
+          args = JSON.parse(tc.function.arguments || '{}');
+        } catch {
+          /* 無視 */
+        }
 
         onToolBefore?.(tc.function.name, args);
         let toolResult: string;
@@ -1068,10 +1138,20 @@ export function createClaudeService(mcpManager?: MCPManager) {
           skillContext.updateMemory?.(args.content as string);
           toolResult = JSON.stringify({ success: true, message: '記憶を更新しました' });
         } else if (tc.function.name === 'create_skill' && skillContext) {
-          const res = skillContext.createAISkill?.(args.name as string, args.description as string, args.body as string, args.trigger as string | undefined);
+          const res = skillContext.createAISkill?.(
+            args.name as string,
+            args.description as string,
+            args.body as string,
+            args.trigger as string | undefined,
+          );
           toolResult = JSON.stringify(res ?? { success: false, message: 'スキル作成機能が無効です' });
         } else if (tc.function.name === 'edit_skill' && skillContext && skillId) {
-          const res = skillContext.editSkill?.(skillId, { name: args.name as string, description: args.description as string, body: args.body as string, trigger: args.trigger as string });
+          const res = skillContext.editSkill?.(skillId, {
+            name: args.name as string,
+            description: args.description as string,
+            body: args.body as string,
+            trigger: args.trigger as string,
+          });
           toolResult = JSON.stringify(res ?? { success: false, message: 'スキル編集機能が無効です' });
         } else if (tc.function.name === 'delete_skill' && skillContext && skillId) {
           const res = skillContext.deleteAISkill?.(skillId);
@@ -1089,9 +1169,10 @@ export function createClaudeService(mcpManager?: MCPManager) {
           // 省トークンモード: サーバー名+ツール名で実行
           const serverName = args.server_name as string;
           const toolName = args.tool_name as string;
-          const toolArgs = (typeof args.arguments === 'object' && args.arguments !== null)
-            ? args.arguments as Record<string, unknown>
-            : {};
+          const toolArgs =
+            typeof args.arguments === 'object' && args.arguments !== null
+              ? (args.arguments as Record<string, unknown>)
+              : {};
           try {
             toolResult = await mcpManager.executeTool(`${serverName}__${toolName}`, toolArgs);
           } catch (err: any) {
@@ -1169,9 +1250,7 @@ export function createClaudeService(mcpManager?: MCPManager) {
     const stats: ChatMessageStats = {
       totalTokens: outputTokens || undefined,
       timeSeconds: Math.round(elapsed * 100) / 100,
-      tokensPerSec: outputTokens > 0 && elapsed > 0
-        ? Math.round((outputTokens / elapsed) * 100) / 100
-        : undefined,
+      tokensPerSec: outputTokens > 0 && elapsed > 0 ? Math.round((outputTokens / elapsed) * 100) / 100 : undefined,
       finishReason: formatFinishReason(response.stop_reason ?? undefined),
     };
 
@@ -1226,18 +1305,14 @@ export function createClaudeService(mcpManager?: MCPManager) {
 
     if (!response.ok) {
       const errText = await response.text();
-      throw new Error(
-        `LM Studio エラー ${response.status}: ${errText.replace(/\s+/g, ' ').trim().slice(0, 200)}`
-      );
+      throw new Error(`LM Studio エラー ${response.status}: ${errText.replace(/\s+/g, ' ').trim().slice(0, 200)}`);
     }
 
     const endTime = Date.now();
     const elapsed = (endTime - requestStartTime) / 1000;
     const json: any = await response.json();
 
-    const content =
-      json?.choices?.[0]?.message?.content ??
-      json?.choices?.[0]?.delta?.content ?? '';
+    const content = json?.choices?.[0]?.message?.content ?? json?.choices?.[0]?.delta?.content ?? '';
 
     const usage = json?.usage;
     const completionTokens = usage?.completion_tokens ?? 0;
@@ -1245,9 +1320,8 @@ export function createClaudeService(mcpManager?: MCPManager) {
     const stats: ChatMessageStats = {
       totalTokens: completionTokens || undefined,
       timeSeconds: Math.round(elapsed * 100) / 100,
-      tokensPerSec: completionTokens > 0 && elapsed > 0
-        ? Math.round((completionTokens / elapsed) * 100) / 100
-        : undefined,
+      tokensPerSec:
+        completionTokens > 0 && elapsed > 0 ? Math.round((completionTokens / elapsed) * 100) / 100 : undefined,
       finishReason: formatFinishReason(json?.choices?.[0]?.finish_reason),
     };
 
@@ -1283,10 +1357,25 @@ export function createClaudeService(mcpManager?: MCPManager) {
         if (provider === 'lmstudio') {
           await streamLMStudio(settings, messages, onChunk, onEnd, options);
         } else {
-          await streamAnthropic(settings, messages, onChunk, onEnd, options?.skillContext, options?.fileBrowserState, options?.openFilePaths, options?.userMemory, options?.chatMemories, options?.onToolBefore, options?.onToolAfter);
+          await streamAnthropic(
+            settings,
+            messages,
+            onChunk,
+            onEnd,
+            options?.skillContext,
+            options?.fileBrowserState,
+            options?.openFilePaths,
+            options?.userMemory,
+            options?.chatMemories,
+            options?.onToolBefore,
+            options?.onToolAfter,
+          );
         }
       } catch (err: any) {
-        if (err.name === 'AbortError') { onEnd({}); return; }
+        if (err.name === 'AbortError') {
+          onEnd({});
+          return;
+        }
         throw err;
       } finally {
         currentAbortController = null;
@@ -1309,18 +1398,14 @@ export function createClaudeService(mcpManager?: MCPManager) {
      * カスタムシステムプロンプトで1ターンのテキスト生成（設定画面などの補助用）
      * 現在のプロバイダー設定に従い Anthropic または LM Studio を使用する
      */
-    async generateText(
-      settings: ArsChatSettings,
-      systemPrompt: string,
-      userMessage: string,
-    ): Promise<string> {
+    async generateText(settings: ArsChatSettings, systemPrompt: string, userMessage: string): Promise<string> {
       const provider = settings.provider ?? 'anthropic';
       if (provider === 'lmstudio') {
         const baseUrl = normalizeBaseUrl(settings.lmstudioBaseUrl);
         if (!baseUrl) throw new Error('LM Studio のサーバーURLが空です');
         const chatEndpoint = resolveChatEndpoint(baseUrl);
         const attemptedUrls: string[] = [];
-        let model = settings.lmstudioModel.trim() || 'local-model';
+        const model = settings.lmstudioModel.trim() || 'local-model';
         const response = await fetchWithFallback(
           chatEndpoint,
           {

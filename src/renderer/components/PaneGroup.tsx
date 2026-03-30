@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import TabBar from './TabBar';
 import type { AppTab, DragState, Pane } from '../types/app';
+import TabBar from './TabBar';
 
 interface PaneGroupProps {
   panes: Pane[];
@@ -42,10 +42,7 @@ export default function PaneGroup({
   }, [panes.length]);
 
   // 現在の幅配列（初期化前はデフォルト均等）
-  const widths =
-    paneWidths.length === panes.length
-      ? paneWidths
-      : panes.map(() => 100 / panes.length);
+  const widths = paneWidths.length === panes.length ? paneWidths : panes.map(() => 100 / panes.length);
 
   // ===== ペイン間リサイズハンドラ =====
   const makePaneResizeHandler = useCallback(
@@ -53,9 +50,7 @@ export default function PaneGroup({
       e.preventDefault();
       if (!containerRef.current) return;
       const containerWidth = containerRef.current.offsetWidth;
-      const w = paneWidths.length === panes.length
-        ? [...paneWidths]
-        : panes.map(() => 100 / panes.length);
+      const w = paneWidths.length === panes.length ? [...paneWidths] : panes.map(() => 100 / panes.length);
 
       const startX = e.clientX;
       const startLeft = w[idx];
@@ -94,11 +89,8 @@ export default function PaneGroup({
       const rect = e.currentTarget.getBoundingClientRect();
       const relX = e.clientX - rect.left;
       const w = rect.width;
-      const zone: 'left' | 'center' | 'right' =
-        relX < w * 0.25 ? 'left' : relX > w * 0.75 ? 'right' : 'center';
-      setHoverZone((prev) =>
-        prev?.paneId === paneId && prev?.zone === zone ? prev : { paneId, zone },
-      );
+      const zone: 'left' | 'center' | 'right' = relX < w * 0.25 ? 'left' : relX > w * 0.75 ? 'right' : 'center';
+      setHoverZone((prev) => (prev?.paneId === paneId && prev?.zone === zone ? prev : { paneId, zone }));
     },
     [isDragging],
   );

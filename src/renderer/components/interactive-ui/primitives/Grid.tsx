@@ -1,17 +1,9 @@
 import React from 'react';
-import { PrimitiveProps } from '../types';
-import { resolveColor, resolveSpacing, ALLOWED_GAP } from '../design-tokens';
+import { ALLOWED_GAP, resolveColor, resolveSpacing } from '../design-tokens';
+import type { PrimitiveProps } from '../types';
 
 export default function Grid({ props, children }: PrimitiveProps) {
-  const {
-    cols = 3,
-    rows,
-    gap,
-    cellWidth,
-    cellHeight,
-    bg,
-    borderColor,
-  } = props || {};
+  const { cols = 3, rows, gap, cellWidth, cellHeight, bg, borderColor } = props || {};
 
   const style: React.CSSProperties = {};
   style.display = 'grid';
